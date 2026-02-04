@@ -1,4 +1,6 @@
-# Task Plan: FPGA_Auto Analysis & Improvement Suggestions
+# Task Plan
+> **(PR Practice Mode)**: This line was added to practice Pull Requests.
+: FPGA_Auto Analysis & Improvement Suggestions
 
 ## Goal
 Analyze all files in the current folder (including subfolders), summarize functionality, and propose improvements including Icarus VCD workflow and Vivado IP catalog automation feasibility.
