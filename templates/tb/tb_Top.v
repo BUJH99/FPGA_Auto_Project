@@ -8,7 +8,8 @@ module tb_Top;
   reg [1023:0] vcdfile;
 
   // Waveform dump (supports +vcd=output/wave.vcd override)
-  initial begin
+  initial
+  begin
     if (!$value$plusargs("vcd=%s", vcdfile))
       vcdfile = "output/wave.vcd";
     $dumpfile(vcdfile);
@@ -18,7 +19,8 @@ module tb_Top;
   // Simple clock/reset stimulus
   always #5 clk = ~clk;
 
-  initial begin
+  initial
+  begin
     #20 rst = 0;
     repeat (100) @(posedge clk);
     $finish;
@@ -30,3 +32,4 @@ module tb_Top;
   //   .reset(rst)
   // );
 endmodule
+//git_lense test
