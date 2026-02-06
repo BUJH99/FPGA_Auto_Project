@@ -11,6 +11,7 @@ and a compact templates folder for new projects.
 5. Icarus simulation helper (`sim_icarus.bat`) with VCD auto-open
 6. IP Integrator GUI launcher (`open_ipi_gui.bat`)
 7. Block design finalize (no wrapper auto-create) (`finalize_bd.bat`)
+8. RTL diagram automation (`draw_schematic.bat`) with SVG/Draw.io export
 
 ## Directory Layout
 
@@ -29,6 +30,11 @@ Each project folder:
 - `open_ipi_gui.bat` open Vivado GUI with IP Integrator
 - `finalize_bd.bat` finalize block design and export BD/IP artifacts
 - `ip/` exported IP files (`*.xci`) for non-project build
+- `draw_schematic.bat` generate module diagrams from `src/*.v`
+- `generate_simple_svg.ps1`, `process_schematic.ps1`, `svg2drawio.js`, `skin.svg`
+  diagram generation/conversion utilities
+- `package.json` Node dependencies for diagram automation
+- `Diagram/Simple`, `Diagram/Detailed`, `Diagram/JSON` generated diagram outputs
 
 ## How to Use
 
@@ -85,6 +91,19 @@ and creates the HTML report.
 ### 8) Check results
 Open `output/Final_Build_Report.html`.
 
+### 9) Generate RTL diagrams (SVG + Draw.io)
+From the project folder:
+```
+npm install
+draw_schematic.bat
+```
+
+`draw_schematic.bat` scans `src/*.v`, then lets you select one or more modules.
+- Leaf module: simple block diagram (`Diagram/Simple/*.svg`, `.drawio`)
+- Module with submodules: both simple and detailed diagrams
+  (`Diagram/Simple/*`, `Diagram/Detailed/*`) plus intermediate JSON
+  (`Diagram/JSON/output_*.json`)
+
 ## Icarus Simulation (VCD Auto-Open)
 
 1. Put a testbench in `tb/` (add your own testbench file).
@@ -105,3 +124,5 @@ so VCD output lands in the `output/` directory.
 ## Notes
 - Make sure `vivado` is in PATH before running `autorun.bat`.
 - Make sure `iverilog` and `vvp` are in PATH before running `sim_icarus.bat`.
+- For diagram automation, install Node.js/npm and run `npm install` once per project.
+- For detailed diagrams, make sure `yosys` or `yowasp-yosys` is in PATH.
