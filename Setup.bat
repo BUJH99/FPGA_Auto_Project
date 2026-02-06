@@ -28,6 +28,24 @@ if exist "%TEMPLATE_DIR%\program_device.bat" (
 if exist "%TEMPLATE_DIR%\sim_icarus.bat" (
     copy /y "%TEMPLATE_DIR%\sim_icarus.bat" "%ProjectName%\sim_icarus.bat" >nul
 )
+if exist "%TEMPLATE_DIR%\draw_schematic.bat" (
+    copy /y "%TEMPLATE_DIR%\draw_schematic.bat" "%ProjectName%\draw_schematic.bat" >nul
+)
+if exist "%TEMPLATE_DIR%\generate_simple_svg.ps1" (
+    copy /y "%TEMPLATE_DIR%\generate_simple_svg.ps1" "%ProjectName%\generate_simple_svg.ps1" >nul
+)
+if exist "%TEMPLATE_DIR%\process_schematic.ps1" (
+    copy /y "%TEMPLATE_DIR%\process_schematic.ps1" "%ProjectName%\process_schematic.ps1" >nul
+)
+if exist "%TEMPLATE_DIR%\svg2drawio.js" (
+    copy /y "%TEMPLATE_DIR%\svg2drawio.js" "%ProjectName%\svg2drawio.js" >nul
+)
+if exist "%TEMPLATE_DIR%\skin.svg" (
+    copy /y "%TEMPLATE_DIR%\skin.svg" "%ProjectName%\skin.svg" >nul
+)
+if exist "%TEMPLATE_DIR%\package.json" (
+    copy /y "%TEMPLATE_DIR%\package.json" "%ProjectName%\package.json" >nul
+)
 if exist "%TEMPLATE_DIR%\create_module.bat" (
     copy /y "%TEMPLATE_DIR%\create_module.bat" "%ProjectName%\create_module.bat" >nul
 )
@@ -63,5 +81,9 @@ echo.
 echo ------------------------------------------------
 echo [%ProjectName%] project folders created.
 echo ------------------------------------------------
+if exist "%ProjectName%\package.json" (
+    echo [INFO] Block diagram automation dependencies:
+    echo        Run npm install once inside %ProjectName%
+)
 pause
 endlocal
