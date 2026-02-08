@@ -159,14 +159,10 @@ for %%M in (%USER_INPUT%) do (
     echo [INFO] Found %%M in !SOURCE_FILE!
     
     REM Check if this module has sub-modules (instantiates other modules)
-    REM Look for pattern: ModuleName instance_name (
+    REM Use PowerShell to avoid findstr stdin hang issue
     set "HAS_SUBMODULES=0"
-    for /f "delims=" %%L in ('findstr /r /c:"^[ 	]*[A-Z][a-zA-Z0-9_]*[ 	][ 	]*[a-zA-Z0-9_]*[ 	]*(" "!SOURCE_FILE!"') do (
-        REM Exclude keywords like input, output, module, etc.
-        echo %%L | findstr /i /v /c:"input" /c:"output" /c:"inout" /c:"module" /c:"endmodule" /c:"parameter" /c:"localparam" /c:"assign" /c:"always" /c:"initial" /c:"wire" /c:"reg" >nul
-        if !errorlevel! equ 0 (
-            set "HAS_SUBMODULES=1"
-        )
+    for /f %%R in ('powershell -NoProfile -Command "$lines = Get-Content '!SOURCE_FILE!'; $found = 0; foreach ($l in $lines) { if ($l -match '^\s*[a-zA-Z_]\w+\s+[a-zA-Z_]\w+\s*\(' -and $l -notmatch '^\s*(module|function|task|input|output|inout|wire|reg|logic|assign|always|initial|localparam|parameter|generate|if|else|for|case|begin|end)\b') { $found = 1; break } }; $found"') do (
+        set "HAS_SUBMODULES=%%R"
     )
     
     if !HAS_SUBMODULES! equ 1 (
@@ -249,6 +245,5 @@ for %%M in (%USER_INPUT%) do (
 
 echo [INFO] All tasks completed.
 echo Opening Diagram folder...
-explorer Diagram
-pause
-endlocal
+start explorer Diagram
+exit /b 0
