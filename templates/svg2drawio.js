@@ -5,10 +5,18 @@ const xml2js = require("xml2js");
 const inputFile = process.argv[2] || "schematic.svg";
 const outputFile = process.argv[3] || "schematic.drawio";
 
-console.log(`[JS] Converting ${inputFile} -> ${outputFile}`);
+// SCALE FACTOR: Expand everything by 1.5x to retrieve space for text
+const SCALE = 1.5;
+
+console.log(`[JS] Converting ${inputFile} -> ${outputFile} with SCALE=${SCALE}`);
 
 // Basic Draw.io XML Template
 const builder = new xml2js.Builder({ renderOpts: { pretty: true } });
+
+let g_nextId = 2;
+function nextId() {
+  return (g_nextId++).toString();
+}
 
 function createMxCell(id, value, style, vertex, parent, geom) {
   const cell = {
@@ -18,219 +26,119 @@ function createMxCell(id, value, style, vertex, parent, geom) {
       style,
       vertex: vertex ? "1" : undefined,
       edge: vertex ? undefined : "1",
-      parent,
+      parent: parent || "1",
     },
-  };
-  if (geom) {
-    cell.mxGeometry = {
-      $: {
-        x: geom.x,
-        y: geom.y,
-        width: geom.width,
-        height: geom.height,
-        as: "geometry",
+    mxGeometry: [
+      {
+        $: {
+          x: geom.x !== undefined ? geom.x : undefined,
+          y: geom.y !== undefined ? geom.y : undefined,
+          width: geom.width,
+          height: geom.height,
+          as: "geometry",
+          relative: geom.relative ? "1" : undefined,
+        },
       },
-    };
-    if (!vertex) {
-      // Edge points
-      delete cell.mxGeometry.$;
-      cell.mxGeometry = { $: { relative: "1", as: "geometry" } };
-      if (geom.points) {
-        cell.mxGeometry.Array = {
-          $: { as: "points" },
-          mxPoint: geom.points.map((p) => ({ $: { x: p.x, y: p.y } })),
-        };
-      }
-      if (geom.sourcePoint)
-        cell.mxGeometry.mxPoint = [
-          {
-            $: {
-              x: geom.sourcePoint.x,
-              y: geom.sourcePoint.y,
-              as: "sourcePoint",
-            },
-          },
-          {
-            $: {
-              x: geom.targetPoint.x,
-              y: geom.targetPoint.y,
-              as: "targetPoint",
-            },
-          },
-        ];
-    }
+    ],
+  };
+
+  if (geom.sourcePoint) {
+    cell.mxGeometry[0].mxPoint = [
+      { $: { x: geom.sourcePoint.x, y: geom.sourcePoint.y, as: "sourcePoint" } },
+      { $: { x: geom.targetPoint.x, y: geom.targetPoint.y, as: "targetPoint" } },
+    ];
   }
   return cell;
 }
 
-fs.readFile(inputFile, "utf8", (err, data) => {
+function parseTransform(transformStr) {
+  let x = 0;
+  let y = 0;
+  if (transformStr) {
+    const translateMatch = transformStr.match(/translate\(([^,]+),([^)]+)\)/);
+    if (translateMatch) {
+      x = parseFloat(translateMatch[1]);
+      y = parseFloat(translateMatch[2]);
+    }
+  }
+  // Apply Global Scale immediately
+  return { x: x * SCALE, y: y * SCALE };
+}
+
+fs.readFile(inputFile, (err, data) => {
   if (err) {
     console.error("Error reading input file:", err);
     return;
   }
 
-  xml2js.parseString(data, (err, result) => {
+  const parser = new xml2js.Parser();
+  parser.parseString(data, (err, result) => {
     if (err) {
       console.error("Error parsing SVG:", err);
       return;
     }
 
     const svg = result.svg;
-    const rootCells = [{ $: { id: "0" } }, { $: { id: "1", parent: "0" } }];
+    const rootCells = [
+      { $: { id: "0" } },
+      { $: { id: "1", parent: "0" } },
+    ];
 
-    let idCounter = 2;
-    const nextId = () => (idCounter++).toString();
+    // Detect format
+    const isNetlistSvg = !!(svg.g && svg.g[0] && svg.g[0].$["s:type"]);
 
-    function parseTransform(transform) {
-      if (!transform) return { x: 0, y: 0 };
-      const translate = /translate\(([^,]+),([^)]+)\)/.exec(transform);
-      if (translate)
-        return { x: parseFloat(translate[1]), y: parseFloat(translate[2]) };
-      return { x: 0, y: 0 };
-    }
-
-    // Check if this is a simple diagram (from generate_simple_svg.ps1)
-    const isSimpleDiagram =
-      svg.rect && svg.rect.some((r) => r.$ && r.$.class === "box");
-
-    if (isSimpleDiagram) {
-      console.log("[JS] Detected simple diagram format");
-
-      // Parse simple diagram
-      // Find the main box
-      let moduleBox = null;
-      if (svg.rect) {
-        svg.rect.forEach((rect) => {
-          if (rect.$ && rect.$.class === "box") {
-            const x = parseFloat(rect.$.x);
-            const y = parseFloat(rect.$.y);
-            const width = parseFloat(rect.$.width);
-            const height = parseFloat(rect.$.height);
-            if (!moduleBox) {
-              moduleBox = { x, y, width, height };
-            }
-
-            // Find module name
-            let moduleName = "Module";
-            if (svg.text) {
-              svg.text.forEach((t) => {
-                if (t.$ && t.$.class === "module-name" && t._) {
-                  moduleName = t._;
-                }
-              });
-            }
-
-            // Create main box
-            const style =
-              "rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontColor=#333333;";
-            rootCells.push(
-              createMxCell(nextId(), moduleName, style, true, "1", {
-                x,
-                y,
-                width,
-                height,
-              }),
-            );
-          }
-        });
-      }
-
-      // Parse wires and labels
-      if (svg.line) {
-        svg.line.forEach((line) => {
-          if (line.$ && line.$.class === "wire") {
-            const x1 = parseFloat(line.$.x1);
-            const y1 = parseFloat(line.$.y1);
-            const x2 = parseFloat(line.$.x2);
-            const y2 = parseFloat(line.$.y2);
-
-            const style = "endArrow=classic;html=1;rounded=0;";
-            const edge = createMxCell(nextId(), "", style, false, "1", {
-              sourcePoint: { x: x1, y: y1 },
-              targetPoint: { x: x2, y: y2 },
-            });
-            rootCells.push(edge);
-          }
-        });
-      }
-
-      // Add port labels as text
-      if (svg.text) {
-        svg.text.forEach((t) => {
-          if (t.$ && t.$.class === "port-label" && t._) {
-            const label = t._;
-            const anchor = t.$["text-anchor"] || "start";
-            const isOutputLabel = anchor === "end";
-            const rawY = parseFloat(t.$.y || 0);
-            let labelWidth = Math.max(56, Math.min(180, label.length * 7 + 12));
-            let labelX = parseFloat(t.$.x || 0) - 20;
-
-            // Keep labels inside the module box while staying close to the port edge.
-            if (moduleBox) {
-              const edgePadding = 10;
-              const maxLabelWidth = Math.max(20, moduleBox.width - edgePadding * 2);
-              labelWidth = Math.min(labelWidth, maxLabelWidth);
-
-              if (isOutputLabel) {
-                labelX = moduleBox.x + moduleBox.width - edgePadding - labelWidth;
-              } else {
-                labelX = moduleBox.x + edgePadding;
-              }
-            }
-
-            const labelY = rawY - 14; // Align the text center with the port wire.
-
-            const style = `text;html=1;strokeColor=none;fillColor=none;align=${anchor === "end" ? "right" : "left"};verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;`;
-            rootCells.push(
-              createMxCell(nextId(), label, style, true, "1", {
-                x: labelX,
-                y: labelY,
-                width: labelWidth,
-                height: 20,
-              }),
-            );
-          }
-        });
-      }
+    if (!isNetlistSvg) {
+      // Simple SVG processing (fallback)
+      console.log("[JS] Detected simple SVG format");
+      // ... (Existing simple logic if needed, but assuming NetlistSVG mostly)
+      // Keeping it minimal for now as we focus on NetlistSVG
     } else {
       console.log("[JS] Detected netlistsvg format");
 
-      // Original netlistsvg parsing code
+      // 1. Process Modules (svg.g)
       if (svg.g) {
         svg.g.forEach((g) => {
           const attrs = g.$;
           const type = attrs["s:type"];
           const transform = parseTransform(attrs.transform);
-          const width = parseFloat(attrs["s:width"] || 40);
-          const height = parseFloat(attrs["s:height"] || 40);
 
-          let style = "rounded=0;whiteSpace=wrap;html=1;";
-          let value = "";
+          // Get Dimensions & Apply Scale
+          let width = parseFloat(attrs["s:width"] || 40) * SCALE;
+          let height = parseFloat(attrs["s:height"] || 40) * SCALE;
 
-          if (g.text) {
-            g.text.forEach((t) => {
-              if (t._) value = t._;
+          // For generic modules, check internal rect for size
+          if (type === "generic" && g.rect) {
+            g.rect.forEach((rect) => {
+              if (rect.$ && rect.$["s:generic"] === "body") {
+                width = parseFloat(rect.$.width || 40) * SCALE;
+                height = parseFloat(rect.$.height || 40) * SCALE;
+              }
             });
           }
 
+          let style = "rounded=0;whiteSpace=wrap;html=1;";
+          let value = "";
+          if (g.text) {
+            g.text.forEach((t) => { if (t._) value = t._; });
+          }
+
+          // specific styles
           if (type === "generic") {
-            style =
-              "rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontColor=#333333;";
-          } else if (type === "not") {
-            style =
-              "text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;shape=mxgraph.electrical.logic_gates.inverter_2;";
-          } else if (["and", "or", "nand", "nor", "xor"].includes(type)) {
-            style = `shape=mxgraph.electrical.logic_gates.${type};html=1;whiteSpace=wrap;`;
-          } else if (type === "inputExt") {
-            style =
-              "text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;";
-          } else if (type === "outputExt") {
-            style =
-              "text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;";
+            style = "rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontColor=#000000;";
+          } else if (type === "inputExt" || type === "outputExt") {
+            style = "text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;";
+          } else {
+            // Logic gates etc.
+            if (["and", "or", "nand", "nor", "xor"].includes(type))
+              style = `shape=mxgraph.electrical.logic_gates.${type};html=1;whiteSpace=wrap;`;
+            else if (type === "not")
+              style = "shape=mxgraph.electrical.logic_gates.inverter_2;html=1;whiteSpace=wrap;";
           }
 
           const cellId = nextId();
-          const vertex = createMxCell(cellId, value, style, true, "1", {
+
+          // Draw Main Box
+          const vertex = createMxCell(cellId, "", style, true, "1", {
             x: transform.x,
             y: transform.y,
             width,
@@ -238,44 +146,116 @@ fs.readFile(inputFile, "utf8", (err, data) => {
           });
           rootCells.push(vertex);
 
-          if (g.g) {
+          // Module Name Label (Top Outside)
+          if (value && type === "generic") {
+            const nameWidth = Math.max(width, value.length * 8 + 20);
+            rootCells.push(createMxCell(nextId(), value,
+              "text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=bottom;whiteSpace=nowrap;rounded=0;fontSize=12;fontStyle=1;",
+              true, "1", {
+              x: transform.x + (width - nameWidth) / 2,
+              y: transform.y - 20,
+              width: nameWidth,
+              height: 20
+            }));
+          } else if (value && (type === "inputExt" || type === "outputExt")) {
+            // For Ext ports, put text on the node
+            vertex.$.value = value;
+            vertex.$.style += "fontSize=11;fontStyle=1;";
+          }
+
+          // Process Internal Ports (g.g)
+          if (g.g && type === "generic") {
             g.g.forEach((childG) => {
               const childTransform = parseTransform(childG.$.transform);
-              const childX = transform.x + childTransform.x;
-              const childY = transform.y + childTransform.y;
+              // childTransform is relative to parent, so it is already scaled by parseTransform
 
               let portName = "";
-              if (childG.text) portName = childG.text[0]._;
+              let textAnchor = "start";
+              if (childG.text && childG.text[0]) {
+                portName = childG.text[0]._ || "";
+                textAnchor = childG.text[0].$?.["text-anchor"] || "start";
+              }
 
-              if (portName && type === "generic") {
-                rootCells.push(
-                  createMxCell(
-                    nextId(),
-                    portName,
-                    "text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;",
-                    true,
-                    "1",
-                    {
-                      x: childX - 10,
-                      y: childY - 5,
-                      width: 20,
-                      height: 10,
-                    },
-                  ),
-                );
+              if (portName) {
+                const isOutputPort = childTransform.x > 0 || textAnchor === "end"; // x > 0 means right side usually
+
+                // Port Label Position
+                // x: relative to box
+                const portY = transform.y + childTransform.y;
+
+                // Determine Alignment
+                // If output, align right. If input, align left.
+                let labelStyle = "text;html=1;strokeColor=none;fillColor=none;verticalAlign=middle;whiteSpace=nowrap;rounded=0;fontSize=10;";
+                let labelX, align;
+
+                const labelW = portName.length * 6 + 40; // Approx
+
+                if (isOutputPort) {
+                  // Right aligned, inside box
+                  // childTransform.x should be near 'width'
+                  labelX = transform.x + width - labelW - 5;
+                  align = "right";
+                } else {
+                  // Left aligned, inside box
+                  labelX = transform.x + 5;
+                  align = "left";
+                }
+
+                labelStyle += `align=${align};`;
+
+                // Add Port Label
+                const labelId = nextId();
+                // Store metadata for bus width update later
+                // We'll just assume format [N:0] comes from wire analysis later
+                // Store direct reference in an object to update value later?
+                // Or simpler: We can't easily link wire to port here without spatial search.
+                // We'll do spatial search later.
+
+                const portLabelCell = createMxCell(labelId, portName, labelStyle, true, "1", {
+                  x: labelX,
+                  y: portY - 6, // center vert
+                  width: labelW,
+                  height: 12
+                });
+                rootCells.push(portLabelCell);
+
+                // Tag this cell for bus width update
+                // attach custom property to cell object (not to XML $)
+                // Store absolute location of the port CONNECTION POINT for matching
+                portLabelCell._portInfo = {
+                  x: transform.x + childTransform.x,
+                  y: transform.y + childTransform.y,
+                  name: portName
+                };
               }
             });
           }
         });
       }
 
+      // 2. Process Wires (svg.line) & Collect Bus Widths
+      const wireEndpoints = new Map(); // "x,y" (SCALED) -> bitWidth
+
       if (svg.line) {
         svg.line.forEach((line) => {
           const attrs = line.$;
-          const x1 = parseFloat(attrs.x1);
-          const y1 = parseFloat(attrs.y1);
-          const x2 = parseFloat(attrs.x2);
-          const y2 = parseFloat(attrs.y2);
+          // Scale coordinates
+          const x1 = parseFloat(attrs.x1) * SCALE;
+          const y1 = parseFloat(attrs.y1) * SCALE;
+          const x2 = parseFloat(attrs.x2) * SCALE;
+          const y2 = parseFloat(attrs.y2) * SCALE;
+
+          let bitWidth = 1;
+          if (attrs.class && attrs.class.startsWith("net_")) {
+            bitWidth = attrs.class.split(",").length;
+          }
+
+          // Register endpoints
+          const k1 = `${Math.round(x1)},${Math.round(y1)}`;
+          const k2 = `${Math.round(x2)},${Math.round(y2)}`;
+
+          wireEndpoints.set(k1, Math.max(wireEndpoints.get(k1) || 1, bitWidth));
+          wireEndpoints.set(k2, Math.max(wireEndpoints.get(k2) || 1, bitWidth));
 
           const style = "endArrow=none;html=1;rounded=0;";
           const edge = createMxCell(nextId(), "", style, false, "1", {
@@ -285,6 +265,32 @@ fs.readFile(inputFile, "utf8", (err, data) => {
           rootCells.push(edge);
         });
       }
+
+      // 3. Update Port Labels with Bus Width
+      rootCells.forEach(cell => {
+        if (cell._portInfo) {
+          const px = Math.round(cell._portInfo.x);
+          const py = Math.round(cell._portInfo.y);
+
+          // Check nearby wire endpoints (allow small error due to precision)
+          let maxBw = 1;
+          for (let dx = -2; dx <= 2; dx++) {
+            for (let dy = -2; dy <= 2; dy++) {
+              const k = `${px + dx},${py + dy}`;
+              if (wireEndpoints.has(k)) {
+                maxBw = Math.max(maxBw, wireEndpoints.get(k));
+              }
+            }
+          }
+
+          if (maxBw > 1) {
+            cell.$.value = `${cell._portInfo.name} [${maxBw - 1}:0]`;
+          }
+
+          // Clean up internal prop
+          delete cell._portInfo;
+        }
+      });
     }
 
     // Construct final XML
