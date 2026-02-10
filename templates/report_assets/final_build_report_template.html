@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FPGA Build Report</title>
+  <link rel="stylesheet" href="./final_build_report.css">
+</head>
+<body>
+  <div class="shell">
+    <div class="topbar">
+      <div>
+        <h1 class="title">FPGA Build Report</h1>
+        <div class="meta">Generated: __GENERATED_AT__ | Top Module: __TOP_MODULE__</div>
+      </div>
+      <div class="badge __STATUS_CLASS__">__BUILD_STATUS__</div>
+    </div>
+
+    <div class="page-wrap">
+      <div id="pageIndicator" class="page-indicator">1 / 0</div>
+
+      <!-- Page 1. Diagram -->
+      <section class="report-page active" data-page="1">
+        <h2 class="page-title">Page 1. Top Module Block Diagram</h2>
+        <p class="page-sub">Top-module block diagram view (SVG preferred).</p>
+        <div class="diagram-frame">
+          <img id="blockDiagramImage" alt="Top module block diagram" style="display:none;">
+        </div>
+        <div id="blockDiagramEmpty" class="panel" style="display:none; margin-top:12px;">
+          Top module SVG not found. Run <code>generate_schematic_diagrams.bat</code> first.
+        </div>
+        <div id="diagramSource" class="hint"></div>
+      </section>
+
+      <!-- Page 2. Module Descriptions (New) -->
+      <section class="report-page" data-page="2">
+        <h2 class="page-title">Page 2. Module Descriptions</h2>
+        <p class="page-sub">Functional descriptions and schematics for sub-modules.</p>
+        <div id="modules-container">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- Page 3. Timing -->
+      <section class="report-page" data-page="3">
+        <h2 class="page-title">Page 3. Timing Report</h2>
+        <p class="page-sub">Timing summary rendered from structured report data.</p>
+        <div class="grid-2">
+          <div class="kpi"><div class="k">WNS (ns)</div><div id="kpiWns" class="v">-</div></div>
+          <div class="kpi"><div class="k">TNS</div><div id="kpiTns" class="v">-</div></div>
+          <div class="kpi"><div class="k">WHS (ns)</div><div id="kpiWhs" class="v">-</div></div>
+          <div class="kpi"><div class="k">THS</div><div id="kpiThs" class="v">-</div></div>
+        </div>
+        <table>
+          <thead>
+            <tr><th>Metric</th><th>Setup (Max)</th><th>Hold (Min)</th><th>Pulse Width</th></tr>
+          </thead>
+          <tbody id="timingTableBody"></tbody>
+        </table>
+      </section>
+
+      <!-- Page 4. Utilization -->
+      <section class="report-page" data-page="4">
+        <h2 class="page-title">Page 4. Utilization &amp; Environment</h2>
+        <p class="page-sub">Utilization and environment rendered from structured report data.</p>
+        <div class="panel" style="margin-bottom:14px;">
+          <table>
+            <thead>
+              <tr><th>Resource</th><th>Used</th><th>Available</th><th>Utilization</th></tr>
+            </thead>
+            <tbody id="utilTableBody"></tbody>
+          </table>
+        </div>
+
+        <div class="panel">
+          <h3 style="margin:0 0 10px 0; font-size:16px;">Environment</h3>
+          <ul id="envListBody" class="env-list"></ul>
+        </div>
+      </section>
+
+      <div id="wavedromPageHost"></div>
+    </div>
+
+    <div class="nav">
+      <button id="btnPrev" class="btn" type="button">&larr; Prev</button>
+      <div class="hint">Keyboard: &larr; / &rarr; to switch pages</div>
+      <button id="btnNext" class="btn" type="button">Next &rarr;</button>
+    </div>
+  </div>
+
+  <!-- Schematic Modal -->
+  <div id="schematic-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal">&times;</span>
+        <img id="modal-image" src="" alt="Module Schematic">
+        <p id="modal-caption"></p>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/wavedrom/3.5.0/wavedrom.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/wavedrom/3.5.0/skins/default.js"></script>
+  <script src="./report_data.js"></script>
+  <script src="./final_build_report.js"></script>
+</body>
+</html>
