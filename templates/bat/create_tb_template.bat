@@ -210,7 +210,7 @@ foreach ($p in $ports) {
 }
 
 [void]$sb.AppendLine('')
-[void]$sb.AppendLine('        $dumpfile("wave.vcd");')
+[void]$sb.AppendLine("        `$dumpfile(`"output/tb_$modName.vcd`");")
 [void]$sb.AppendLine("        `$dumpvars(0, tb_$modName);")
 [void]$sb.AppendLine('')
 [void]$sb.AppendLine('        // Reset Sequence')

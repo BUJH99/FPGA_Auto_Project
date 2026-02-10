@@ -21,8 +21,10 @@ if not exist ".\bat" (
 
 set "COUNT=0"
 for /f "delims=" %%F in ('dir /b /a-d ".\bat\*.bat" 2^>nul') do (
-    set /a COUNT+=1
-    set "BAT_!COUNT!=%%F"
+    if /i not "%%~nxF"=="sync_codex_tb_skill.bat" (
+        set /a COUNT+=1
+        set "BAT_!COUNT!=%%F"
+    )
 )
 
 if !COUNT! equ 0 (
