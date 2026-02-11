@@ -1,12 +1,22 @@
 @echo off
 setlocal enabledelayedexpansion
-pushd "%~dp0.."
-title Vivado Automation Flow
+
+if "%~1"=="" (
+    echo [ERROR] No target project path provided.
+    echo Usage: %~nx0 ^<Project_Directory^>
+    pause
+    exit /b 1
+)
+
+set "TARGET_PROJECT=%~f1"
+cd /d "%TARGET_PROJECT%"
+title Vivado Automation Flow - %TARGET_PROJECT%
 
 cls
 echo.
 echo ===============================================================================
 echo  [START] Vivado Automation Flow
+echo  Target: %TARGET_PROJECT%
 echo ===============================================================================
 echo.
 
@@ -36,7 +46,7 @@ echo         (Please wait. Check log for details.)
 echo ===============================================================================
 echo.
 
-call vivado -mode batch -source ./tcl/run_vivado_build_flow.tcl -log ./output/vivado_full_build.log -nojournal -notrace
+call vivado -mode batch -source "%~dp0..\tcl\run_vivado_build_flow.tcl" -log ./output/vivado_full_build.log -nojournal -notrace
 
 if %errorlevel% neq 0 (
     echo.
@@ -60,7 +70,7 @@ echo  [INFO] Extracting RTL Hierarchy (diagram/report source data)...
 echo ===============================================================================
 echo.
 
-call vivado -mode batch -source ./tcl/export_rtl_hierarchy_mermaid.tcl -notrace -nojournal -log ./output/rtl_hier.log
+call vivado -mode batch -source "%~dp0..\tcl\export_rtl_hierarchy_mermaid.tcl" -notrace -nojournal -log ./output/rtl_hier.log
 if %errorlevel% neq 0 (
     echo [WARNING] RTL hierarchy extraction failed. Check output/rtl_hier.log
 )
@@ -71,13 +81,13 @@ echo  [REPORT] Generating Final Build Report...
 echo ===============================================================================
 echo.
 
-call vivado -mode batch -source ./tcl/generate_html_report.tcl -notrace -nojournal -log ./output/report_gen.log
+call vivado -mode batch -source "%~dp0..\tcl\generate_html_report.tcl" -tclargs "%TARGET_PROJECT%" -notrace -nojournal -log ./output/report_gen.log
 if %errorlevel% neq 0 (
     echo [WARNING] Report generation script returned an error.
 )
 
 if exist output\Final_Build_Report.html (
-    echo      - Report generated: output\Final_Build_Report.html
+    echo      - Report generated: %TARGET_PROJECT%\output\Final_Build_Report.html
 ) else (
     echo      - [WARNING] Failed to generate report.
 )
@@ -88,13 +98,13 @@ echo  [PROMPT] Run FPGA Device Programming?
 echo ===============================================================================
 echo.
 
-if exist .\bat\program_fpga_device.bat (
+if exist "%~dp0program_fpga_device.bat" (
     choice /C YN /N /M "Run program_fpga_device.bat now? [Y/N]: "
     if errorlevel 2 (
         echo [INFO] Device programming skipped by user.
         set "PROGRAM_STATUS=SKIPPED_BY_USER"
     ) else (
-        call .\bat\program_fpga_device.bat --no-pause
+        call "%~dp0program_fpga_device.bat" "%TARGET_PROJECT%" --no-pause
         if !errorlevel! neq 0 (
             echo [WARNING] program_fpga_device.bat failed.
             set "PROGRAM_STATUS=FAILED"
@@ -104,7 +114,7 @@ if exist .\bat\program_fpga_device.bat (
         )
     )
 ) else (
-    echo [WARNING] program_fpga_device.bat not found. Skipping device programming.
+    echo [WARNING] program_fpga_device.bat not found in templates.
 )
 
 echo.

@@ -61,7 +61,8 @@ set rpt_dir       "$base_output/reports"
 set power_limit   2.5               ;# Power consumption limit (Watts)
 
 # Optional config override
-set config_file "./tcl/project_build_config.tcl"
+set script_dir [file dirname [info script]]
+set config_file [file join $script_dir "project_build_config.tcl"]
 if {[file exists $config_file]} {
     print_info "Loading build config: $config_file"
     source $config_file

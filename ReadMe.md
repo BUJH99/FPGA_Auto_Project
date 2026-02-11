@@ -39,14 +39,14 @@ Run the `Setup.bat` file in the repository root.
 > Setup.bat
 Enter project name: MyFPGAProject
 ```
-A folder with the entered name will be created, and standard workspace files (`bat/`, `tcl/`, `tools/`, `MAIN.bat`, etc.) will be copied.
+A folder with the entered name will be created with **project-only working directories**.
+Automation scripts/tools remain centralized under `templates/` in the repository root.
 
 ### 2. Development Workflow
 
-Use one of the following methods within the created project folder.
+Use the launcher from the repository root.
 
-*   **`MAIN.bat`**: Interactive launcher. It scans `bat/`, lets you run scripts by number, and stays open until you press `Q`.
-*   **Direct execution**: Run scripts in `bat/` manually (example: `bat\run_vivado_build_flow.bat`).
+*   **`MAIN.bat`**: Interactive launcher in repository root. It scans project folders and runs scripts from `templates/bat/` for the selected project.
 
 #### 🏗️ Build & Implementation
 *   **`bat\run_vivado_build_flow.bat`**: Generates a Vivado project and builds up to the bitstream in one go. Results are saved in `output/`. At the end, it asks whether to run device programming (`Y/N`).
@@ -75,24 +75,20 @@ The structure of the project created by `Setup.bat` is as follows:
 
 ```
 [ProjectName]/
-├── MAIN.bat         # Interactive launcher (press Q to quit)
-├── bat/             # Executable automation scripts
-├── tcl/             # Vivado Tcl scripts + build config
-├── tools/           # Schematic helper tools (ps1/js/svg skin)
-├── src/             # Verilog source code (.v/.sv) - User written
-├── tb/              # Testbench code (.v/.sv) - User written
 ├── constrs/         # XDC constraints
+├── Diagram/         # Generated schematic images
 ├── ip/              # Exported/managed IP files (.xci)
-├── output/          # Build logs, bitstreams, reports storage
-├── report_assets/   # HTML report template/assets
 ├── md/              # Markdown outputs/notes
-├── Diagram/         # Generated schematic images (created when needed)
-└── package.json     # Node dependency manifest for schematic tools
+├── output/          # Build logs, bitstreams, reports storage
+├── report_assets/   # Reserved project asset folder
+├── src/             # Verilog source code (.v/.sv) - User written
+├── skills/          # Project-specific skill notes/assets
+└── tb/              # Testbench code (.v/.sv) - User written
 ```
 
 ## ⚙️ Configuration
 
-You can change the FPGA part number or project settings in the `tcl/project_build_config.tcl` file.
+You can change the FPGA part number or project settings in `templates/tcl/project_build_config.tcl`.
 
 ```tcl
 set part_number "xc7a35tcpg236-1"  ; # Target FPGA Part
@@ -147,14 +143,14 @@ set top_module "Top"               ; # Top Module Name
 > Setup.bat
 Enter project name: MyFPGAProject
 ```
-입력한 이름으로 폴더가 생성되며, 표준 작업 파일(`bat/`, `tcl/`, `tools/`, `MAIN.bat` 등)이 복사됩니다.
+입력한 이름으로 폴더가 생성되며, **프로젝트 작업용 디렉토리만** 만들어집니다.
+자동화 실행 파일은 레포지토리 루트의 `templates/`에 중앙화되어 유지됩니다.
 
 ### 2. 개발 워크플로우
 
-생성된 프로젝트 폴더 내에서 아래 방식 중 하나를 사용하세요.
+레포지토리 루트에서 런처를 사용하세요.
 
-*   **`MAIN.bat`**: 대화형 런처입니다. `bat/`를 스캔해 번호로 실행할 수 있으며 `Q`를 누를 때까지 창이 유지됩니다.
-*   **직접 실행**: `bat/` 내부 스크립트를 직접 실행합니다 (예: `bat\run_vivado_build_flow.bat`).
+*   **`MAIN.bat`**: 레포지토리 루트의 대화형 런처입니다. 프로젝트 폴더를 선택하면 `templates/bat/`의 스크립트를 해당 프로젝트 컨텍스트로 실행합니다.
 
 #### 🏗️ 빌드 및 구현
 *   **`bat\run_vivado_build_flow.bat`**: Vivado 프로젝트를 생성하고 비트스트림까지 일괄 빌드합니다. 결과는 `output/`에 저장되며, 마지막에 디바이스 프로그래밍 실행 여부를 `Y/N`으로 묻습니다.
@@ -183,24 +179,20 @@ Enter project name: MyFPGAProject
 
 ```
 [ProjectName]/
-├── MAIN.bat         # 대화형 런처 (Q 입력 시 종료)
-├── bat/             # 실행 가능한 자동화 스크립트
-├── tcl/             # Vivado Tcl 스크립트 + 빌드 설정
-├── tools/           # 회로도 보조 도구(ps1/js/svg skin)
-├── src/             # Verilog 소스 코드 (.v/.sv) - 사용자가 작성
-├── tb/              # 테스트벤치 코드 (.v/.sv) - 사용자가 작성
 ├── constrs/         # XDC 제약 파일
+├── Diagram/         # 생성된 회로도 이미지
 ├── ip/              # IP 파일(.xci) 저장소
-├── output/          # 빌드 로그, 비트스트림, 레포트 저장소
-├── report_assets/   # HTML 리포트 템플릿/에셋
 ├── md/              # Markdown 결과/노트
-├── Diagram/         # 생성된 회로도 이미지 (필요 시 생성)
-└── package.json     # 회로도 도구용 Node 의존성 정의
+├── output/          # 빌드 로그, 비트스트림, 레포트 저장소
+├── report_assets/   # 프로젝트 예약 에셋 폴더
+├── src/             # Verilog 소스 코드 (.v/.sv) - 사용자가 작성
+├── skills/          # 프로젝트별 스킬/메모 자산
+└── tb/              # 테스트벤치 코드 (.v/.sv) - 사용자가 작성
 ```
 
 ## ⚙️ 환경 설정
 
-`tcl/project_build_config.tcl` 파일에서 FPGA 부품 번호나 프로젝트 설정을 변경할 수 있습니다.
+`templates/tcl/project_build_config.tcl` 파일에서 FPGA 부품 번호나 프로젝트 설정을 변경할 수 있습니다.
 
 ```tcl
 set part_number "xc7a35tcpg236-1"  ; # Target FPGA Part

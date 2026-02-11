@@ -1,6 +1,16 @@
 @echo off
 setlocal
-cd /d "%~dp0.."
+
+if "%~1"=="" (
+    echo [ERROR] No target project path provided.
+    echo Usage: %~nx0 ^<Project_Directory^>
+    pause
+    exit /b 1
+)
+
+set "TARGET_PROJECT=%~f1"
+set "TEMPLATES_DIR=%~dp0.."
+cd /d "%TARGET_PROJECT%"
 
 echo -----------------------------------------------------------
 echo      Icarus Verilog Simulation + WaveDrom Export
@@ -127,12 +137,12 @@ if (-not $waveCfgFile) {
     Write-Host "[INFO] Wave config not found. Skipping WaveDrom conversion." -ForegroundColor DarkYellow
 } elseif (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     Write-Host "[WARNING] Node.js is not available. Skipping WaveDrom conversion." -ForegroundColor DarkYellow
-} elseif (-not (Test-Path 'tools\vcd_to_wavedrom.js')) {
-    Write-Host "[WARNING] tools\vcd_to_wavedrom.js not found. Skipping WaveDrom conversion." -ForegroundColor DarkYellow
+} elseif (-not (Test-Path -Path (Join-Path $env:TEMPLATES_DIR 'tools\vcd_to_wavedrom.js'))) {
+    Write-Host "[WARNING] tools\vcd_to_wavedrom.js not found in templates. Skipping WaveDrom conversion." -ForegroundColor DarkYellow
 } else {
     $jsonlMeta = Join-Path $outDir "$tbBase`_cases.jsonl"
     $nodeArgs = @(
-        'tools\vcd_to_wavedrom.js',
+        (Join-Path $env:TEMPLATES_DIR 'tools\vcd_to_wavedrom.js'),
         '--vcd', $vcdFile,
         '--signals', $waveCfgFile,
         '--markers', $simLogFile,
@@ -168,15 +178,19 @@ if (Get-Command gtkwave -ErrorAction SilentlyContinue) {
 }
 
 Write-Host "[5/5] Regenerating Final HTML report..." -ForegroundColor Yellow
-if (-not (Test-Path 'tcl\generate_html_report.tcl')) {
+$tclScript = Join-Path $env:TEMPLATES_DIR 'tcl\generate_html_report.tcl'
+
+if (-not (Test-Path $tclScript)) {
     Write-Host "[INFO] tcl\generate_html_report.tcl not found. Skip report generation." -ForegroundColor DarkYellow
 } elseif (-not (Get-Command vivado -ErrorAction SilentlyContinue)) {
     Write-Host "[INFO] Vivado not found in PATH. Skip report generation." -ForegroundColor DarkYellow
 } else {
-    & vivado -mode batch -source ./tcl/generate_html_report.tcl -notrace -nojournal -log ./output/report_gen_sim.log
+    $projectRoot = (Get-Location).Path
+    & vivado -mode batch -source $tclScript -tclargs $projectRoot -notrace -nojournal -log ./output/report_gen_sim.log
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[WARNING] Report generation failed. Check output\report_gen_sim.log" -ForegroundColor DarkYellow
     } else {
-        Write-Host "[SUCCESS] Report generated: output\Final_Build_Report.html" -ForegroundColor Green
+        $reportPath = Join-Path $projectRoot 'output\Final_Build_Report.html'
+        Write-Host "[SUCCESS] Report generated: $reportPath" -ForegroundColor Green
     }
 }

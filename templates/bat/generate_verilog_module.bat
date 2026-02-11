@@ -1,6 +1,16 @@
 @echo off
-setlocal
-cd /d "%~dp0.."
+setlocal EnableDelayedExpansion
+
+if "%~1"=="" (
+    echo [ERROR] No target project path provided.
+    echo Usage: %~nx0 ^<Project_Directory^>
+    pause
+    exit /b 1
+)
+
+set "TARGET_PROJECT=%~f1"
+cd /d "%TARGET_PROJECT%"
+echo Target Project: %TARGET_PROJECT%
 
 echo -----------------------------------------------------------
 echo      Verilog Module Generator

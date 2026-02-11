@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 function usageAndExit() {
-    console.error('Usage: node tools/parse_tb.js <path_to_tb_file.v>');
+    console.error('Usage: node tools/parse_tb.js <path_to_tb_file.v> [project_root]');
     process.exit(1);
 }
 
@@ -14,6 +14,11 @@ if (args.length < 1) {
 const tbFile = path.resolve(args[0]);
 if (!fs.existsSync(tbFile)) {
     console.error(`Error: Testbench file not found at ${tbFile}`);
+    process.exit(1);
+}
+const projectRootArg = args[1] ? path.resolve(args[1]) : null;
+if (projectRootArg && !fs.existsSync(projectRootArg)) {
+    console.error(`Error: Project root not found at ${projectRootArg}`);
     process.exit(1);
 }
 
@@ -510,7 +515,8 @@ const scenarioEndNs = scenarios.reduce((maxEnd, s) => {
 const requiredEndNs = Math.max(Math.round(currentTimeNs), Math.round(scenarioEndNs));
 const simDurationNs = Math.max(100000, Math.ceil(requiredEndNs * 1.1) + 100000);
 
-const projectPath = path.dirname(path.dirname(tbFile));
+const inferredProjectPath = path.dirname(path.dirname(tbFile));
+const projectPath = projectRootArg || inferredProjectPath;
 const projectName = path.basename(projectPath);
 const topModule = extractTopModuleName(tbContent, path.basename(tbFile, path.extname(tbFile)));
 

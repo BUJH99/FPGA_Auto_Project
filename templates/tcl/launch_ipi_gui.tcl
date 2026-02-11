@@ -10,7 +10,8 @@ set top_module "Top"
 set bd_name "design_1"
 set project_name "vivado_ipi"
 set project_dir "./vivado_ipi"
-set config_file "./tcl/project_build_config.tcl"
+set script_dir [file dirname [info script]]
+set config_file [file join $script_dir "project_build_config.tcl"]
 
 if {[file exists $config_file]} {
     puts "\[INFO\] Loading build config: $config_file"

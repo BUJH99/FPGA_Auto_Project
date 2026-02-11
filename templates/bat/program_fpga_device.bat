@@ -1,8 +1,19 @@
 @echo off
 setlocal
-cd /d "%~dp0.."
+
+if "%~1"=="" (
+    echo [ERROR] No target project path provided.
+    echo Usage: %~nx0 ^<Project_Directory^>
+    pause
+    exit /b 1
+)
+
+set "TARGET_PROJECT=%~f1"
+cd /d "%TARGET_PROJECT%"
+echo Target Project: %TARGET_PROJECT%
+
 set "NO_PAUSE=0"
-if /i "%~1"=="--no-pause" set "NO_PAUSE=1"
+if /i "%~2"=="--no-pause" set "NO_PAUSE=1"
 
 echo ===========================================
 echo   Vivado Batch Mode - Program Device
@@ -19,7 +30,7 @@ if %errorlevel% neq 0 (
 if not exist output mkdir output
 
 :: Run Hardware Manager script in batch mode
-vivado -mode batch -source ./tcl/program_fpga_device.tcl -notrace -log ./output/vivado_program.log -nojournal
+vivado -mode batch -source "%~dp0..\tcl\program_fpga_device.tcl" -notrace -log ./output/vivado_program.log -nojournal
 
 if %errorlevel% neq 0 (
     echo.

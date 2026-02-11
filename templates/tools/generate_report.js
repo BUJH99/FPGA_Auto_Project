@@ -115,10 +115,14 @@ console.log(`TCL script generated: ${tclPath}`);
 
 // 2.2 Run Simulation (Vivado)
 console.log("Running Vivado Simulation...");
+const workDir = path.join(projectRoot, 'work');
+if (!fs.existsSync(workDir)) {
+    fs.mkdirSync(workDir, { recursive: true });
+}
 try {
     const vivadoCmd = `vivado -mode batch -source "${tclPath}"`;
     // Increase maxBuffer to handle large Vivado output
-    execSync(vivadoCmd, { stdio: 'inherit', cwd: path.join(projectRoot, 'work'), maxBuffer: 1024 * 1024 * 10 });
+    execSync(vivadoCmd, { stdio: 'inherit', cwd: workDir, maxBuffer: 1024 * 1024 * 10 });
 } catch (e) {
     console.error("Vivado simulation failed. Check logs.");
     // We might continue if VCD exists, but usually we stop.

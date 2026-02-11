@@ -1,6 +1,16 @@
 @echo off
 setlocal EnableDelayedExpansion
-cd /d "%~dp0.."
+
+if "%~1"=="" (
+    echo [ERROR] No target project path provided.
+    echo Usage: %~nx0 ^<Project_Directory^>
+    pause
+    exit /b 1
+)
+
+set "TARGET_PROJECT=%~f1"
+cd /d "%TARGET_PROJECT%"
+echo Target Project: %TARGET_PROJECT%
 
 REM Check for Yosys (trying yowasp-yosys first, then yosys)
 set YOSYS_CMD=yosys
@@ -134,15 +144,16 @@ echo.
 echo [INFO] Generating schematics for: %USER_INPUT%
 echo.
 
-REM Create Diagram folder structure if it doesn't exist
-if not exist "Diagram" mkdir Diagram
-if not exist "Diagram\Simple" mkdir Diagram\Simple
-if not exist "Diagram\Detailed" mkdir Diagram\Detailed
-if not exist "Diagram\JSON" mkdir Diagram\JSON
+REM Create output/Diagram folder structure if it doesn't exist
+if not exist "output" mkdir output
+if not exist "output\Diagram" mkdir output\Diagram
+if not exist "output\Diagram\Simple" mkdir output\Diagram\Simple
+if not exist "output\Diagram\Detailed" mkdir output\Diagram\Detailed
+if not exist "output\Diagram\JSON" mkdir output\Diagram\JSON
 echo [INFO] Output directory structure:
-echo   - Diagram\Simple\    (Simple box diagrams)
-echo   - Diagram\Detailed\  (Detailed internal diagrams)
-echo   - Diagram\JSON\      (Intermediate JSON files)
+echo   - output\Diagram\Simple\    (Simple box diagrams)
+echo   - output\Diagram\Detailed\  (Detailed internal diagrams)
+echo   - output\Diagram\JSON\      (Intermediate JSON files)
 echo.
 
 REM Loop through each requested module
@@ -178,9 +189,9 @@ for %%M in (%USER_INPUT%) do (
         echo [INFO] Module %%M has sub-modules - generating BOTH detailed and simple versions
         
         REM === Generate DETAILED version ===
-        set "JSON_FILE=Diagram\JSON\output_%%M.json"
-        set "SVG_DETAILED=Diagram\Detailed\%%M_detailed.svg"
-        set "DRAWIO_DETAILED=Diagram\Detailed\%%M_detailed.drawio"
+        set "JSON_FILE=output\Diagram\JSON\output_%%M.json"
+        set "SVG_DETAILED=output\Diagram\Detailed\%%M_detailed.svg"
+        set "DRAWIO_DETAILED=output\Diagram\Detailed\%%M_detailed.drawio"
         
         echo [INFO] Generating detailed diagram...
         %YOSYS_CMD% -p "read_verilog -sv %VERILOG_FILES%; hierarchy -top %%M; proc; opt; write_json !JSON_FILE!" >nul 2>&1
@@ -188,21 +199,21 @@ for %%M in (%USER_INPUT%) do (
             echo [ERROR] Yosys synthesis failed for %%M
         ) else (
             echo [INFO] Cleaning JSON...
-            powershell -ExecutionPolicy Bypass -File tools\process_schematic.ps1 -JsonPath !JSON_FILE!
+            powershell -ExecutionPolicy Bypass -File "%~dp0..\tools\process_schematic.ps1" -JsonPath !JSON_FILE!
             
             echo [INFO] Generating detailed SVG...
-            call npx --yes netlistsvg !JSON_FILE! --skin tools\skin.svg -o !SVG_DETAILED! >nul 2>&1
+            call npx --yes netlistsvg !JSON_FILE! --skin "%~dp0..\tools\skin.svg" -o !SVG_DETAILED! >nul 2>&1
             
             if exist !SVG_DETAILED! (
                 echo [SUCCESS] Generated !SVG_DETAILED!
                 echo [INFO] Centering detailed SVG ports...
-                node tools\center_detailed_svg_ports.js !SVG_DETAILED! >nul 2>&1
+                node "%~dp0..\tools\center_detailed_svg_ports.js" !SVG_DETAILED! >nul 2>&1
                 if !errorlevel! neq 0 (
                     echo [WARN] Failed to center detailed SVG ports for %%M
                 )
                 
                 echo [INFO] Converting detailed to Draw.io...
-                node tools\svg2drawio.js !SVG_DETAILED! !DRAWIO_DETAILED!
+                node "%~dp0..\tools\svg2drawio.js" !SVG_DETAILED! !DRAWIO_DETAILED!
                 if exist !DRAWIO_DETAILED! (
                     echo [SUCCESS] Generated !DRAWIO_DETAILED!
                 )
@@ -212,17 +223,17 @@ for %%M in (%USER_INPUT%) do (
         )
         
         REM === Generate SIMPLE version ===
-        set "SVG_SIMPLE=Diagram\Simple\%%M.svg"
-        set "DRAWIO_SIMPLE=Diagram\Simple\%%M.drawio"
+        set "SVG_SIMPLE=output\Diagram\Simple\%%M.svg"
+        set "DRAWIO_SIMPLE=output\Diagram\Simple\%%M.drawio"
         
         echo [INFO] Generating simple diagram...
-        powershell -ExecutionPolicy Bypass -File tools\generate_simple_svg.ps1 -VerilogFile !SOURCE_FILE! -OutputSvg !SVG_SIMPLE!
+        powershell -ExecutionPolicy Bypass -File "%~dp0..\tools\generate_simple_svg.ps1" -VerilogFile !SOURCE_FILE! -OutputSvg !SVG_SIMPLE!
         
         if exist !SVG_SIMPLE! (
             echo [SUCCESS] Generated !SVG_SIMPLE!
             
             echo [INFO] Converting simple to Draw.io...
-            node tools\svg2drawio.js !SVG_SIMPLE! !DRAWIO_SIMPLE!
+            node "%~dp0..\tools\svg2drawio.js" !SVG_SIMPLE! !DRAWIO_SIMPLE!
             if exist !DRAWIO_SIMPLE! (
                 echo [SUCCESS] Generated !DRAWIO_SIMPLE!
             )
@@ -234,17 +245,17 @@ for %%M in (%USER_INPUT%) do (
         echo [INFO] Module %%M is a leaf module - generating simple version only
         
         REM === Generate SIMPLE version only ===
-        set "SVG_SIMPLE=Diagram\Simple\%%M.svg"
-        set "DRAWIO_SIMPLE=Diagram\Simple\%%M.drawio"
+        set "SVG_SIMPLE=output\Diagram\Simple\%%M.svg"
+        set "DRAWIO_SIMPLE=output\Diagram\Simple\%%M.drawio"
         
         echo [INFO] Generating simple diagram...
-        powershell -ExecutionPolicy Bypass -File tools\generate_simple_svg.ps1 -VerilogFile !SOURCE_FILE! -OutputSvg !SVG_SIMPLE!
+        powershell -ExecutionPolicy Bypass -File "%~dp0..\tools\generate_simple_svg.ps1" -VerilogFile !SOURCE_FILE! -OutputSvg !SVG_SIMPLE!
         
         if exist !SVG_SIMPLE! (
             echo [SUCCESS] Generated !SVG_SIMPLE!
             
             echo [INFO] Converting to Draw.io...
-            node tools\svg2drawio.js !SVG_SIMPLE! !DRAWIO_SIMPLE!
+            node "%~dp0..\tools\svg2drawio.js" !SVG_SIMPLE! !DRAWIO_SIMPLE!
             if exist !DRAWIO_SIMPLE! (
                 echo [SUCCESS] Generated !DRAWIO_SIMPLE!
             )

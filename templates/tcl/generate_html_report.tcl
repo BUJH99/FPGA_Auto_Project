@@ -6,19 +6,26 @@
 # - Render HTML from external template/assets
 # =================================================================
 
-set output_dir "./output"
-set report_dir "$output_dir/reports"
-set time_file "$report_dir/timing_summary.rpt"
-set power_file "$report_dir/power_report.rpt"
-set util_file "$report_dir/post_place_util.rpt"
-set cdc_file "$report_dir/cdc_report.rpt"
+set script_dir [file dirname [info script]]
+set project_root [pwd]
+if {[llength $argv] >= 1} {
+    set project_root [file normalize [lindex $argv 0]]
+}
 
-set json_file "$output_dir/report_data.json"
-set data_js_file "$output_dir/report_data.js"
-set html_file "$output_dir/Final_Build_Report.html"
-set wavedrom_file "$output_dir/wavedrom_cases.json"
+set output_dir [file normalize [file join $project_root "output"]]
+set report_dir [file normalize [file join $output_dir "reports"]]
+set time_file [file normalize [file join $report_dir "timing_summary.rpt"]]
+set power_file [file normalize [file join $report_dir "power_report.rpt"]]
+set util_file [file normalize [file join $report_dir "post_place_util.rpt"]]
+set cdc_file [file normalize [file join $report_dir "cdc_report.rpt"]]
 
-set asset_dir "./report_assets"
+set json_file [file normalize [file join $output_dir "report_data.json"]]
+set data_js_file [file normalize [file join $output_dir "report_data.js"]]
+set html_file [file normalize [file join $output_dir "Final_Build_Report.html"]]
+set wavedrom_file [file normalize [file join $output_dir "wavedrom_cases.json"]]
+set diagram_assets_dir [file normalize [file join $output_dir "diagram_assets"]]
+
+set asset_dir [file normalize [file join $script_dir ".." "report_assets"]]
 set html_template_file "$asset_dir/final_build_report_template.html"
 set css_asset "$asset_dir/final_build_report.css"
 set js_asset "$asset_dir/final_build_report.js"
@@ -28,7 +35,7 @@ set js_output "$output_dir/final_build_report.js"
 set gen_date [clock format [clock seconds] -format "%Y-%m-%d %H:%M:%S"]
 
 set top_module "Top"
-set config_file "./tcl/project_build_config.tcl"
+set config_file [file join $script_dir "project_build_config.tcl"]
 if {[file exists $config_file]} {
     puts "\[INFO\] Loading build config: $config_file"
     source $config_file
@@ -63,7 +70,7 @@ array set power_summary {
 
 set util_io_list {}
 set power_env_list {}
-set wavedrom_payload "{\"cases\":[]}"
+set wavedrom_payload {{"cases":[]}}
 
 # CDC Analysis variables
 set cdc_violations 0
@@ -71,7 +78,7 @@ set cdc_safe 0
 
 set bitstream_status "FAIL"
 set bitstream_path "N/A"
-set bit_file "$output_dir/${top_module}.bit"
+set bit_file [file normalize [file join $output_dir "${top_module}.bit"]]
 if {[file exists $bit_file]} {
     set bitstream_status "SUCCESS"
     set bitstream_path $bit_file
@@ -81,23 +88,31 @@ set has_block_diagram 0
 set block_diagram_rel ""
 set detailed_svg_name "${top_module}_detailed.svg"
 set simple_svg_name "${top_module}.svg"
+set block_diagram_src ""
 
-foreach f [glob -nocomplain "./Diagram/Detailed/*.svg"] {
+foreach f [glob -nocomplain [file join $output_dir "Diagram" "Detailed" "*.svg"]] {
     if {[string equal -nocase [file tail $f] $detailed_svg_name]} {
         set has_block_diagram 1
-        set block_diagram_rel "../Diagram/Detailed/[file tail $f]"
+        set block_diagram_src $f
         break
     }
 }
 
 if {!$has_block_diagram} {
-    foreach f [glob -nocomplain "./Diagram/Simple/*.svg"] {
+    foreach f [glob -nocomplain [file join $output_dir "Diagram" "Simple" "*.svg"]] {
         if {[string equal -nocase [file tail $f] $simple_svg_name]} {
             set has_block_diagram 1
-            set block_diagram_rel "../Diagram/Simple/[file tail $f]"
+            set block_diagram_src $f
             break
         }
     }
+}
+
+if {$has_block_diagram && $block_diagram_src ne "" && [file exists $block_diagram_src]} {
+    file mkdir $diagram_assets_dir
+    set block_diagram_name [file tail $block_diagram_src]
+    file copy -force $block_diagram_src [file join $diagram_assets_dir $block_diagram_name]
+    set block_diagram_rel "./diagram_assets/$block_diagram_name"
 }
 
 proc clean_val {val} {
@@ -138,6 +153,30 @@ proc write_text_file {path content} {
     set fp [open $path w]
     puts -nonewline $fp $content
     close $fp
+}
+
+proc stage_diagram_asset {src_path assets_dir} {
+    if {$src_path eq "" || ![file exists $src_path]} {
+        return ""
+    }
+    file mkdir $assets_dir
+    set dst_path [file join $assets_dir [file tail $src_path]]
+    file copy -force $src_path $dst_path
+    return "./diagram_assets/[file tail $src_path]"
+}
+
+proc is_valid_wavedrom_payload {raw_json} {
+    set txt [string trim $raw_json]
+    if {$txt eq ""} {
+        return 0
+    }
+    if {![regexp {^\s*\{.*\}\s*$} $txt]} {
+        return 0
+    }
+    if {![regexp {"cases"\s*:\s*\[} $txt]} {
+        return 0
+    }
+    return 1
 }
 
 # -----------------------------------------------------------------
@@ -269,8 +308,10 @@ if {[file exists $cdc_file]} {
 # -----------------------------------------------------------------
 if {[file exists $wavedrom_file]} {
     set raw_wave_json [string trim [read_text_file $wavedrom_file]]
-    if {$raw_wave_json ne ""} {
+    if {[is_valid_wavedrom_payload $raw_wave_json]} {
         set wavedrom_payload $raw_wave_json
+    } elseif {$raw_wave_json ne ""} {
+        puts "\[WARNING\] Invalid WaveDrom payload in $wavedrom_file. Using empty case list."
     }
 }
 
@@ -278,7 +319,7 @@ if {[file exists $wavedrom_file]} {
 # 3.6 Parse Source Modules (Descriptions)
 # -----------------------------------------------------------------
 set modules_list {}
-set src_files [glob -nocomplain "./src/*.v" "./src/*.sv"]
+set src_files [glob -nocomplain [file join $project_root "src" "*.v"] [file join $project_root "src" "*.sv"]]
 
 foreach f $src_files {
     set fp [open $f r]
@@ -385,10 +426,10 @@ for {set i 0} {$i < $mod_count} {incr i} {
     
     # Check for Schematic (Detailed > Simple)
     set schem_path ""
-    if {[file exists "./Diagram/Detailed/${m_name}_detailed.svg"]} {
-        set schem_path "../Diagram/Detailed/${m_name}_detailed.svg"
-    } elseif {[file exists "./Diagram/Simple/${m_name}.svg"]} {
-        set schem_path "../Diagram/Simple/${m_name}.svg"
+    if {[file exists [file join $output_dir "Diagram" "Detailed" "${m_name}_detailed.svg"]]} {
+        set schem_path [stage_diagram_asset [file join $output_dir "Diagram" "Detailed" "${m_name}_detailed.svg"] $diagram_assets_dir]
+    } elseif {[file exists [file join $output_dir "Diagram" "Simple" "${m_name}.svg"]]} {
+        set schem_path [stage_diagram_asset [file join $output_dir "Diagram" "Simple" "${m_name}.svg"] $diagram_assets_dir]
     }
 
     append report_json "{"

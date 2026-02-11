@@ -1,0 +1,26 @@
+# Ignore everything in the root directory
+/*
+
+# But exclude (allow) these files and directories
+!/.gitignore
+!/Setup.bat
+!/ReadMe.md
+!/templates/
+!/MAIN.bat
+
+# Do not keep generated sample outputs in templates
+/templates/output/**
+
+# Ignore common OS files (just in case they end up in templates)
+thumbs.db
+desktop.ini
+.DS_Store
+
+# Ignore common FPGA/Editor files (doubly ensuring)
+*.xpr
+*.log
+*.jou
+*.str
+*.pb
+*.wdb
+*.vcd

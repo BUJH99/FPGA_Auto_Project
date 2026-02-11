@@ -7,14 +7,15 @@ setlocal enabledelayedexpansion
 :: Description: Scans testbenches and runs simulation.
 :: ============================================================================
 
-:: Adjust Roots
-:: SCRIPT_DIR      = ...\UART_WATCH_STOPWATCH\bat\
-:: WORKSPACE_ROOT  = ...\UART_WATCH_STOPWATCH\ (Project Root)
-:: TOOLS_ROOT      = ...\FPGA_Auto_Project\    (Repo Root where 'tools' folder is)
+if "%~1"=="" (
+    echo [ERROR] No target project path provided.
+    echo Usage: %~nx0 ^<Project_Directory^>
+    pause
+    exit /b 1
+)
 
-set "SCRIPT_DIR=%~dp0"
-set "WORKSPACE_ROOT=%SCRIPT_DIR%.."
-set "TOOLS_ROOT=%SCRIPT_DIR%..\.."
+set "WORKSPACE_ROOT=%~f1"
+set "TOOLS_ROOT=%~dp0.."
 
 echo ============================================================================
 echo      Verilog Auto Simulation ^& Report
@@ -28,7 +29,7 @@ for /r %%F in (tb_*.v) do (
     set /a count+=1
     set "TB_FILE_!count!=%%F"
     set "TB_NAME_!count!=%%~nxF"
-    set "TB_REL_!count!=%%~pF" 
+    set "TB_REL_!count!=%%~pF"
 )
 popd
 
@@ -43,7 +44,7 @@ echo.
 echo Found !count! testbench(es):
 echo ----------------------------------------------------------------------------
 for /L %%i in (1,1,%count%) do (
-    echo [%%i] !TB_NAME_%%i!  	(Location: !TB_REL_%%i!)
+    echo [%%i] !TB_NAME_%%i!   (Location: !TB_REL_%%i!)
 )
 echo ----------------------------------------------------------------------------
 
@@ -69,17 +70,14 @@ echo Path: %TB_FILE_PATH%
 echo ============================================================================
 
 :: 4. Run Parse TB (Using TOOLS_ROOT)
-call node "%TOOLS_ROOT%\tools\parse_tb.js" "%TB_FILE_PATH%"
+call node "%TOOLS_ROOT%\tools\parse_tb.js" "%TB_FILE_PATH%" "%WORKSPACE_ROOT%"
 if errorlevel 1 (
     echo [FAILURE] Failed to parse testbench and generate config.
     pause
     exit /b 1
 )
 
-:: Infer Config Path (Logic: TB is in proj\tb\tb.v -> Config is in proj\sim_config.json)
-for %%I in ("%TB_FILE_PATH%") do set "TB_DIR=%%~dpI"
-for %%I in ("%TB_DIR%..") do set "PROJ_DIR=%%~fI"
-set "CONFIG_PATH=%PROJ_DIR%\sim_config.json"
+set "CONFIG_PATH=%WORKSPACE_ROOT%\sim_config.json"
 echo Target Config: %CONFIG_PATH%
 
 if not exist "%CONFIG_PATH%" (
@@ -111,7 +109,7 @@ if errorlevel 1 (
 echo.
 echo ============================================================================
 echo [SUCCESS] Automation Complete!
-echo Report Directory: %PROJ_DIR%\output\
+echo Report Directory: %WORKSPACE_ROOT%\output\
 echo ============================================================================
 pause
 exit /b 0
