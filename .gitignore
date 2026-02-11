@@ -10,6 +10,7 @@
 
 # Do not keep generated sample outputs in templates
 /templates/output/**
+!/templates/output/.gitkeep
 
 # Ignore common OS files (just in case they end up in templates)
 thumbs.db
