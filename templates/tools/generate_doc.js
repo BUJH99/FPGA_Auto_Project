@@ -9,7 +9,10 @@ console.log(`Target Project Root: ${projectRoot}`);
 const SRC_DIR = path.join(projectRoot, 'src');
 const DOC_DIR = path.join(projectRoot, 'output/docs');
 const OUTPUT_DIR = path.join(projectRoot, 'output');
-const DIAGRAM_DIR = path.join(projectRoot, 'output/Diagram/Simple');
+const DIAGRAM_SIMPLE_DIR = path.join(projectRoot, 'output/Diagram/Simple');
+const DIAGRAM_DETAILED_DIR = path.join(projectRoot, 'output/Diagram/Detailed');
+const FSM_SVG_DIR = path.join(projectRoot, 'output/fsm/svg');
+const FSM_DRAWIO_DIR = path.join(projectRoot, 'output/fsm/drawio');
 
 // Ensure DOC_DIR exists
 if (!fs.existsSync(DOC_DIR)) {
@@ -38,6 +41,33 @@ function extractComment(lines, index) {
     return comment.join(' ');
 }
 
+function detectFsmInSource(content) {
+    const hasStateCase = /\bcase\s*\(\s*[A-Za-z_]\w*(?:state|cur)[A-Za-z_0-9]*\s*\)/i.test(content);
+    const hasStateDecl = /\b(localparam|parameter)\b[\s\S]{0,240}\b[A-Za-z_]\w*(?:state|idle|init|run|wait|done)\w*\s*=/i.test(content);
+    const hasNextStateAssign = /\b[A-Za-z_]\w*(?:next|nxt|_d)\w*\s*(?:<=|=)\s*[A-Za-z_]\w+/i.test(content);
+    const hasAlways = /\balways\s*@|\balways_comb\b/i.test(content);
+    return (hasAlways && hasStateCase) || (hasStateDecl && hasNextStateAssign);
+}
+
+function appendFileLink(mdContent, docDir, targetPath, label, asImage) {
+    if (!fs.existsSync(targetPath)) return mdContent;
+    const relPath = path.relative(docDir, targetPath).replace(/\\/g, '/');
+    if (asImage) {
+        return mdContent + `- ${label}: ![${label}](${relPath})\n`;
+    }
+    return mdContent + `- ${label}: [${path.basename(targetPath)}](${relPath})\n`;
+}
+
+function appendSectionToc(mdContent, tocItems) {
+    if (!tocItems || tocItems.length === 0) return mdContent;
+    mdContent += `## Table of Contents\n\n`;
+    tocItems.forEach(item => {
+        mdContent += `- [${item.title}](#${item.anchor})\n`;
+    });
+    mdContent += `\n`;
+    return mdContent;
+}
+
 // Main Function
 function generateMarkdown(filePath) {
     const content = fs.readFileSync(filePath, 'utf-8');
@@ -63,17 +93,78 @@ function generateMarkdown(filePath) {
         mdContent += `**Description**: ${description}\n\n`;
     }
 
-    // 2. Visuals (Schematic & Diagram)
+    const fsmSvgPath = path.join(FSM_SVG_DIR, `${moduleName}_fsm.svg`);
+    const fsmDrawioPath = path.join(FSM_DRAWIO_DIR, `${moduleName}_fsm.drawio`);
+    const fsmAssetExists = fs.existsSync(fsmSvgPath) || fs.existsSync(fsmDrawioPath);
+    const fsmDetected = detectFsmInSource(content);
+    const enableFsmSection = fsmDetected || fsmAssetExists;
+
+    mdContent = appendSectionToc(mdContent, [
+        { title: 'Visuals', anchor: 'visuals' },
+        ...(enableFsmSection ? [{ title: 'FSM Diagram', anchor: 'fsm-diagram' }] : []),
+        { title: 'Parameters', anchor: 'parameters' },
+        { title: 'Interface', anchor: 'interface' },
+        { title: 'Signals', anchor: 'signals' },
+        { title: 'Assign Statements', anchor: 'assign-statements' },
+        { title: 'Always Blocks', anchor: 'always-blocks' },
+        { title: 'Functions', anchor: 'functions' },
+        { title: 'Sub-modules', anchor: 'sub-modules' }
+    ]);
+
+    // 2. Visuals (Simple / Detailed)
     mdContent += `## Visuals\n\n`;
-    
-    // Check for schematic SVG in output/Diagram/Simple folder
-    const svgPath = path.join(DIAGRAM_DIR, `${moduleName}.svg`);
-    if (fs.existsSync(svgPath)) {
-        // Calculate relative path from DOC_DIR to the SVG file
-        const relPath = path.relative(DOC_DIR, svgPath).replace(/\\/g, '/');
-        mdContent += `![Schematic](${relPath})\n\n`;
-    } else {
-        mdContent += `*Schematic not found in output/Diagram/Simple.*\n\n`;
+    const simpleSvgPath = path.join(DIAGRAM_SIMPLE_DIR, `${moduleName}.svg`);
+    const simpleDrawioPath = path.join(DIAGRAM_SIMPLE_DIR, `${moduleName}.drawio`);
+    const detailedSvgPath = path.join(DIAGRAM_DETAILED_DIR, `${moduleName}_detailed.svg`);
+    const detailedDrawioPath = path.join(DIAGRAM_DETAILED_DIR, `${moduleName}_detailed.drawio`);
+
+    mdContent += `### Simple Diagram\n`;
+    let hasSimpleAsset = false;
+    if (fs.existsSync(simpleSvgPath)) {
+        hasSimpleAsset = true;
+        mdContent = appendFileLink(mdContent, DOC_DIR, simpleSvgPath, 'Simple SVG', true);
+    }
+    if (fs.existsSync(simpleDrawioPath)) {
+        hasSimpleAsset = true;
+        mdContent = appendFileLink(mdContent, DOC_DIR, simpleDrawioPath, 'Simple Draw.io', false);
+    }
+    if (!hasSimpleAsset) {
+        mdContent += `- *Simple diagram assets not found.*\n`;
+    }
+    mdContent += `\n`;
+
+    mdContent += `### Detailed Diagram\n`;
+    let hasDetailedAsset = false;
+    if (fs.existsSync(detailedSvgPath)) {
+        hasDetailedAsset = true;
+        mdContent = appendFileLink(mdContent, DOC_DIR, detailedSvgPath, 'Detailed SVG', true);
+    }
+    if (fs.existsSync(detailedDrawioPath)) {
+        hasDetailedAsset = true;
+        mdContent = appendFileLink(mdContent, DOC_DIR, detailedDrawioPath, 'Detailed Draw.io', false);
+    }
+    if (!hasDetailedAsset) {
+        mdContent += `- *Detailed diagram assets not found.*\n`;
+    }
+    mdContent += `\n`;
+
+    // FSM visuals are shown when source pattern is detected or FSM assets already exist.
+    if (enableFsmSection) {
+        mdContent += `## FSM Diagram\n\n`;
+        let hasFsmAsset = false;
+        if (fs.existsSync(fsmSvgPath)) {
+            hasFsmAsset = true;
+            mdContent = appendFileLink(mdContent, DOC_DIR, fsmSvgPath, 'FSM SVG', true);
+        }
+        if (fs.existsSync(fsmDrawioPath)) {
+            hasFsmAsset = true;
+            mdContent = appendFileLink(mdContent, DOC_DIR, fsmDrawioPath, 'FSM Draw.io', false);
+        }
+        if (!hasFsmAsset) {
+            mdContent += `- *FSM was detected, but no generated FSM assets were found.*\n`;
+            mdContent += `- *Run draw_fsm.bat to generate output/fsm/svg and output/fsm/drawio files.*\n`;
+        }
+        mdContent += `\n`;
     }
 
     // 3. Parameters
@@ -384,6 +475,63 @@ function generateMarkdown(filePath) {
     const outPath = path.join(DOC_DIR, `${moduleName}.md`);
     fs.writeFileSync(outPath, mdContent);
     console.log(`Generated: ${outPath}`);
+
+    return {
+        moduleName,
+        docPath: outPath,
+        hasSimpleSvg: fs.existsSync(simpleSvgPath),
+        hasSimpleDrawio: fs.existsSync(simpleDrawioPath),
+        simpleSvgPath,
+        simpleDrawioPath,
+        hasFsmSection: enableFsmSection,
+        hasFsmSvg: fs.existsSync(fsmSvgPath),
+        hasFsmDrawio: fs.existsSync(fsmDrawioPath),
+        fsmSvgPath,
+        fsmDrawioPath
+    };
+}
+
+function generateFsmIndex(docItems) {
+    const fsmItems = docItems.filter(item =>
+        item &&
+        item.hasFsmSection &&
+        (item.hasFsmSvg || item.hasFsmDrawio)
+    );
+    if (fsmItems.length === 0) return;
+
+    let indexMd = `# FSM Index\n\n`;
+    indexMd += `자동 감지된 FSM 모듈의 다이어그램/문서 링크입니다.\n\n`;
+    indexMd += `## Modules\n\n`;
+
+    fsmItems
+        .sort((a, b) => a.moduleName.localeCompare(b.moduleName))
+        .forEach(item => {
+            const docRel = path.relative(DOC_DIR, item.docPath).replace(/\\/g, '/');
+            indexMd += `### ${item.moduleName}\n`;
+            indexMd += `- Module Doc: [${path.basename(item.docPath)}](${docRel})\n`;
+            if (item.hasSimpleSvg) {
+                const simpleSvgRel = path.relative(DOC_DIR, item.simpleSvgPath).replace(/\\/g, '/');
+                indexMd += `- Simple SVG: [${path.basename(item.simpleSvgPath)}](${simpleSvgRel})\n`;
+            }
+            if (item.hasSimpleDrawio) {
+                const simpleDrawioRel = path.relative(DOC_DIR, item.simpleDrawioPath).replace(/\\/g, '/');
+                indexMd += `- Simple Draw.io: [${path.basename(item.simpleDrawioPath)}](${simpleDrawioRel})\n`;
+            }
+            if (item.hasFsmSvg) {
+                const svgRel = path.relative(DOC_DIR, item.fsmSvgPath).replace(/\\/g, '/');
+                indexMd += `- FSM SVG: [${path.basename(item.fsmSvgPath)}](${svgRel})\n`;
+                indexMd += `- Preview:\n\n![${item.moduleName} FSM](${svgRel})\n\n`;
+            }
+            if (item.hasFsmDrawio) {
+                const drawioRel = path.relative(DOC_DIR, item.fsmDrawioPath).replace(/\\/g, '/');
+                indexMd += `- FSM Draw.io: [${path.basename(item.fsmDrawioPath)}](${drawioRel})\n`;
+            }
+            indexMd += `\n`;
+        });
+
+    const outPath = path.join(DOC_DIR, 'fsm_index.md');
+    fs.writeFileSync(outPath, indexMd);
+    console.log(`Generated: ${outPath}`);
 }
 
 // Run for all .v files in src
@@ -426,9 +574,11 @@ if (fs.existsSync(SRC_DIR)) {
                 console.log("No valid files selected.");
             } else {
                 console.log(`\nGenerating docs for ${selectedFiles.length} files...`);
+                const results = [];
                 selectedFiles.forEach(f => {
-                    generateMarkdown(path.join(SRC_DIR, f));
+                    results.push(generateMarkdown(path.join(SRC_DIR, f)));
                 });
+                generateFsmIndex(results);
                 console.log("\nDone.");
             }
             rl.close();

@@ -1,4 +1,4 @@
-﻿<svg  xmlns="http://www.w3.org/2000/svg"
+<svg  xmlns="http://www.w3.org/2000/svg"
   xmlns:xlink="http://www.w3.org/1999/xlink"
   xmlns:s="https://github.com/nturley/netlistsvg"
   width="800" height="300">
@@ -8,6 +8,9 @@
       org.eclipse.elk.spacing.nodeNode="40"
       org.eclipse.elk.spacing.portPort="15"
       org.eclipse.elk.layered.layering.strategy="LONGEST_PATH"
+      org.eclipse.elk.portAlignment.default="CENTER"
+      org.eclipse.elk.portAlignment.west="CENTER"
+      org.eclipse.elk.portAlignment.east="CENTER"
     />
     <s:low_priority_alias val="$dff" />
   </s:properties>

@@ -206,12 +206,6 @@ for %%M in (%USER_INPUT%) do (
             
             if exist !SVG_DETAILED! (
                 echo [SUCCESS] Generated !SVG_DETAILED!
-                echo [INFO] Centering detailed SVG ports...
-                node "%~dp0..\tools\center_detailed_svg_ports.js" !SVG_DETAILED! >nul 2>&1
-                if !errorlevel! neq 0 (
-                    echo [WARN] Failed to center detailed SVG ports for %%M
-                )
-                
                 echo [INFO] Converting detailed to Draw.io...
                 node "%~dp0..\tools\svg2drawio.js" !SVG_DETAILED! !DRAWIO_DETAILED!
                 if exist !DRAWIO_DETAILED! (

@@ -135,34 +135,9 @@ function retargetWireEndpoints(svgRoot, endpointMoves) {
 
   const findMove = (x, y) => endpointMoves.find((m) => nearlyEqual(x, m.oldX) && nearlyEqual(y, m.oldY));
   let updatedEndpoints = 0;
+  let addedBridgeSegments = 0;
   const lines = svgRoot.line || [];
-
-  const moveJunctionForNet = (netClass, jx, oldJy, deltaY) => {
-    if (!netClass) {
-      return;
-    }
-
-    lines.forEach((line) => {
-      if (!line.$ || line.$.class !== netClass) {
-        return;
-      }
-
-      const x1 = parseFloat(line.$.x1);
-      const y1 = parseFloat(line.$.y1);
-      const x2 = parseFloat(line.$.x2);
-      const y2 = parseFloat(line.$.y2);
-
-      if (Number.isFinite(x1) && Number.isFinite(y1) && nearlyEqual(x1, jx) && nearlyEqual(y1, oldJy)) {
-        line.$.y1 = formatNumber(y1 + deltaY);
-        updatedEndpoints += 1;
-      }
-
-      if (Number.isFinite(x2) && Number.isFinite(y2) && nearlyEqual(x2, jx) && nearlyEqual(y2, oldJy)) {
-        line.$.y2 = formatNumber(y2 + deltaY);
-        updatedEndpoints += 1;
-      }
-    });
-  };
+  const bridges = [];
 
   lines.forEach((line) => {
     if (!line.$) {
@@ -176,6 +151,8 @@ function retargetWireEndpoints(svgRoot, endpointMoves) {
 
     let moved1 = null;
     let moved2 = null;
+    let originalNewY1 = oldY1;
+    let originalNewY2 = oldY2;
     let newY1 = oldY1;
     let newY2 = oldY2;
 
@@ -183,6 +160,7 @@ function retargetWireEndpoints(svgRoot, endpointMoves) {
       const move1 = findMove(oldX1, oldY1);
       if (move1) {
         newY1 = oldY1 + move1.deltaY;
+        originalNewY1 = newY1;
         line.$.y1 = formatNumber(newY1);
         updatedEndpoints += 1;
         moved1 = move1;
@@ -193,31 +171,53 @@ function retargetWireEndpoints(svgRoot, endpointMoves) {
       const move2 = findMove(oldX2, oldY2);
       if (move2) {
         newY2 = oldY2 + move2.deltaY;
+        originalNewY2 = newY2;
         line.$.y2 = formatNumber(newY2);
         updatedEndpoints += 1;
         moved2 = move2;
       }
     }
 
-    // Keep orthogonal routing by shifting the connected junction on the same net.
+    // If only one endpoint moved on a horizontal segment, keep the shared junction fixed
+    // and add a short local vertical bridge near the moved port.
+    // This avoids disconnecting other sinks/sources sharing the same net junction.
     if (moved1 && !moved2 && Number.isFinite(oldY1) && Number.isFinite(oldY2) && nearlyEqual(oldY1, oldY2)) {
-      const junctionX = oldX2;
-      const junctionOldY = oldY2;
-      const deltaY = moved1.deltaY;
-      newY2 = oldY2 + deltaY;
-      line.$.y2 = formatNumber(newY2);
-      moveJunctionForNet(line.$.class, junctionX, junctionOldY, deltaY);
+      line.$.y1 = formatNumber(oldY1);
+      bridges.push({
+        x1: oldX1,
+        y1: oldY1,
+        x2: oldX1,
+        y2: originalNewY1,
+        className: line.$.class,
+      });
+      addedBridgeSegments += 1;
     } else if (!moved1 && moved2 && Number.isFinite(oldY1) && Number.isFinite(oldY2) && nearlyEqual(oldY1, oldY2)) {
-      const junctionX = oldX1;
-      const junctionOldY = oldY1;
-      const deltaY = moved2.deltaY;
-      newY1 = oldY1 + deltaY;
-      line.$.y1 = formatNumber(newY1);
-      moveJunctionForNet(line.$.class, junctionX, junctionOldY, deltaY);
+      line.$.y2 = formatNumber(oldY2);
+      bridges.push({
+        x1: oldX2,
+        y1: oldY2,
+        x2: oldX2,
+        y2: originalNewY2,
+        className: line.$.class,
+      });
+      addedBridgeSegments += 1;
     }
   });
 
-  return updatedEndpoints;
+  bridges.forEach((b) => {
+    const attrs = {
+      x1: formatNumber(b.x1),
+      y1: formatNumber(b.y1),
+      x2: formatNumber(b.x2),
+      y2: formatNumber(b.y2),
+    };
+    if (b.className) {
+      attrs.class = b.className;
+    }
+    lines.push({ $: attrs });
+  });
+
+  return { updatedEndpoints, addedBridgeSegments };
 }
 
 fs.readFile(inputFile, (readError, data) => {
@@ -239,7 +239,7 @@ fs.readFile(inputFile, (readError, data) => {
     }
 
     const { endpointMoves, shiftedModuleCount } = recenterPorts(result.svg);
-    const updatedEndpointCount = retargetWireEndpoints(result.svg, endpointMoves);
+    const { updatedEndpoints: updatedEndpointCount, addedBridgeSegments } = retargetWireEndpoints(result.svg, endpointMoves);
 
     const builder = new xml2js.Builder({ renderOpts: { pretty: true } });
     const xmlOutput = builder.buildObject(result);
@@ -251,7 +251,7 @@ fs.readFile(inputFile, (readError, data) => {
       }
 
       console.log(
-        `[INFO] Recentered ports in ${shiftedModuleCount} module(s), retargeted ${updatedEndpointCount} wire endpoint(s).`
+        `[INFO] Recentered ports in ${shiftedModuleCount} module(s), retargeted ${updatedEndpointCount} wire endpoint(s), added ${addedBridgeSegments} bridge segment(s).`
       );
     });
   });

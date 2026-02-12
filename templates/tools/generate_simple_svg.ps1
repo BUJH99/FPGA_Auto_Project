@@ -93,7 +93,9 @@ Write-Host "[INFO] Inputs: $($inputPorts.Count), Outputs: $($outputPorts.Count)"
 $portSpacing = 25
 $maxPorts = [Math]::Max($inputPorts.Count, $outputPorts.Count)
 $boxHeight = [Math]::Max(150, $maxPorts * $portSpacing + 80)
-$arrowLength = 80
+$arrowLength = [Math]::Max(24, [Math]::Round(80 * 0.4))
+$arrowHeadLength = [Math]::Max(4, [Math]::Round($arrowLength * 0.22))
+$arrowHeadHalfHeight = [Math]::Max(2, [Math]::Round($arrowHeadLength * 0.5))
 
 # SVG coordinates
 $boxX = 150
@@ -150,7 +152,7 @@ foreach ($port in $inputPorts) {
   $svg += @"
   <!-- Input: $port -->
   <line class="wire" x1="$($boxX - $arrowLength)" y1="$inputY" x2="$boxX" y2="$inputY"/>
-  <polygon class="arrow" points="$($boxX-8),$($inputY-4) $boxX,$inputY $($boxX-8),$($inputY+4)"/>
+  <polygon class="arrow" points="$($boxX-$arrowHeadLength),$($inputY-$arrowHeadHalfHeight) $boxX,$inputY $($boxX-$arrowHeadLength),$($inputY+$arrowHeadHalfHeight)"/>
   <text class="port-label" x="$($boxX + 10)" y="$($inputY + 4)">$port</text>
   
 "@
@@ -165,7 +167,7 @@ foreach ($port in $outputPorts) {
   $svg += @"
   <!-- Output: $port -->
   <line class="wire" x1="$outputXStart" y1="$outputY" x2="$outputXEnd" y2="$outputY"/>
-  <polygon class="arrow" points="$($outputXEnd-8),$($outputY-4) $outputXEnd,$outputY $($outputXEnd-8),$($outputY+4)"/>
+  <polygon class="arrow" points="$($outputXEnd-$arrowHeadLength),$($outputY-$arrowHeadHalfHeight) $outputXEnd,$outputY $($outputXEnd-$arrowHeadLength),$($outputY+$arrowHeadHalfHeight)"/>
   <text class="port-label" text-anchor="end" x="$($boxX + $boxWidth - 10)" y="$($outputY + 4)">$port</text>
   
 "@

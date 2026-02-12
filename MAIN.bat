@@ -100,6 +100,7 @@ call :ADD_MENU_ITEM 3 "draw_schematic.bat"
 call :ADD_MENU_ITEM 4 "browse_verilog_hierarchy.bat"
 call :ADD_MENU_ITEM 5 "print_verilog_hierarchy.bat"
 call :ADD_MENU_ITEM 6 "generate_docs.bat"
+call :ADD_MENU_ITEM 15 "draw_fsm.bat"
 echo.
 
 echo %Yellow%[ Simulation ^& Reporting ]%Reset%

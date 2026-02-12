@@ -54,6 +54,14 @@ function createMxCell(id, value, style, vertex, parent, geom) {
       { $: { x: geom.targetPoint.x, y: geom.targetPoint.y, as: "targetPoint" } },
     ];
   }
+  if (Array.isArray(geom.waypoints) && geom.waypoints.length > 0) {
+    cell.mxGeometry[0].Array = [
+      {
+        $: { as: "points" },
+        mxPoint: geom.waypoints.map((p) => ({ $: { x: p.x, y: p.y } })),
+      },
+    ];
+  }
   return cell;
 }
 
@@ -73,6 +81,45 @@ function parseTransform(transformStr) {
 
 function isNear(a, b, tol = 0.75) {
   return Math.abs(a - b) <= tol;
+}
+
+function safeParseFloat(v, fallback = 0) {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function parseSimplePathGeometry(d) {
+  if (!d || typeof d !== "string") return null;
+
+  const q = d.match(/M\s*([-\d.]+)\s+([-\d.]+)\s+Q\s*([-\d.]+)\s+([-\d.]+),?\s*([-\d.]+)\s+([-\d.]+)/i);
+  if (q) {
+    return {
+      type: "Q",
+      x1: safeParseFloat(q[1]) * SCALE,
+      y1: safeParseFloat(q[2]) * SCALE,
+      cx1: safeParseFloat(q[3]) * SCALE,
+      cy1: safeParseFloat(q[4]) * SCALE,
+      x2: safeParseFloat(q[5]) * SCALE,
+      y2: safeParseFloat(q[6]) * SCALE,
+    };
+  }
+
+  const c = d.match(/M\s*([-\d.]+)\s+([-\d.]+)\s+C\s*([-\d.]+)\s+([-\d.]+),?\s*([-\d.]+)\s+([-\d.]+),?\s*([-\d.]+)\s+([-\d.]+)/i);
+  if (c) {
+    return {
+      type: "C",
+      x1: safeParseFloat(c[1]) * SCALE,
+      y1: safeParseFloat(c[2]) * SCALE,
+      cx1: safeParseFloat(c[3]) * SCALE,
+      cy1: safeParseFloat(c[4]) * SCALE,
+      cx2: safeParseFloat(c[5]) * SCALE,
+      cy2: safeParseFloat(c[6]) * SCALE,
+      x2: safeParseFloat(c[7]) * SCALE,
+      y2: safeParseFloat(c[8]) * SCALE,
+    };
+  }
+
+  return null;
 }
 
 function getSimpleLayoutProfile(svg) {
@@ -167,7 +214,13 @@ fs.readFile(inputFile, (err, data) => {
 
       if (svg.rect) {
         svg.rect.forEach((rect) => {
-           const r = rect.$;
+           const r = rect.$ || {};
+           const className = r.class || "";
+           // FSM SVG uses label background rectangles only for readability.
+           // In Draw.io these look like extra unwanted signal boxes, so skip them.
+           if (className.includes("label-bg")) {
+             return;
+           }
            const x = parseFloat(r.x) * SCALE;
            const y = parseFloat(r.y) * SCALE;
            let w = parseFloat(r.width) * SCALE;
@@ -183,14 +236,58 @@ fs.readFile(inputFile, (err, data) => {
         });
       }
 
+      if (svg.ellipse) {
+        svg.ellipse.forEach((e) => {
+          const att = e.$ || {};
+          const cx = safeParseFloat(att.cx) * SCALE;
+          const cy = safeParseFloat(att.cy) * SCALE;
+          const rx = safeParseFloat(att.rx) * SCALE;
+          const ry = safeParseFloat(att.ry) * SCALE;
+          if (rx <= 0 || ry <= 0) return;
+
+          const style = "ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;";
+          rootCells.push(createMxCell(nextId(), "", style, true, "1", {
+            x: cx - rx,
+            y: cy - ry,
+            width: rx * 2,
+            height: ry * 2,
+          }));
+        });
+      }
+
       if (svg.text) {
         svg.text.forEach((t) => {
-           const txt = t._;
-           const att = t.$;
-           let x = parseFloat(att.x) * SCALE;
-           const y = parseFloat(att.y) * SCALE;
+           const att = t.$ || {};
            const className = att.class || "";
-           const anchor = att["text-anchor"] || (att.class === "module-name" ? "middle" : "start");
+           const classTokens = new Set(className.split(/\s+/).filter(Boolean));
+           const tspanLines = Array.isArray(t.tspan)
+             ? t.tspan
+                 .map((span) => (typeof span === "string" ? span : (typeof span?._ === "string" ? span._ : "")))
+                 .map((x) => x.trim())
+                 .filter(Boolean)
+             : [];
+           const multiline = tspanLines.length > 1;
+           let txt = typeof t._ === "string" ? t._ : "";
+           if (!txt && tspanLines.length) {
+             txt = multiline ? tspanLines.join("<br/>") : tspanLines[0];
+           }
+           if (!txt) return;
+
+           let x = safeParseFloat(att.x, NaN) * SCALE;
+           let y = safeParseFloat(att.y, NaN) * SCALE;
+           if ((!Number.isFinite(x) || !Number.isFinite(y)) && Array.isArray(t.tspan) && t.tspan[0] && t.tspan[0].$) {
+             if (!Number.isFinite(x)) x = safeParseFloat(t.tspan[0].$.x, 0) * SCALE;
+             if (!Number.isFinite(y)) y = safeParseFloat(t.tspan[0].$.y, 0) * SCALE;
+           }
+           if (!Number.isFinite(x)) x = 0;
+           if (!Number.isFinite(y)) y = 0;
+
+           // Some FSM SVG texts rely on CSS class-based text-anchor (not inline attr).
+           // Preserve visual parity with SVG by inferring center alignment from class.
+           let anchor = att["text-anchor"] || (att.class === "module-name" ? "middle" : "start");
+           if (classTokens.has("node-text") || classTokens.has("label")) {
+             anchor = "middle";
+           }
 
            if (simpleLayout) {
              if (className.includes("module-name")) {
@@ -207,19 +304,20 @@ fs.readFile(inputFile, (err, data) => {
            // Font size heuristic
            let fontSize = 12;
            if (att.class === "module-name") fontSize = 16;
-           
-           const w = txt.length * 8; 
-           const h = 20;
+           const maxLineLen = multiline ? Math.max(...tspanLines.map((x) => x.length)) : txt.length;
+           const w = Math.max(24, maxLineLen * 8);
+           const h = multiline ? Math.max(20, tspanLines.length * 14) : 20;
 
            // Adjust x for alignment because Draw.io x is left-top usually
            let finalX = x;
            if (align === "center") finalX = x - w/2;
            if (align === "right") finalX = x - w;
 
-           const style = `text;html=1;strokeColor=none;fillColor=none;align=${align};verticalAlign=middle;whiteSpace=nowrap;rounded=0;fontSize=${fontSize};fontFamily=Helvetica;`;
+           const whiteSpace = multiline ? "wrap" : "nowrap";
+           const style = `text;html=1;strokeColor=none;fillColor=none;align=${align};verticalAlign=middle;whiteSpace=${whiteSpace};rounded=0;fontSize=${fontSize};fontFamily=Helvetica;`;
            
            rootCells.push(createMxCell(nextId(), txt, style, true, "1", {
-             x: finalX, y: y - 10, width: w, height: h
+             x: finalX, y: y - h / 2, width: w, height: h
            }));
         });
       }
@@ -242,6 +340,29 @@ fs.readFile(inputFile, (err, data) => {
              sourcePoint: { x: x1, y: y1 },
              targetPoint: { x: x2, y: y2 }
            }));
+        });
+      }
+
+      if (svg.path) {
+        svg.path.forEach((p) => {
+          const att = p.$ || {};
+          const geo = parseSimplePathGeometry(att.d);
+          if (!geo) return;
+
+          const style = "curved=1;endArrow=classic;html=1;rounded=0;";
+          const geom = {
+            sourcePoint: { x: geo.x1, y: geo.y1 },
+            targetPoint: { x: geo.x2, y: geo.y2 },
+          };
+          if (geo.type === "Q") {
+            geom.waypoints = [{ x: geo.cx1, y: geo.cy1 }];
+          } else if (geo.type === "C") {
+            geom.waypoints = [
+              { x: geo.cx1, y: geo.cy1 },
+              { x: geo.cx2, y: geo.cy2 },
+            ];
+          }
+          rootCells.push(createMxCell(nextId(), "", style, false, "1", geom));
         });
       }
 
@@ -304,6 +425,9 @@ fs.readFile(inputFile, (err, data) => {
       }
     } else {
       console.log("[JS] Detected netlistsvg format");
+      const genericInputAnchors = [];
+      const deferredOutputPortSymbols = [];
+      const netClassEndpoints = new Map();
 
       // 1. Process Modules (svg.g)
       if (svg.g) {
@@ -371,6 +495,23 @@ fs.readFile(inputFile, (err, data) => {
             vertex.$.style += "fontSize=11;fontStyle=1;";
           }
 
+          // Reproduce external port symbol strokes from netlistsvg:
+          // - inputExt: plain short line (no arrowhead)
+          // - outputExt: short line with one arrowhead
+          if (type === "inputExt") {
+            const sy = transform.y + 10 * SCALE;
+            rootCells.push(createMxCell(nextId(), "", "startArrow=none;endArrow=none;edgeStyle=none;html=1;rounded=0;", false, "1", {
+              sourcePoint: { x: transform.x + 10 * SCALE, y: sy },
+              targetPoint: { x: transform.x + 30 * SCALE, y: sy },
+            }));
+          } else if (type === "outputExt") {
+            const sy = transform.y + 10 * SCALE;
+            rootCells.push(createMxCell(nextId(), "", "startArrow=none;endArrow=classic;edgeStyle=none;html=1;rounded=0;", false, "1", {
+              sourcePoint: { x: transform.x, y: sy },
+              targetPoint: { x: transform.x + 20 * SCALE, y: sy },
+            }));
+          }
+
           // Process Internal Ports (g.g)
           if (g.g && type === "generic") {
             const ports = [];
@@ -398,26 +539,6 @@ fs.readFile(inputFile, (err, data) => {
               });
             });
 
-            // Keep original spacing, but vertically center the side with fewer ports.
-            const inputPorts = ports.filter((p) => !p.isOutput).sort((a, b) => a.relY - b.relY);
-            const outputPorts = ports.filter((p) => p.isOutput).sort((a, b) => a.relY - b.relY);
-
-            const centerShift = (fixed, moving) => {
-              if (!fixed.length || !moving.length) return;
-              const fixedCenter = (fixed[0].relY + fixed[fixed.length - 1].relY) / 2;
-              const movingCenter = (moving[0].relY + moving[moving.length - 1].relY) / 2;
-              const delta = fixedCenter - movingCenter;
-              moving.forEach((p) => {
-                p.relY += delta;
-              });
-            };
-
-            if (inputPorts.length > outputPorts.length) {
-              centerShift(inputPorts, outputPorts);
-            } else if (outputPorts.length > inputPorts.length) {
-              centerShift(outputPorts, inputPorts);
-            }
-
             ports.forEach((port) => {
               let labelStyle = "text;html=1;strokeColor=none;fillColor=none;verticalAlign=middle;whiteSpace=nowrap;rounded=0;fontSize=10;fontFamily=Helvetica;";
               const labelW = port.name.length * 6 + 40; // Approx
@@ -434,6 +555,27 @@ fs.readFile(inputFile, (err, data) => {
               labelStyle += `align=${align};`;
 
               const portY = transform.y + port.relY;
+              const portSymbolStyle = "startArrow=none;endArrow=classic;edgeStyle=none;html=1;rounded=0;strokeWidth=1;endSize=6;";
+
+              // Recreate netlistsvg per-port triangles on both input/output sides.
+              // input  : x-5 -> x   (arrow points right into module boundary)
+              // output : x   -> x+5 (arrow points right away from module boundary)
+              if (port.isOutput) {
+                deferredOutputPortSymbols.push({
+                  x: transform.x + width,
+                  y: portY,
+                });
+              } else {
+                rootCells.push(createMxCell(nextId(), "", portSymbolStyle, false, "1", {
+                  sourcePoint: { x: transform.x - 5, y: portY },
+                  targetPoint: { x: transform.x, y: portY },
+                }));
+                genericInputAnchors.push({
+                  x: transform.x + port.relX,
+                  y: transform.y + port.relY,
+                });
+              }
+
               const portLabelCell = createMxCell(nextId(), port.name, labelStyle, true, "1", {
                 x: labelX,
                 y: portY - 6, // center vertically
@@ -456,42 +598,6 @@ fs.readFile(inputFile, (err, data) => {
       // 2. Process Wires (svg.line) & Collect Bus Widths
       const wireEndpoints = new Map(); // "x,y" (SCALED) -> bitWidth
       
-      // Helper to check if point touches a component's input (Left Edge Rule)
-      // Excludes inputExt since it's a source
-      const isInputTarget = (x, y) => {
-        // Tolerance for floating point/alignment
-        const TOL = 4; 
-        for (const cell of rootCells) {
-           // Skip edges, root, or non-module vertices
-           if (!cell.$ || cell.$.edge === "1") continue; // Skip edges
-           if (!cell.mxGeometry || !cell.mxGeometry[0] || !cell.mxGeometry[0].$) continue;
-           
-           const g = cell.mxGeometry[0].$;
-           const cx = parseFloat(g.x || 0);
-           const cy = parseFloat(g.y || 0);
-           const cw = parseFloat(g.width || 0);
-           const ch = parseFloat(g.height || 0);
-           
-           // Filter types based on cell style or id? 
-           // We can check if it's a vertex and NOT an inputExt
-           // In our code, inputExt style is "text;..." but we can check the cell value or logic
-           // Better: we can rely on spatial collision.
-           // InputExt inputs are on the RIGHT (Source). OutputExt inputs are on LEFT (Sink).
-           // Standard Modules inputs are on LEFT (Sink).
-           
-           // Logic check:
-           // If it's an inputExt, its logic input is external, output is internal (Right side).
-           const isInputExt = cell.$.style && cell.$.style.includes("inputExt"); 
-           if (isInputExt) continue;
-
-           // Check Left Edge collision (Sink)
-           if (Math.abs(x - cx) <= TOL && y >= cy - TOL && y <= cy + ch + TOL) {
-             return true;
-           }
-        }
-        return false;
-      };
-
       if (svg.line) {
         svg.line.forEach((line) => {
           const attrs = line.$;
@@ -511,20 +617,15 @@ fs.readFile(inputFile, (err, data) => {
           wireEndpoints.set(k1, Math.max(wireEndpoints.get(k1) || 1, bitWidth));
           wireEndpoints.set(k2, Math.max(wireEndpoints.get(k2) || 1, bitWidth));
 
-          // Default: No arrow
-          let style = "endArrow=none;html=1;rounded=0;";
-          let startArrow = "";
-          let endArrow = "none";
-
-          // Check connectivity to component inputs
-          if (isInputTarget(x2, y2)) {
-             endArrow = "classic";
-          } else if (isInputTarget(x1, y1)) {
-             startArrow = "classic"; // Wire drawn reverse?
+          const netClass = attrs.class || "";
+          if (netClass) {
+            if (!netClassEndpoints.has(netClass)) netClassEndpoints.set(netClass, []);
+            netClassEndpoints.get(netClass).push({ x: x1, y: y1 });
+            netClassEndpoints.get(netClass).push({ x: x2, y: y2 });
           }
 
-          if (startArrow) style = `startArrow=${startArrow};endArrow=${endArrow};html=1;rounded=0;`;
-          else style = `endArrow=${endArrow};html=1;rounded=0;`;
+          // Preserve netlistsvg as-is: do not infer or add arrowheads on wires.
+          const style = "startArrow=none;endArrow=none;html=1;rounded=0;";
 
           const edge = createMxCell(nextId(), "", style, false, "1", {
             sourcePoint: { x: x1, y: y1 },
@@ -533,6 +634,38 @@ fs.readFile(inputFile, (err, data) => {
           rootCells.push(edge);
         });
       }
+
+      // Draw output-port triangles after line scan so we can skip symbols for
+      // outputs that never drive any input-side anchor.
+      const portSymbolStyle = "startArrow=none;endArrow=classic;edgeStyle=none;html=1;rounded=0;strokeWidth=1;endSize=6;";
+      deferredOutputPortSymbols.forEach((port) => {
+        const touchingNetClasses = [];
+        netClassEndpoints.forEach((pts, cls) => {
+          if (pts.some((p) => isNear(p.x, port.x, 1.5) && isNear(p.y, port.y, 1.5))) {
+            touchingNetClasses.push(cls);
+          }
+        });
+
+        let drivesAnyInput = false;
+        for (const cls of touchingNetClasses) {
+          const pts = netClassEndpoints.get(cls) || [];
+          if (pts.some((p) => genericInputAnchors.some((a) => isNear(p.x, a.x, 1.5) && isNear(p.y, a.y, 1.5)))) {
+            drivesAnyInput = true;
+            break;
+          }
+        }
+
+        // If this output net does not feed any input anchor, skip module-side arrow.
+        if (!drivesAnyInput) return;
+
+        // Keep the arrow completely outside module boundary.
+        const outStartX = port.x + 4;
+        const outEndX = outStartX + 5;
+        rootCells.push(createMxCell(nextId(), "", portSymbolStyle, false, "1", {
+          sourcePoint: { x: outStartX, y: port.y },
+          targetPoint: { x: outEndX, y: port.y },
+        }));
+      });
 
       // 3. Update Port Labels with Bus Width
       rootCells.forEach(cell => {
