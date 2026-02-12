@@ -440,21 +440,34 @@ function extractCaseItems(caseBody) {
   return items;
 }
 
-function parseStates(cleanSrc, caseItems) {
+function parseStates(blockText, caseItems, nextVar, curVar) {
   const st = new Set();
-  const lpRe = /localparam(?:\s*\[[^\]]+\])?\s+([^;]+);/g;
-  let m;
-  while ((m = lpRe.exec(cleanSrc)) !== null) {
-    const decl = m[1];
-    const parts = decl.split(",");
-    for (const p of parts) {
-      const mm = p.match(/([A-Za-z_]\w*)\s*=/);
-      if (mm) st.add(mm[1]);
-    }
-  }
   for (const it of caseItems) {
     if (it.label.toLowerCase() !== "default") st.add(it.label);
   }
+
+  function addStateToken(tok) {
+    if (!tok) return;
+    if (tok === curVar || tok === nextVar) return;
+    st.add(tok);
+  }
+
+  const assignRe = new RegExp(`\\b${nextVar}\\b\\s*(?:<=|=)\\s*([A-Za-z_]\\w*)\\b`, "g");
+  let m;
+  while ((m = assignRe.exec(blockText)) !== null) {
+    addStateToken(m[1]);
+  }
+
+  const cmpRe1 = new RegExp(`\\b${curVar}\\b\\s*(?:==|!=)\\s*([A-Za-z_]\\w*)\\b`, "g");
+  while ((m = cmpRe1.exec(blockText)) !== null) {
+    addStateToken(m[1]);
+  }
+
+  const cmpRe2 = new RegExp(`([A-Za-z_]\\w*)\\b\\s*(?:==|!=)\\s*\\b${curVar}\\b`, "g");
+  while ((m = cmpRe2.exec(blockText)) !== null) {
+    addStateToken(m[1]);
+  }
+
   return st;
 }
 
@@ -1249,7 +1262,7 @@ function parseFsmFromVerilog(filePath) {
   const caseBody = extractCaseBody(block.text, vars.curVar);
   const caseItems = caseBody ? extractCaseItems(caseBody) : [];
 
-  const stateSet = parseStates(src, caseItems);
+  const stateSet = parseStates(block.text, caseItems, vars.nextVar, vars.curVar);
   const edgeMap = new Map();
   let startState = null;
 

@@ -15,7 +15,6 @@ mkdir "%ProjectName%"
 
 echo [INFO] Creating standardized project directories...
 if not exist "%ProjectName%\constrs" mkdir "%ProjectName%\constrs"
-if not exist "%ProjectName%\Diagram" mkdir "%ProjectName%\Diagram"
 if not exist "%ProjectName%\ip" mkdir "%ProjectName%\ip"
 if not exist "%ProjectName%\md" mkdir "%ProjectName%\md"
 if not exist "%ProjectName%\output" mkdir "%ProjectName%\output"
@@ -37,7 +36,6 @@ echo ------------------------------------------------
 echo [%ProjectName%] project created successfully.
 echo Created folders:
 echo - constrs
-echo - Diagram
 echo - ip
 echo - md
 echo - output
