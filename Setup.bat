@@ -19,6 +19,14 @@ if not exist "%ProjectName%\Diagram" mkdir "%ProjectName%\Diagram"
 if not exist "%ProjectName%\ip" mkdir "%ProjectName%\ip"
 if not exist "%ProjectName%\md" mkdir "%ProjectName%\md"
 if not exist "%ProjectName%\output" mkdir "%ProjectName%\output"
+if not exist "%ProjectName%\output\docs" mkdir "%ProjectName%\output\docs"
+if not exist "%ProjectName%\output\Diagram" mkdir "%ProjectName%\output\Diagram"
+if not exist "%ProjectName%\output\Diagram\Simple" mkdir "%ProjectName%\output\Diagram\Simple"
+if not exist "%ProjectName%\output\Diagram\Detailed" mkdir "%ProjectName%\output\Diagram\Detailed"
+if not exist "%ProjectName%\output\Diagram\JSON" mkdir "%ProjectName%\output\Diagram\JSON"
+if not exist "%ProjectName%\output\fsm" mkdir "%ProjectName%\output\fsm"
+if not exist "%ProjectName%\output\fsm\svg" mkdir "%ProjectName%\output\fsm\svg"
+if not exist "%ProjectName%\output\fsm\drawio" mkdir "%ProjectName%\output\fsm\drawio"
 if not exist "%ProjectName%\report_assets" mkdir "%ProjectName%\report_assets"
 if not exist "%ProjectName%\src" mkdir "%ProjectName%\src"
 if not exist "%ProjectName%\skills" mkdir "%ProjectName%\skills"
@@ -33,6 +41,12 @@ echo - Diagram
 echo - ip
 echo - md
 echo - output
+echo - output\docs
+echo - output\Diagram\Simple
+echo - output\Diagram\Detailed
+echo - output\Diagram\JSON
+echo - output\fsm\svg
+echo - output\fsm\drawio
 echo - report_assets
 echo - src
 echo - skills
