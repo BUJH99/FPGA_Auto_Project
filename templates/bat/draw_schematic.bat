@@ -29,6 +29,14 @@ if %errorlevel% equ 0 (
     )
 )
 
+set "NETLISTSVG_CMD=%~dp0..\node_modules\netlistsvg\bin\netlistsvg.js"
+if not exist "%NETLISTSVG_CMD%" (
+    echo [ERROR] netlistsvg not found at templates\node_modules
+    echo [INFO] Run: cd templates ^&^& npm install
+    pause
+    exit /b 1
+)
+
 REM Dynamically find all Verilog files in src folder
 set "VERILOG_FILES="
 set "ALL_MODULES="
@@ -202,7 +210,12 @@ for %%M in (%USER_INPUT%) do (
             powershell -ExecutionPolicy Bypass -File "%~dp0..\tools\process_schematic.ps1" -JsonPath !JSON_FILE!
             
             echo [INFO] Generating detailed SVG...
-            call npx --yes netlistsvg !JSON_FILE! --skin "%~dp0..\tools\skin.svg" -o !SVG_DETAILED! >nul 2>&1
+            if exist !SVG_DETAILED! del /q !SVG_DETAILED! >nul 2>&1
+            call node "%NETLISTSVG_CMD%" !JSON_FILE! --skin "%~dp0..\tools\skin.svg" -o !SVG_DETAILED! >nul 2>&1
+            if !errorlevel! neq 0 (
+                echo [ERROR] netlistsvg generation failed for %%M
+                goto :next_module
+            )
             
             if exist !SVG_DETAILED! (
                 echo [SUCCESS] Generated !SVG_DETAILED!

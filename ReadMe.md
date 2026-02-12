@@ -29,6 +29,17 @@ To fully utilize this toolkit, the following tools need to be installed.
 4.  **Node.js & npm**: Required for schematic generation features (`netlistsvg`, `svg2drawio`).
 5.  **Yosys** (Optional): Required for generating Detailed Schematics (Recommended: `yowasp-yosys`).
 
+#### Using templates after clone (netlistsvg patch)
+
+To use schematic generation (e.g. `draw_schematic.bat`) after cloning the repo, install template dependencies once:
+
+```cmd
+cd templates
+npm install
+```
+
+- The repo includes `templates/node_modules/` and `templates/patches/netlistsvg+1.0.2.patch`, so clone 후 바로 사용 가능. 새로 의존성 설치 시에는 `cd templates` 후 `npm install` 하면 패치가 자동 적용됨.
+
 ---
 
 ## 🚦 Getting Started
@@ -132,6 +143,17 @@ set top_module "Top"               ; # Top Module Name
 3.  **GTKWave**: 시뮬레이션 파형 확인용.
 4.  **Node.js & npm**: 회로도 생성(`netlistsvg`, `svg2drawio`) 기능을 위해 필요.
 5.  **Yosys** (선택): 상세 회로도(Detailed Schematic) 생성을 위해 필요 (`yowasp-yosys` 권장).
+
+#### clone 후 templates 사용 (netlistsvg 패치)
+
+레포를 clone한 뒤 회로도 생성(`draw_schematic.bat` 등)을 쓰려면, **templates에서 의존성 설치를 한 번** 해주세요.
+
+```cmd
+cd templates
+npm install
+```
+
+- 레포에 `templates/node_modules/`와 `templates/patches/netlistsvg+1.0.2.patch`가 포함되어 있어 clone 후 바로 사용 가능. 새로 의존성 설치할 때는 `cd templates` 후 `npm install` 하면 패치가 자동 적용됨.
 
 ---
 
