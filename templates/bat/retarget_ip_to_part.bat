@@ -10,6 +10,11 @@ if "%~1"=="" (
 
 set "TARGET_PROJECT=%~f1"
 cd /d "%TARGET_PROJECT%"
+set "LOG_DIR=%TARGET_PROJECT%\log"
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
+set "RETARGET_LOG=%LOG_DIR%\retarget_ip_to_part.log"
+set "RETARGET_JOU=%LOG_DIR%\retarget_ip_to_part.jou"
+call :route_vivado_artifacts
 
 where vivado >nul 2>nul
 if %errorlevel% neq 0 (
@@ -19,11 +24,23 @@ if %errorlevel% neq 0 (
 )
 
 echo [INFO] Retargeting IP to project_build_config.tcl part...
-vivado -mode batch -source "%~dp0..\tcl\retarget_ip_to_part.tcl" -notrace -nojournal -log ./output/retarget_ip_to_part.log
-if %errorlevel% neq 0 (
-    echo [ERROR] Retarget IP failed. Check output/retarget_ip_to_part.log
-    exit /b %errorlevel%
+vivado -mode batch -source "%~dp0..\tcl\retarget_ip_to_part.tcl" -notrace -log "%RETARGET_LOG%" -journal "%RETARGET_JOU%"
+set "RETARGET_RC=%errorlevel%"
+call :route_vivado_artifacts
+if %RETARGET_RC% neq 0 (
+    echo [ERROR] Retarget IP failed. Check %RETARGET_LOG%
+    exit /b %RETARGET_RC%
 )
 
 echo [DONE] IP retarget complete.
 endlocal
+exit /b 0
+
+:route_vivado_artifacts
+for %%F in (vivado.log vivado.jou vivado.pb vivado.str) do (
+    if exist "%%F" move /y "%%F" "%LOG_DIR%\" >nul 2>&1
+)
+for %%F in (*.backup.log *.backup.jou *.backup.str) do (
+    if exist "%%F" move /y "%%F" "%LOG_DIR%\" >nul 2>&1
+)
+exit /b 0

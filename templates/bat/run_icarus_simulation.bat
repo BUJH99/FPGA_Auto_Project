@@ -38,8 +38,10 @@ goto :eof
 $tbDir = 'tb'
 $srcDir = 'src'
 $outDir = 'output'
+$finalReportDir = Join-Path $outDir 'FINALReport'
 
 if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir | Out-Null }
+if (-not (Test-Path $finalReportDir)) { New-Item -ItemType Directory -Path $finalReportDir | Out-Null }
 if (-not (Test-Path $tbDir)) {
     Write-Host "No 'tb' directory found." -ForegroundColor Red
     exit 1
@@ -71,7 +73,7 @@ $tbBase = $targetTB.BaseName
 $outFile = Join-Path $outDir 'sim.out'
 $simLogFile = Join-Path $outDir "$tbBase.sim.log"
 $defaultVcd = Join-Path $outDir "$tbBase.vcd"
-$wavedromOut = Join-Path $outDir 'wavedrom_cases.json'
+$wavedromOut = Join-Path $finalReportDir 'wavedrom_cases.json'
 
 Write-Host "`n[1/5] Compiling..." -ForegroundColor Yellow
 $srcFiles = Get-ChildItem -Path $srcDir -File | Where-Object { $_.Extension -in '.v', '.sv' } | ForEach-Object { $_.FullName }
@@ -186,11 +188,33 @@ if (-not (Test-Path $tclScript)) {
     Write-Host "[INFO] Vivado not found in PATH. Skip report generation." -ForegroundColor DarkYellow
 } else {
     $projectRoot = (Get-Location).Path
-    & vivado -mode batch -source $tclScript -tclargs $projectRoot -notrace -nojournal -log ./output/report_gen_sim.log
+    $logDir = Join-Path $projectRoot 'log'
+    if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
+    $reportLog = Join-Path $logDir 'report_gen_sim.log'
+    $reportJou = Join-Path $logDir 'report_gen_sim.jou'
+
+    foreach ($f in @('vivado.log', 'vivado.jou', 'vivado.pb', 'vivado.str')) {
+        $src = Join-Path $projectRoot $f
+        if (Test-Path $src) { Move-Item -Force $src $logDir }
+    }
+    Get-ChildItem -Path $projectRoot -Filter *.backup.* -File -ErrorAction SilentlyContinue | ForEach-Object {
+        Move-Item -Force $_.FullName $logDir
+    }
+
+    & vivado -mode batch -source $tclScript -tclargs $projectRoot -notrace -log $reportLog -journal $reportJou
+
+    foreach ($f in @('vivado.log', 'vivado.jou', 'vivado.pb', 'vivado.str')) {
+        $src = Join-Path $projectRoot $f
+        if (Test-Path $src) { Move-Item -Force $src $logDir }
+    }
+    Get-ChildItem -Path $projectRoot -Filter *.backup.* -File -ErrorAction SilentlyContinue | ForEach-Object {
+        Move-Item -Force $_.FullName $logDir
+    }
+
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "[WARNING] Report generation failed. Check output\report_gen_sim.log" -ForegroundColor DarkYellow
+        Write-Host "[WARNING] Report generation failed. Check log\\report_gen_sim.log" -ForegroundColor DarkYellow
     } else {
-        $reportPath = Join-Path $projectRoot 'output\Final_Build_Report.html'
+        $reportPath = Join-Path $projectRoot 'output\FINALReport\Final_Build_Report.html'
         Write-Host "[SUCCESS] Report generated: $reportPath" -ForegroundColor Green
     }
 }

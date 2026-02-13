@@ -1,8 +1,8 @@
 # =================================================================
 # Vivado HTML Report Generator (Structured)
 # - Parse Vivado text reports
-# - Serialize to JSON artifact (output/report_data.json)
-# - Export JS object payload (output/report_data.js)
+# - Serialize to JSON artifact (output/FINALReport/report_data.json)
+# - Export JS object payload (output/FINALReport/report_data.js)
 # - Render HTML from external template/assets
 # =================================================================
 
@@ -13,24 +13,26 @@ if {[llength $argv] >= 1} {
 }
 
 set output_dir [file normalize [file join $project_root "output"]]
+set final_report_dir [file normalize [file join $output_dir "FINALReport"]]
 set report_dir [file normalize [file join $output_dir "reports"]]
 set time_file [file normalize [file join $report_dir "timing_summary.rpt"]]
 set power_file [file normalize [file join $report_dir "power_report.rpt"]]
 set util_file [file normalize [file join $report_dir "post_place_util.rpt"]]
 set cdc_file [file normalize [file join $report_dir "cdc_report.rpt"]]
 
-set json_file [file normalize [file join $output_dir "report_data.json"]]
-set data_js_file [file normalize [file join $output_dir "report_data.js"]]
-set html_file [file normalize [file join $output_dir "Final_Build_Report.html"]]
-set wavedrom_file [file normalize [file join $output_dir "wavedrom_cases.json"]]
-set diagram_assets_dir [file normalize [file join $output_dir "diagram_assets"]]
+set json_file [file normalize [file join $final_report_dir "report_data.json"]]
+set data_js_file [file normalize [file join $final_report_dir "report_data.js"]]
+set html_file [file normalize [file join $final_report_dir "Final_Build_Report.html"]]
+set wavedrom_file [file normalize [file join $final_report_dir "wavedrom_cases.json"]]
+set legacy_wavedrom_file [file normalize [file join $output_dir "wavedrom_cases.json"]]
+set diagram_assets_dir [file normalize [file join $final_report_dir "diagram_assets"]]
 
 set asset_dir [file normalize [file join $script_dir ".." "report_assets"]]
 set html_template_file "$asset_dir/final_build_report_template.html"
 set css_asset "$asset_dir/final_build_report.css"
 set js_asset "$asset_dir/final_build_report.js"
-set css_output "$output_dir/final_build_report.css"
-set js_output "$output_dir/final_build_report.js"
+set css_output "$final_report_dir/final_build_report.css"
+set js_output "$final_report_dir/final_build_report.js"
 
 set gen_date [clock format [clock seconds] -format "%Y-%m-%d %H:%M:%S"]
 
@@ -163,6 +165,15 @@ proc stage_diagram_asset {src_path assets_dir} {
     set dst_path [file join $assets_dir [file tail $src_path]]
     file copy -force $src_path $dst_path
     return "./diagram_assets/[file tail $src_path]"
+}
+
+proc move_if_exists {src_path dst_path} {
+    if {![file exists $src_path]} {
+        return
+    }
+    file mkdir [file dirname $dst_path]
+    file copy -force $src_path $dst_path
+    file delete -force $src_path
 }
 
 proc is_valid_wavedrom_payload {raw_json} {
@@ -312,6 +323,15 @@ if {[file exists $wavedrom_file]} {
         set wavedrom_payload $raw_wave_json
     } elseif {$raw_wave_json ne ""} {
         puts "\[WARNING\] Invalid WaveDrom payload in $wavedrom_file. Using empty case list."
+    }
+} elseif {[file exists $legacy_wavedrom_file]} {
+    file mkdir $final_report_dir
+    file copy -force $legacy_wavedrom_file $wavedrom_file
+    set raw_wave_json [string trim [read_text_file $wavedrom_file]]
+    if {[is_valid_wavedrom_payload $raw_wave_json]} {
+        set wavedrom_payload $raw_wave_json
+    } elseif {$raw_wave_json ne ""} {
+        puts "\[WARNING\] Invalid WaveDrom payload in $legacy_wavedrom_file. Using empty case list."
     }
 }
 
@@ -506,6 +526,7 @@ append report_json "\"wavedrom\":$wavedrom_payload"
 append report_json "}"
 
 file mkdir $output_dir
+file mkdir $final_report_dir
 
 write_text_file $json_file "$report_json\n"
 puts "\[INFO\] Structured report data saved: $json_file"
@@ -550,4 +571,30 @@ write_text_file $html_file $final_html
 if {$missing_assets} {
     puts "\[WARNING\] Report generated, but one or more UI assets were missing."
 }
+
+# -----------------------------------------------------------------
+# 8. Migrate legacy report artifacts from output root
+# -----------------------------------------------------------------
+set legacy_json_file [file normalize [file join $output_dir "report_data.json"]]
+set legacy_data_js_file [file normalize [file join $output_dir "report_data.js"]]
+set legacy_html_file [file normalize [file join $output_dir "Final_Build_Report.html"]]
+set legacy_css_file [file normalize [file join $output_dir "final_build_report.css"]]
+set legacy_js_file [file normalize [file join $output_dir "final_build_report.js"]]
+set legacy_diagram_assets [file normalize [file join $output_dir "diagram_assets"]]
+
+if {$legacy_json_file ne $json_file} { move_if_exists $legacy_json_file $json_file }
+if {$legacy_data_js_file ne $data_js_file} { move_if_exists $legacy_data_js_file $data_js_file }
+if {$legacy_html_file ne $html_file} { move_if_exists $legacy_html_file $html_file }
+if {$legacy_css_file ne $css_output} { move_if_exists $legacy_css_file $css_output }
+if {$legacy_js_file ne $js_output} { move_if_exists $legacy_js_file $js_output }
+if {$legacy_wavedrom_file ne $wavedrom_file} { move_if_exists $legacy_wavedrom_file $wavedrom_file }
+
+if {[file exists $legacy_diagram_assets] && [string compare $legacy_diagram_assets $diagram_assets_dir] != 0} {
+    file mkdir $diagram_assets_dir
+    foreach old_asset [glob -nocomplain [file join $legacy_diagram_assets "*"]] {
+        file copy -force $old_asset [file join $diagram_assets_dir [file tail $old_asset]]
+    }
+    file delete -force $legacy_diagram_assets
+}
+
 puts "Report Generated: $html_file"

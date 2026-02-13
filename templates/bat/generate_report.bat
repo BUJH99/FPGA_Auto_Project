@@ -10,8 +10,13 @@ if "%~1"=="" (
 
 set "TARGET_PROJECT=%~f1"
 cd /d "%TARGET_PROJECT%"
-set "REPORT_HTML=%TARGET_PROJECT%\output\Final_Build_Report.html"
-set "REPORT_LOG=%TARGET_PROJECT%\output\report_gen_standalone.log"
+set "REPORT_DIR=%TARGET_PROJECT%\output\FINALReport"
+set "REPORT_HTML=%REPORT_DIR%\Final_Build_Report.html"
+set "LOG_DIR=%TARGET_PROJECT%\log"
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
+set "REPORT_LOG=%LOG_DIR%\report_gen_standalone.log"
+set "REPORT_JOU=%LOG_DIR%\report_gen_standalone.jou"
+call :route_vivado_artifacts
 
 echo ===============================================================================
 echo  [REPORT] Generating HTML Report from existing logs...
@@ -29,16 +34,28 @@ if not exist "output\reports" (
 )
 
 :: Run the Tcl script (force project root path)
-call vivado -mode batch -source "%~dp0..\tcl\generate_html_report.tcl" -tclargs "%TARGET_PROJECT%" -notrace -nojournal -log ./output/report_gen_standalone.log
+call vivado -mode batch -source "%~dp0..\tcl\generate_html_report.tcl" -tclargs "%TARGET_PROJECT%" -notrace -log "%REPORT_LOG%" -journal "%REPORT_JOU%"
+set "REPORT_RC=%errorlevel%"
+call :route_vivado_artifacts
 
-if %errorlevel% neq 0 (
+if %REPORT_RC% neq 0 (
     echo.
     echo [ERROR] Report generation failed. Check "%REPORT_LOG%".
     pause
-    exit /b %errorlevel%
+    exit /b %REPORT_RC%
 )
 
 echo.
 echo [SUCCESS] Report generated: %REPORT_HTML%
 echo.
 pause
+exit /b 0
+
+:route_vivado_artifacts
+for %%F in (vivado.log vivado.jou vivado.pb vivado.str) do (
+    if exist "%%F" move /y "%%F" "%LOG_DIR%\" >nul 2>&1
+)
+for %%F in (*.backup.log *.backup.jou *.backup.str) do (
+    if exist "%%F" move /y "%%F" "%LOG_DIR%\" >nul 2>&1
+)
+exit /b 0

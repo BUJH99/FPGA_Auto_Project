@@ -115,6 +115,7 @@ call :ADD_MENU_ITEM 11 "run_vivado_build_flow.bat"
 call :ADD_MENU_ITEM 12 "finalize_block_design.bat"
 call :ADD_MENU_ITEM 13 "retarget_ip_to_part.bat"
 call :ADD_MENU_ITEM 14 "program_fpga_device.bat"
+call :ADD_MENU_ITEM 16 "auto_build_and_program.bat"
 echo.
 
 echo   %Blue%[B] Back to Project Selection%Reset%

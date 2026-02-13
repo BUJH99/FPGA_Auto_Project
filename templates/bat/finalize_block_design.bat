@@ -10,6 +10,11 @@ if "%~1"=="" (
 
 set "TARGET_PROJECT=%~f1"
 cd /d "%TARGET_PROJECT%"
+set "LOG_DIR=%TARGET_PROJECT%\log"
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
+set "FINALIZE_LOG=%LOG_DIR%\finalize_block_design.log"
+set "FINALIZE_JOU=%LOG_DIR%\finalize_block_design.jou"
+call :route_vivado_artifacts
 
 where vivado >nul 2>nul
 if %errorlevel% neq 0 (
@@ -19,11 +24,23 @@ if %errorlevel% neq 0 (
 )
 
 echo [INFO] Finalizing block design and exported artifacts...
-vivado -mode batch -source "%~dp0..\tcl\finalize_block_design.tcl" -notrace -nojournal -log ./output/finalize_block_design.log
-if %errorlevel% neq 0 (
-    echo [ERROR] Finalize failed. Check output/finalize_block_design.log
-    exit /b %errorlevel%
+vivado -mode batch -source "%~dp0..\tcl\finalize_block_design.tcl" -notrace -log "%FINALIZE_LOG%" -journal "%FINALIZE_JOU%"
+set "FINALIZE_RC=%errorlevel%"
+call :route_vivado_artifacts
+if %FINALIZE_RC% neq 0 (
+    echo [ERROR] Finalize failed. Check %FINALIZE_LOG%
+    exit /b %FINALIZE_RC%
 )
 
 echo [DONE] BD finalized. No wrapper generated.
 endlocal
+exit /b 0
+
+:route_vivado_artifacts
+for %%F in (vivado.log vivado.jou vivado.pb vivado.str) do (
+    if exist "%%F" move /y "%%F" "%LOG_DIR%\" >nul 2>&1
+)
+for %%F in (*.backup.log *.backup.jou *.backup.str) do (
+    if exist "%%F" move /y "%%F" "%LOG_DIR%\" >nul 2>&1
+)
+exit /b 0

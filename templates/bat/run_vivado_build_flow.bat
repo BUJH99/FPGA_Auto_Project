@@ -9,8 +9,29 @@ if "%~1"=="" (
 )
 
 set "TARGET_PROJECT=%~f1"
+set "AUTO_PROGRAM=0"
+set "NO_PAUSE=0"
+for %%A in ("%~2" "%~3" "%~4") do (
+    if /i "%%~A"=="--auto-program" set "AUTO_PROGRAM=1"
+    if /i "%%~A"=="--no-pause" set "NO_PAUSE=1"
+)
+
 cd /d "%TARGET_PROJECT%"
 title Vivado Automation Flow - %TARGET_PROJECT%
+
+set "LOG_DIR=%TARGET_PROJECT%\log"
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
+
+set "BUILD_LOG=%LOG_DIR%\vivado_full_build.log"
+set "BUILD_JOU=%LOG_DIR%\vivado_full_build.jou"
+set "RTL_HIER_LOG=%LOG_DIR%\rtl_hier.log"
+set "RTL_HIER_JOU=%LOG_DIR%\rtl_hier.jou"
+set "REPORT_GEN_LOG=%LOG_DIR%\report_gen.log"
+set "REPORT_GEN_JOU=%LOG_DIR%\report_gen.jou"
+set "FINAL_REPORT_DIR=%TARGET_PROJECT%\output\FINALReport"
+set "FINAL_REPORT_HTML=%FINAL_REPORT_DIR%\Final_Build_Report.html"
+
+call :route_vivado_artifacts
 
 cls
 echo.
@@ -27,7 +48,7 @@ if %errorlevel% neq 0 (
     echo [ERROR] Vivado executable not found in PATH.
     echo         Please add Vivado bin directory to your System PATH.
     echo.
-    pause
+    call :maybe_pause
     exit /b 1
 )
 echo      - Vivado found.
@@ -46,9 +67,11 @@ echo         (Please wait. Check log for details.)
 echo ===============================================================================
 echo.
 
-call vivado -mode batch -source "%~dp0..\tcl\run_vivado_build_flow.tcl" -log ./output/vivado_full_build.log -nojournal -notrace
+call vivado -mode batch -source "%~dp0..\tcl\run_vivado_build_flow.tcl" -log "%BUILD_LOG%" -journal "%BUILD_JOU%" -notrace
+set "BUILD_RC=%errorlevel%"
+call :route_vivado_artifacts
 
-if %errorlevel% neq 0 (
+if %BUILD_RC% neq 0 (
     echo.
     echo ###############################################################################
     echo #                                                                             #
@@ -56,10 +79,10 @@ if %errorlevel% neq 0 (
     echo #                                                                             #
     echo ###############################################################################
     echo.
-    echo [ERROR] Please check the log file: output/vivado_full_build.log
+    echo [ERROR] Please check the log file: %BUILD_LOG%
     echo.
-    pause
-    exit /b %errorlevel%
+    call :maybe_pause
+    exit /b %BUILD_RC%
 )
 
 set "PROGRAM_STATUS=SKIPPED"
@@ -70,9 +93,11 @@ echo  [INFO] Extracting RTL Hierarchy (diagram/report source data)...
 echo ===============================================================================
 echo.
 
-call vivado -mode batch -source "%~dp0..\tcl\export_rtl_hierarchy_mermaid.tcl" -notrace -nojournal -log ./output/rtl_hier.log
-if %errorlevel% neq 0 (
-    echo [WARNING] RTL hierarchy extraction failed. Check output/rtl_hier.log
+call vivado -mode batch -source "%~dp0..\tcl\export_rtl_hierarchy_mermaid.tcl" -notrace -log "%RTL_HIER_LOG%" -journal "%RTL_HIER_JOU%"
+set "RTL_RC=%errorlevel%"
+call :route_vivado_artifacts
+if %RTL_RC% neq 0 (
+    echo [WARNING] RTL hierarchy extraction failed. Check %RTL_HIER_LOG%
 )
 
 echo.
@@ -81,13 +106,15 @@ echo  [REPORT] Generating Final Build Report...
 echo ===============================================================================
 echo.
 
-call vivado -mode batch -source "%~dp0..\tcl\generate_html_report.tcl" -tclargs "%TARGET_PROJECT%" -notrace -nojournal -log ./output/report_gen.log
-if %errorlevel% neq 0 (
+call vivado -mode batch -source "%~dp0..\tcl\generate_html_report.tcl" -tclargs "%TARGET_PROJECT%" -notrace -log "%REPORT_GEN_LOG%" -journal "%REPORT_GEN_JOU%"
+set "REPORT_RC=%errorlevel%"
+call :route_vivado_artifacts
+if %REPORT_RC% neq 0 (
     echo [WARNING] Report generation script returned an error.
 )
 
-if exist output\Final_Build_Report.html (
-    echo      - Report generated: %TARGET_PROJECT%\output\Final_Build_Report.html
+if exist "%FINAL_REPORT_HTML%" (
+    echo      - Report generated: %FINAL_REPORT_HTML%
 ) else (
     echo      - [WARNING] Failed to generate report.
 )
@@ -99,11 +126,8 @@ echo ===========================================================================
 echo.
 
 if exist "%~dp0program_fpga_device.bat" (
-    choice /C YN /N /M "Run program_fpga_device.bat now? [Y/N]: "
-    if errorlevel 2 (
-        echo [INFO] Device programming skipped by user.
-        set "PROGRAM_STATUS=SKIPPED_BY_USER"
-    ) else (
+    if "%AUTO_PROGRAM%"=="1" (
+        echo [INFO] Auto program mode enabled. Running program_fpga_device.bat...
         call "%~dp0program_fpga_device.bat" "%TARGET_PROJECT%" --no-pause
         if !errorlevel! neq 0 (
             echo [WARNING] program_fpga_device.bat failed.
@@ -111,6 +135,21 @@ if exist "%~dp0program_fpga_device.bat" (
         ) else (
             echo [INFO] Device programming completed.
             set "PROGRAM_STATUS=SUCCESS"
+        )
+    ) else (
+        choice /C YN /N /M "Run program_fpga_device.bat now? [Y/N]: "
+        if errorlevel 2 (
+            echo [INFO] Device programming skipped by user.
+            set "PROGRAM_STATUS=SKIPPED_BY_USER"
+        ) else (
+            call "%~dp0program_fpga_device.bat" "%TARGET_PROJECT%" --no-pause
+            if !errorlevel! neq 0 (
+                echo [WARNING] program_fpga_device.bat failed.
+                set "PROGRAM_STATUS=FAILED"
+            ) else (
+                echo [INFO] Device programming completed.
+                set "PROGRAM_STATUS=SUCCESS"
+            )
         )
     )
 ) else (
@@ -125,10 +164,26 @@ echo #                                                                          
 echo ###############################################################################
 echo.
 echo [INFO] Bitstream location: %CD%\output
-echo [INFO] Build Report      : %CD%\output\Final_Build_Report.html
+echo [INFO] Build Report      : %FINAL_REPORT_HTML%
+echo [INFO] Vivado Logs       : %LOG_DIR%
 echo [INFO] Program Device    : %PROGRAM_STATUS%
 echo.
 echo ===============================================================================
 echo  All tasks completed. Press any key to close this window...
 echo ===============================================================================
+call :maybe_pause
+exit /b 0
+
+:maybe_pause
+if "%NO_PAUSE%"=="1" exit /b 0
 pause >nul
+exit /b 0
+
+:route_vivado_artifacts
+for %%F in (vivado.log vivado.jou vivado.pb vivado.str) do (
+    if exist "%%F" move /y "%%F" "%LOG_DIR%\" >nul 2>&1
+)
+for %%F in (*.backup.log *.backup.jou *.backup.str) do (
+    if exist "%%F" move /y "%%F" "%LOG_DIR%\" >nul 2>&1
+)
+exit /b 0

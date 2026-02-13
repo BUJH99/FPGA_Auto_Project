@@ -60,7 +60,7 @@ Use the launcher from the repository root.
 *   **`MAIN.bat`**: Interactive launcher in repository root. It scans project folders and runs scripts from `templates/bat/` for the selected project.
 
 #### 🏗️ Build & Implementation
-*   **`bat\run_vivado_build_flow.bat`**: Generates a Vivado project and builds up to the bitstream in one go. Results are saved in `output/`. At the end, it asks whether to run device programming (`Y/N`).
+*   **`bat\run_vivado_build_flow.bat`**: Generates a Vivado project and builds up to the bitstream in one go. Build artifacts are saved under `output/`, and final report assets are saved under `output/FINALReport/`. At the end, it asks whether to run device programming (`Y/N`).
 *   **`bat\program_fpga_device.bat`**: Downloads the generated bitstream to the board.
 *   **`bat\launch_ipi_gui.bat`**: Opens the configured project in the Vivado GUI environment.
 
@@ -90,7 +90,8 @@ The structure of the project created by `Setup.bat` is as follows:
 ├── Diagram/         # Generated schematic images
 ├── ip/              # Exported/managed IP files (.xci)
 ├── md/              # Markdown outputs/notes
-├── output/          # Build logs, bitstreams, reports storage
+├── output/          # Build artifacts and report data
+│   └── FINALReport/ # Final report HTML/CSS/JS/JSON and diagram assets
 ├── report_assets/   # Reserved project asset folder
 ├── src/             # Verilog source code (.v/.sv) - User written
 ├── skills/          # Project-specific skill notes/assets
@@ -175,7 +176,7 @@ Enter project name: MyFPGAProject
 *   **`MAIN.bat`**: 레포지토리 루트의 대화형 런처입니다. 프로젝트 폴더를 선택하면 `templates/bat/`의 스크립트를 해당 프로젝트 컨텍스트로 실행합니다.
 
 #### 🏗️ 빌드 및 구현
-*   **`bat\run_vivado_build_flow.bat`**: Vivado 프로젝트를 생성하고 비트스트림까지 일괄 빌드합니다. 결과는 `output/`에 저장되며, 마지막에 디바이스 프로그래밍 실행 여부를 `Y/N`으로 묻습니다.
+*   **`bat\run_vivado_build_flow.bat`**: Vivado 프로젝트를 생성하고 비트스트림까지 일괄 빌드합니다. 빌드 산출물은 `output/`에, 최종 리포트 관련 파일은 `output/FINALReport/`에 저장되며, 마지막에 디바이스 프로그래밍 실행 여부를 `Y/N`으로 묻습니다.
 *   **`bat\program_fpga_device.bat`**: 생성된 비트스트림을 보드에 다운로드합니다.
 *   **`bat\launch_ipi_gui.bat`**: 설정된 프로젝트를 Vivado GUI 환경에서 엽니다.
 
@@ -205,7 +206,8 @@ Enter project name: MyFPGAProject
 ├── Diagram/         # 생성된 회로도 이미지
 ├── ip/              # IP 파일(.xci) 저장소
 ├── md/              # Markdown 결과/노트
-├── output/          # 빌드 로그, 비트스트림, 레포트 저장소
+├── output/          # 빌드 산출물/리포트 데이터 저장소
+│   └── FINALReport/ # 최종 리포트 HTML/CSS/JS/JSON 및 다이어그램 에셋
 ├── report_assets/   # 프로젝트 예약 에셋 폴더
 ├── src/             # Verilog 소스 코드 (.v/.sv) - 사용자가 작성
 ├── skills/          # 프로젝트별 스킬/메모 자산
