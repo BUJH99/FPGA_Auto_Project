@@ -22,16 +22,55 @@ if (Test-Path $JsonPath) {
     if ($json.modules) {
       foreach ($moduleProp in $json.modules.PSObject.Properties) {
         $module = $moduleProp.Value
+        
+        # FIX: Sanitize Ports
+        if ($module.ports) {
+            foreach ($portProp in $module.ports.PSObject.Properties) {
+                $port = $portProp.Value
+                # Fix direction: inout -> output (netlistsvg schema restriction)
+                if ($port.direction -eq "inout") {
+                    $port.direction = "output"
+                }
+                # Fix bits: "z" -> "x" (schema only allows 0, 1, x, or int)
+                if ($port.bits) {
+                    for ($i = 0; $i -lt $port.bits.Count; $i++) {
+                        if ($port.bits[$i] -eq "z") { $port.bits[$i] = "x" }
+                    }
+                }
+            }
+        }
+
+        # FIX: Sanitize Netnames
+        if ($module.netnames) {
+            foreach ($netProp in $module.netnames.PSObject.Properties) {
+                $net = $netProp.Value
+                if ($net.bits) {
+                    for ($i = 0; $i -lt $net.bits.Count; $i++) {
+                        if ($net.bits[$i] -eq "z") { $net.bits[$i] = "x" }
+                    }
+                }
+            }
+        }
+
+        # FIX: Sanitize Cell Connections
         if ($module.cells) {
           foreach ($cellProp in $module.cells.PSObject.Properties) {
             $cell = $cellProp.Value
             # Check if this cell is likely generic (has connections)
             if ($cell.connections) {
               foreach ($connProp in $cell.connections.PSObject.Properties) {
-                # Find the longest port name (key)
+                # Find the longest port name (key) for sizing
                 $portName = $connProp.Name
                 if ($portName.Length -gt $maxPortLen) {
                   $maxPortLen = $portName.Length
+                }
+                
+                # Fix connection bits: "z" -> "x"
+                $connBits = $connProp.Value
+                if ($connBits) {
+                    for ($i = 0; $i -lt $connBits.Count; $i++) {
+                        if ($connBits[$i] -eq "z") { $connBits[$i] = "x" }
+                    }
                 }
               }
             }
@@ -39,6 +78,10 @@ if (Test-Path $JsonPath) {
         }
       }
     }
+    
+    # Save the sanitized JSON back to file (Depth 100 is critical)
+    $cleanContent = $json | ConvertTo-Json -Depth 100
+    Set-Content $JsonPath $cleanContent -Encoding UTF8
   }
   catch {
     Write-Host "[WARN] Failed to parse JSON for sizing: $_. Using default width."

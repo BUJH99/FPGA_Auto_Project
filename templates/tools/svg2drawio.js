@@ -88,6 +88,16 @@ function safeParseFloat(v, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function isNetlistJunctionCircle(attrs) {
+  if (!attrs) return false;
+  const className = attrs.class || "";
+  const styleText = `${attrs.style || ""};fill:${attrs.fill || ""}`;
+  const hasNetClass = className.startsWith("net_");
+  const hasBlackFill = /fill\s*:\s*(#000(?:000)?|black)\b/i.test(styleText);
+  const r = safeParseFloat(attrs.r, 0);
+  return r > 0 && (hasNetClass || hasBlackFill);
+}
+
 function parseSimplePathGeometry(d) {
   if (!d || typeof d !== "string") return null;
 
@@ -440,8 +450,8 @@ fs.readFile(inputFile, (err, data) => {
           let width = parseFloat(attrs["s:width"] || 40) * SCALE;
           let height = parseFloat(attrs["s:height"] || 40) * SCALE;
 
-          // For generic modules, check internal rect for size
-          if (type === "generic" && g.rect) {
+          // For generic/split/join modules, prefer internal body rect size when present.
+          if ((type === "generic" || type === "split" || type === "join") && g.rect) {
             g.rect.forEach((rect) => {
               if (rect.$ && rect.$["s:generic"] === "body") {
                 width = parseFloat(rect.$.width || 40) * SCALE;
@@ -592,6 +602,63 @@ fs.readFile(inputFile, (err, data) => {
               };
             });
           }
+
+          // Render split/join child labels (bit indices / ranges), e.g. 0, 1, 0:11.
+          if (g.g && (type === "split" || type === "join")) {
+            g.g.forEach((childG) => {
+              if (!childG || !childG.$ || !Array.isArray(childG.text)) return;
+              const childTransform = parseTransform(childG.$.transform);
+
+              childG.text.forEach((t) => {
+                const tAtt = t.$ || {};
+                const className = tAtt.class || "";
+
+                let txt = typeof t._ === "string" ? t._.trim() : "";
+                if (!txt && Array.isArray(t.tspan)) {
+                  const lines = t.tspan
+                    .map((span) => (typeof span === "string" ? span : (typeof span?._ === "string" ? span._ : "")))
+                    .map((x) => x.trim())
+                    .filter(Boolean);
+                  if (lines.length > 0) {
+                    txt = lines.join("<br/>");
+                  }
+                }
+                if (!txt) return;
+
+                const tx = safeParseFloat(tAtt.x, 0) * SCALE;
+                const ty = safeParseFloat(tAtt.y, 0) * SCALE;
+                const absX = transform.x + childTransform.x + tx;
+                const absY = transform.y + childTransform.y + ty;
+
+                let anchor = tAtt["text-anchor"] || "start";
+                // skin.svg uses CSS class for split/join left labels instead of inline attr.
+                if (!tAtt["text-anchor"] && className.includes("inputPortLabel")) {
+                  anchor = "end";
+                }
+
+                let align = "left";
+                if (anchor === "middle") align = "center";
+                if (anchor === "end") align = "right";
+
+                const textLen = txt.replace(/<br\/>/g, "").length;
+                const w = Math.max(10, textLen * 7 + 2);
+                const h = 12;
+
+                let finalX = absX;
+                if (align === "center") finalX = absX - w / 2;
+                if (align === "right") finalX = absX - w;
+
+                const whiteSpace = txt.includes("<br/>") ? "wrap" : "nowrap";
+                const style = `text;html=1;strokeColor=none;fillColor=none;align=${align};verticalAlign=middle;whiteSpace=${whiteSpace};rounded=0;fontSize=10;fontFamily=Helvetica;`;
+                rootCells.push(createMxCell(nextId(), txt, style, true, "1", {
+                  x: finalX,
+                  y: absY - 6,
+                  width: w,
+                  height: h,
+                }));
+              });
+            });
+          }
         });
       }
 
@@ -632,6 +699,33 @@ fs.readFile(inputFile, (err, data) => {
             targetPoint: { x: x2, y: y2 },
           });
           rootCells.push(edge);
+        });
+      }
+
+      // 2.5. Recreate net junction points from root-level circles.
+      if (svg.circle) {
+        const seenJunctions = new Set();
+        svg.circle.forEach((circle) => {
+          const attrs = circle.$ || {};
+          if (!isNetlistJunctionCircle(attrs)) return;
+
+          const cx = safeParseFloat(attrs.cx, NaN) * SCALE;
+          const cy = safeParseFloat(attrs.cy, NaN) * SCALE;
+          const r = safeParseFloat(attrs.r, NaN) * SCALE;
+          if (!Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(r) || r <= 0) return;
+
+          const key = `${cx.toFixed(3)},${cy.toFixed(3)},${r.toFixed(3)}`;
+          if (seenJunctions.has(key)) return;
+          seenJunctions.add(key);
+
+          rootCells.push(createMxCell(nextId(), "",
+            "ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#000000;strokeColor=#000000;",
+            true, "1", {
+            x: cx - r,
+            y: cy - r,
+            width: r * 2,
+            height: r * 2,
+          }));
         });
       }
 

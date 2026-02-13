@@ -202,6 +202,7 @@ for %%M in (%USER_INPUT%) do (
         set "DRAWIO_DETAILED=output\Diagram\Detailed\%%M_detailed.drawio"
         
         echo [INFO] Generating detailed diagram...
+        if exist "!JSON_FILE!" del /q "!JSON_FILE!" >nul 2>&1
         %YOSYS_CMD% -p "read_verilog -sv %VERILOG_FILES%; hierarchy -top %%M; proc; opt; write_json !JSON_FILE!" >nul 2>&1
         if !errorlevel! neq 0 (
             echo [ERROR] Yosys synthesis failed for %%M
@@ -211,7 +212,7 @@ for %%M in (%USER_INPUT%) do (
             
             echo [INFO] Generating detailed SVG...
             if exist !SVG_DETAILED! del /q !SVG_DETAILED! >nul 2>&1
-            call node "%NETLISTSVG_CMD%" !JSON_FILE! --skin "%~dp0..\tools\skin.svg" -o !SVG_DETAILED! >nul 2>&1
+            call node "%NETLISTSVG_CMD%" !JSON_FILE! --skin "%~dp0..\tools\skin.svg" -o !SVG_DETAILED!
             if !errorlevel! neq 0 (
                 echo [ERROR] netlistsvg generation failed for %%M
                 goto :next_module
