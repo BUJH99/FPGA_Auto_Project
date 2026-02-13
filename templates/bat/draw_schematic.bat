@@ -194,82 +194,63 @@ for %%M in (%USER_INPUT%) do (
     )
     
     if !HAS_SUBMODULES! equ 1 (
-        echo [INFO] Module %%M has sub-modules - generating BOTH detailed and simple versions
+        echo [INFO] Module %%M has sub-modules - generating detailed and simple versions
+    ) else (
+        echo [INFO] Module %%M is a leaf module - generating detailed and simple versions
+    )
+    
+    REM === Generate DETAILED version (always) ===
+    set "JSON_FILE=output\Diagram\JSON\output_%%M.json"
+    set "SVG_DETAILED=output\Diagram\Detailed\%%M_detailed.svg"
+    set "DRAWIO_DETAILED=output\Diagram\Detailed\%%M_detailed.drawio"
+    
+    echo [INFO] Generating detailed diagram...
+    if exist "!JSON_FILE!" del /q "!JSON_FILE!" >nul 2>&1
+    %YOSYS_CMD% -p "read_verilog -sv %VERILOG_FILES%; hierarchy -top %%M; proc; opt; write_json !JSON_FILE!" >nul 2>&1
+    if !errorlevel! neq 0 (
+        echo [ERROR] Yosys synthesis failed for %%M
+    ) else (
+        echo [INFO] Cleaning JSON...
+        powershell -ExecutionPolicy Bypass -File "%~dp0..\tools\process_schematic.ps1" -JsonPath "!JSON_FILE!"
         
-        REM === Generate DETAILED version ===
-        set "JSON_FILE=output\Diagram\JSON\output_%%M.json"
-        set "SVG_DETAILED=output\Diagram\Detailed\%%M_detailed.svg"
-        set "DRAWIO_DETAILED=output\Diagram\Detailed\%%M_detailed.drawio"
-        
-        echo [INFO] Generating detailed diagram...
-        if exist "!JSON_FILE!" del /q "!JSON_FILE!" >nul 2>&1
-        %YOSYS_CMD% -p "read_verilog -sv %VERILOG_FILES%; hierarchy -top %%M; proc; opt; write_json !JSON_FILE!" >nul 2>&1
+        echo [INFO] Generating detailed SVG...
+        if exist "!SVG_DETAILED!" del /q "!SVG_DETAILED!" >nul 2>&1
+        call node "%NETLISTSVG_CMD%" "!JSON_FILE!" --skin "%~dp0..\tools\skin.svg" -o "!SVG_DETAILED!"
         if !errorlevel! neq 0 (
-            echo [ERROR] Yosys synthesis failed for %%M
+            echo [ERROR] netlistsvg generation failed for %%M
         ) else (
-            echo [INFO] Cleaning JSON...
-            powershell -ExecutionPolicy Bypass -File "%~dp0..\tools\process_schematic.ps1" -JsonPath !JSON_FILE!
-            
-            echo [INFO] Generating detailed SVG...
-            if exist !SVG_DETAILED! del /q !SVG_DETAILED! >nul 2>&1
-            call node "%NETLISTSVG_CMD%" !JSON_FILE! --skin "%~dp0..\tools\skin.svg" -o !SVG_DETAILED!
-            if !errorlevel! neq 0 (
-                echo [ERROR] netlistsvg generation failed for %%M
-                goto :next_module
-            )
-            
-            if exist !SVG_DETAILED! (
+            if exist "!SVG_DETAILED!" (
                 echo [SUCCESS] Generated !SVG_DETAILED!
                 echo [INFO] Converting detailed to Draw.io...
-                node "%~dp0..\tools\svg2drawio.js" !SVG_DETAILED! !DRAWIO_DETAILED!
-                if exist !DRAWIO_DETAILED! (
+                node "%~dp0..\tools\svg2drawio.js" "!SVG_DETAILED!" "!DRAWIO_DETAILED!"
+                if exist "!DRAWIO_DETAILED!" (
                     echo [SUCCESS] Generated !DRAWIO_DETAILED!
+                ) else (
+                    echo [WARN] Detailed Draw.io conversion failed for %%M
                 )
             ) else (
                 echo [ERROR] Failed to generate detailed SVG for %%M
             )
         )
+    )
+    
+    REM === Generate SIMPLE version ===
+    set "SVG_SIMPLE=output\Diagram\Simple\%%M.svg"
+    set "DRAWIO_SIMPLE=output\Diagram\Simple\%%M.drawio"
+    
+    echo [INFO] Generating simple diagram...
+    powershell -ExecutionPolicy Bypass -File "%~dp0..\tools\generate_simple_svg.ps1" -VerilogFile "!SOURCE_FILE!" -OutputSvg "!SVG_SIMPLE!"
+    
+    if exist "!SVG_SIMPLE!" (
+        echo [SUCCESS] Generated !SVG_SIMPLE!
         
-        REM === Generate SIMPLE version ===
-        set "SVG_SIMPLE=output\Diagram\Simple\%%M.svg"
-        set "DRAWIO_SIMPLE=output\Diagram\Simple\%%M.drawio"
-        
-        echo [INFO] Generating simple diagram...
-        powershell -ExecutionPolicy Bypass -File "%~dp0..\tools\generate_simple_svg.ps1" -VerilogFile !SOURCE_FILE! -OutputSvg !SVG_SIMPLE!
-        
-        if exist !SVG_SIMPLE! (
-            echo [SUCCESS] Generated !SVG_SIMPLE!
-            
-            echo [INFO] Converting simple to Draw.io...
-            node "%~dp0..\tools\svg2drawio.js" !SVG_SIMPLE! !DRAWIO_SIMPLE!
-            if exist !DRAWIO_SIMPLE! (
-                echo [SUCCESS] Generated !DRAWIO_SIMPLE!
-            )
-        ) else (
-            echo [ERROR] Failed to generate simple SVG for %%M
+        echo [INFO] Converting simple to Draw.io...
+        node "%~dp0..\tools\svg2drawio.js" "!SVG_SIMPLE!" "!DRAWIO_SIMPLE!"
+        if exist "!DRAWIO_SIMPLE!" (
+            echo [SUCCESS] Generated !DRAWIO_SIMPLE!
         )
-        
     ) else (
-        echo [INFO] Module %%M is a leaf module - generating simple version only
-        
-        REM === Generate SIMPLE version only ===
-        set "SVG_SIMPLE=output\Diagram\Simple\%%M.svg"
-        set "DRAWIO_SIMPLE=output\Diagram\Simple\%%M.drawio"
-        
-        echo [INFO] Generating simple diagram...
-        powershell -ExecutionPolicy Bypass -File "%~dp0..\tools\generate_simple_svg.ps1" -VerilogFile !SOURCE_FILE! -OutputSvg !SVG_SIMPLE!
-        
-        if exist !SVG_SIMPLE! (
-            echo [SUCCESS] Generated !SVG_SIMPLE!
-            
-            echo [INFO] Converting to Draw.io...
-            node "%~dp0..\tools\svg2drawio.js" !SVG_SIMPLE! !DRAWIO_SIMPLE!
-            if exist !DRAWIO_SIMPLE! (
-                echo [SUCCESS] Generated !DRAWIO_SIMPLE!
-            )
-        ) else (
-            echo [ERROR] Failed to generate SVG for %%M
-        )
+        echo [ERROR] Failed to generate simple SVG for %%M
     )
     
     :next_module

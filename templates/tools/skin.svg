@@ -106,16 +106,27 @@ text {
     <g s:x="26" s:y="10" s:pid="Y"/>
   </g>
 
-  <g s:type="dff" transform="translate(350,150)" s:width="30" s:height="40">
+  <g s:type="dff" transform="translate(350,150)" s:width="42" s:height="64">
     <s:alias val="$dff"/>
+    <s:alias val="$adff"/>
     <s:alias val="$_DFF_"/>
     <s:alias val="$_DFF_P_"/>
-    <rect width="30" height="40" x="0" y="0" class="$cell_id"/>
-    <path d="M0,35 L5,30 L0,25" class="$cell_id"/>
-    <g s:x="30" s:y="10" s:pid="Q"/>
-    <g s:x="0" s:y="30" s:pid="CLK"/>
-    <g s:x="0" s:y="30" s:pid="C"/>
-    <g s:x="0" s:y="10" s:pid="D"/>
+    <rect width="42" height="64" x="0" y="0" class="$cell_id"/>
+    <text x="21" y="-4" class="nodelabel">D-FF</text>
+    <path d="M0,35 L6,32 L0,29" class="$cell_id"/>
+    <g transform="translate(0,16)" s:x="0" s:y="16" s:pid="D">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="$cell_id">D</text>
+    </g>
+    <g transform="translate(0,32)" s:x="0" s:y="32" s:pid="CLK">
+      <text x="8" y="3" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="$cell_id">CLK</text>
+    </g>
+    <g s:x="0" s:y="32" s:pid="C"/>
+    <g transform="translate(0,48)" s:x="0" s:y="48" s:pid="ARST">
+      <text x="2" y="4" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="$cell_id">ARST</text>
+    </g>
+    <g transform="translate(42,16)" s:x="42" s:y="16" s:pid="Q">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="$cell_id">Q</text>
+    </g>
   </g>
 
   <!-- Input Port: LINE ONLY (No Double Arrow) -->
