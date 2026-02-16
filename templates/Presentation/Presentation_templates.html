@@ -1,0 +1,3570 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>발표자료 자동화 템플릿 (reveal.js)</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/theme/white.css"
+    />
+    <style>
+      :root {
+        --bg-body: #e0e0e0;
+        --bg-slide: #ffffff;
+        --bg-light: #f4f4f5;
+        --text-primary: #000000;
+        --text-secondary: #52525b;
+        --border-thick: 3px solid #000000;
+        --primary-brand: #2563eb;
+        --shadow-hard: 6px 6px 0 rgba(0, 0, 0, 1);
+        --shadow-slide: 0 20px 40px rgba(0, 0, 0, 0.14);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg-body);
+      }
+
+      .reveal {
+        font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+        color: var(--text-primary);
+        font-size: 24px;
+      }
+
+      .reveal .slides {
+        text-align: left;
+      }
+
+      .reveal .slides section {
+        padding: 0;
+        height: 100%;
+      }
+
+      .slide-frame {
+        width: 100%;
+        height: 100%;
+        background: var(--bg-slide);
+        border: var(--border-thick);
+        box-shadow: var(--shadow-slide);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        padding: 50px 60px;
+        overflow: hidden;
+      }
+
+      .slide-frame.cover-slide {
+        justify-content: center;
+      }
+
+      .cover-container {
+        border: 4px solid black;
+        height: 100%;
+        width: 100%;
+        padding: 40px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        box-shadow: 10px 10px 0 #eeeeee;
+      }
+
+      .cover-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+      }
+
+      .cover-logo-text {
+        font-family: monospace;
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--primary-brand);
+        letter-spacing: 0.4px;
+      }
+
+      .cover-logo-circle {
+        width: 52px;
+        height: 52px;
+        background: var(--primary-brand);
+        border-radius: 999px;
+      }
+
+      .reveal .cover-title {
+        margin: 0 0 18px 0;
+        font-size: 50px;
+        line-height: 0.96;
+        letter-spacing: -1px;
+        font-weight: 900;
+      }
+
+      .cover-divider {
+        width: 160px;
+        height: 10px;
+        background: black;
+        margin-bottom: 16px;
+      }
+
+      .reveal .cover-subtitle {
+        margin: 0;
+        font-size: 18px;
+        color: #333333;
+        font-weight: 700;
+      }
+
+      .reveal .cover-footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 13px;
+        color: #666666;
+      }
+
+      .reveal .chapter-number {
+        position: absolute;
+        right: 60px;
+        top: 40px;
+        z-index: 0;
+        font-size: 48px;
+        font-weight: 900;
+        line-height: 0.8;
+        color: var(--bg-light);
+        -webkit-text-stroke: 2px black;
+      }
+
+      .slide-header {
+        margin-bottom: 16px;
+        border-bottom: 4px solid black;
+        padding-bottom: 12px;
+        z-index: 1;
+      }
+
+      .reveal .chapter-tag {
+        display: inline-block;
+        margin-bottom: 8px;
+        padding: 6px 12px;
+        font-size: 12px;
+        font-weight: 800;
+        background: black;
+        color: white;
+        letter-spacing: 0.6px;
+      }
+
+      .reveal .slide-frame h1 {
+        margin: 0;
+        font-size: 28px;
+        font-weight: 800;
+        line-height: 1.12;
+        letter-spacing: -0.6px;
+        position: relative;
+      }
+
+      .reveal .slide-frame h3 {
+        margin: 0 0 12px 0;
+        font-size: 16px;
+        font-weight: 800;
+        border-left: 5px solid var(--primary-brand);
+        padding-left: 10px;
+      }
+
+      .reveal .slide-frame p {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--text-secondary);
+        font-weight: 500;
+      }
+
+      .reveal .slide-frame ul,
+      .reveal .slide-frame ol {
+        margin: 0;
+        padding-left: 20px;
+        color: var(--text-secondary);
+        font-size: 13px;
+      }
+
+      .reveal .slide-frame li {
+        margin-bottom: 6px;
+        line-height: 1.42;
+        font-weight: 500;
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        min-height: 0;
+      }
+
+      .col-flex {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        min-height: 0;
+      }
+
+      .toc-card-large {
+        flex: 1;
+        padding: 24px;
+      }
+
+      .toc-card-large ol {
+        column-count: 2;
+        column-gap: 36px;
+        font-size: 14px;
+      }
+
+      .toc-card-large li {
+        break-inside: avoid;
+      }
+
+      .card {
+        border: 2px solid black;
+        background: white;
+        padding: 18px;
+        box-shadow: var(--shadow-hard);
+      }
+
+      .diagram-blank-slot {
+        min-height: 220px;
+      }
+
+      .card.plain {
+        border: none;
+        box-shadow: none;
+        background: transparent;
+        padding: 0;
+      }
+
+      .card.accent {
+        background: var(--primary-brand);
+        color: white;
+      }
+
+      .card.accent h3 {
+        border-left-color: white;
+        color: white;
+      }
+
+      .card.accent p,
+      .card.accent li {
+        color: rgba(255, 255, 255, 0.95);
+      }
+
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+      }
+
+      .feature-item {
+        border: 2px solid black;
+        background: #fafafa;
+        padding: 12px;
+      }
+
+      .feature-item strong {
+        font-size: 14px;
+      }
+
+      .feature-item p {
+        margin-top: 6px;
+        font-size: 13px;
+      }
+
+      .media-box {
+        width: 100%;
+        height: 320px;
+        border: 2px solid black;
+        background: #f8f8f8;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      .media-box.tall {
+        height: 280px;
+      }
+
+      .media-box.short {
+        height: 220px;
+      }
+
+      .media-box.board-box {
+        height: 170px;
+      }
+
+      .top-diagram-card {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .media-box.top-diagram-box {
+        flex: 1;
+        height: auto;
+        min-height: 0;
+      }
+
+      .datapath-overlay-box {
+        position: relative;
+        width: 100%;
+        height: 360px;
+        border: 2px solid black;
+        background: #f8f8f8;
+        overflow: hidden;
+      }
+
+      .datapath-overlay-box img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        opacity: 0.36;
+      }
+
+      .datapath-overlay-svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      .datapath-overlay-text {
+        font-size: 12px;
+        fill: #111827;
+        font-weight: 700;
+      }
+
+      .flow-mix-card {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      .flow-chain {
+        --flow-chain-padding: 12px;
+        --flow-chain-gap: 4px;
+        --flow-step-min-h: 42px;
+        --flow-step-pad-y: 8px;
+        --flow-step-pad-right: 10px;
+        --flow-step-pad-left: 38px;
+        --flow-font-size: 11px;
+        --flow-line-height: 1.24;
+        --flow-text-lines: 2;
+        --flow-box-flex: 1;
+        --flow-arrow-flex: 0.16;
+        --flow-index-size: 18px;
+        --flow-index-font: 10px;
+        --flow-index-left: 9px;
+        --flow-index-border: 2px;
+        --flow-arrow-stem-w: 3px;
+        --flow-arrow-stem-h: 9px;
+        --flow-arrow-head-w: 6px;
+        --flow-arrow-head-h: 7px;
+        display: flex;
+        flex-direction: column;
+        gap: var(--flow-chain-gap);
+        min-height: 0;
+        overflow: hidden;
+        padding: var(--flow-chain-padding);
+        border: 2px solid #000000;
+        background: #ffffff;
+        box-shadow: 6px 6px 0 rgba(0, 0, 0, 1);
+        border-radius: 0;
+        counter-reset: flow-step;
+        scrollbar-width: thin;
+        scrollbar-color: #9ca3af transparent;
+      }
+
+      .flow-chain::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .flow-chain::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      .flow-chain::-webkit-scrollbar-thumb {
+        background: #9ca3af;
+        border: 1px solid #000000;
+      }
+
+      .flow-step-box {
+        position: relative;
+        flex: var(--flow-box-flex) 1 0;
+        border: 2px solid #000000;
+        background: #f4f4f5;
+        min-height: 0;
+        padding: var(--flow-step-pad-y) var(--flow-step-pad-right) var(--flow-step-pad-y)
+          var(--flow-step-pad-left);
+        display: flex;
+        align-items: center;
+        box-shadow: 3px 3px 0 rgba(0, 0, 0, 1);
+        border-radius: 0;
+        counter-increment: flow-step;
+      }
+
+      .flow-step-box::before {
+        content: counter(flow-step);
+        position: absolute;
+        left: var(--flow-index-left);
+        top: 50%;
+        transform: translateY(-50%);
+        width: var(--flow-index-size);
+        height: var(--flow-index-size);
+        border: var(--flow-index-border) solid #000000;
+        background: #000000;
+        color: #ffffff;
+        font-size: var(--flow-index-font);
+        font-weight: 900;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0;
+      }
+
+      .flow-step-box::after {
+        content: none;
+      }
+
+      .flow-step-text {
+        margin: 0;
+        font-size: var(--flow-font-size);
+        line-height: var(--flow-line-height);
+        font-weight: 700;
+        color: #111111;
+        overflow: hidden;
+        word-break: break-word;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: var(--flow-text-lines);
+      }
+
+      .flow-step-arrow {
+        flex: var(--flow-arrow-flex) 1 0;
+        min-height: 0;
+        height: auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .flow-step-arrow::before {
+        content: "";
+        width: var(--flow-arrow-stem-w);
+        height: var(--flow-arrow-stem-h);
+        background: #000000;
+      }
+
+      .flow-step-arrow::after {
+        content: "";
+        width: 0;
+        height: 0;
+        border-left: var(--flow-arrow-head-w) solid transparent;
+        border-right: var(--flow-arrow-head-w) solid transparent;
+        border-top: var(--flow-arrow-head-h) solid #000000;
+      }
+
+      .flow-split-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .flow-split-col {
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .flow-split-col .flow-chain {
+        flex: 1;
+        min-height: 0;
+      }
+
+      .flow-split-title {
+        margin: 0 0 6px 0;
+        padding: 4px 12px 4px 16px;
+        display: inline-flex;
+        align-items: center;
+        align-self: flex-start;
+        border: 2px solid #000000;
+        background: #ffffff;
+        color: #000000;
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.7px;
+        border-radius: 0;
+        box-shadow: 3px 3px 0 rgba(0, 0, 0, 1);
+        position: relative;
+      }
+
+      .flow-split-title::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 5px;
+        background: var(--primary-brand);
+      }
+
+      .path-flow-grid {
+        flex: 1;
+        min-height: 0;
+        grid-template-rows: minmax(0, 1fr);
+        align-content: stretch;
+      }
+
+      .path-flow-grid > .card {
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .path-flow-grid .flow-mix-card .flow-chain {
+        flex: 1;
+      }
+
+      .path-flow-grid .flow-step-box {
+        min-height: 0;
+      }
+
+      .path-flow-grid .flow-step-arrow {
+        height: auto;
+      }
+
+      .path-flow-grid .datapath-overlay-box {
+        flex: 1;
+        min-height: 0;
+        height: auto;
+      }
+
+      .media-box img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+      }
+
+      .media-box .empty-label {
+        display: none;
+        margin: 0 18px;
+        text-align: center;
+        font-size: 13px;
+        line-height: 1.45;
+        color: #666;
+      }
+
+      .media-box.is-empty {
+        background: repeating-linear-gradient(
+          -45deg,
+          #f3f4f6,
+          #f3f4f6 12px,
+          #e5e7eb 12px,
+          #e5e7eb 24px
+        );
+      }
+
+      .media-box.is-empty img {
+        display: none;
+      }
+
+      .media-box.is-empty .empty-label {
+        display: block;
+      }
+
+      .media-caption {
+        margin-top: 8px;
+        text-align: center;
+        color: #666;
+        font-size: 13px;
+      }
+
+      .split-meta {
+        margin-top: 10px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .meta-pill {
+        border: 2px solid black;
+        background: #f8fafc;
+        padding: 10px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .module-role-card .split-meta {
+        margin-top: 12px;
+      }
+
+      .module-role-card .meta-pill {
+        min-height: 120px;
+        display: flex;
+        align-items: flex-start;
+      }
+
+      .module-no-fsm-role,
+      .module-parent-role {
+        padding: 14px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .module-no-fsm-role .split-meta,
+      .module-parent-role .split-meta {
+        margin-top: 8px;
+        gap: 8px;
+        flex: 1 1 auto;
+        min-height: 0;
+        height: 100%;
+        grid-template-rows: minmax(0, 1fr);
+      }
+
+      .module-no-fsm-role .meta-pill,
+      .module-parent-role .meta-pill {
+        min-height: 0;
+        height: 100%;
+        padding: 8px;
+        font-size: 11px;
+        line-height: 1.25;
+        display: flex;
+        align-items: flex-start;
+      }
+
+      .module-no-fsm-role .module-role-input-box,
+      .module-parent-role .module-role-input-box {
+        min-height: 34px;
+        padding: 6px 8px;
+        font-size: 11px;
+        flex: 0 0 auto;
+      }
+
+      .module-role-input-box {
+        width: 100%;
+        min-height: 40px;
+        border: 2px solid black;
+        background: #ffffff;
+        color: #111827;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.35;
+        padding: 8px 10px;
+        overflow: hidden;
+      }
+
+      .module-detail-grid {
+        height: 100%;
+        min-height: 0;
+      }
+
+      .module-left-col,
+      .module-right-col {
+        min-height: 0;
+      }
+
+      .module-simple-card {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .module-fsm-card {
+        flex: 1;
+        min-height: 0;
+      }
+
+      .module-fsm-card {
+        flex: 0 0 auto;
+      }
+
+      .media-box.module-simple-box {
+        height: 220px;
+      }
+
+      .media-box.module-simple-box img {
+        max-width: 96%;
+        max-height: 94%;
+      }
+
+      .module-simple-card .media-box.module-simple-box {
+        flex: 1;
+        min-height: 0;
+        height: auto;
+      }
+
+      .module-simple-card .media-caption {
+        margin-top: 4px;
+      }
+
+      .media-box.module-fsm-box {
+        height: 160px;
+      }
+
+      .module-role-card,
+      .module-state-card {
+        min-height: 0;
+      }
+
+      .module-state-card {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 250px;
+      }
+
+      .module-viz-placeholder-card {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 250px;
+      }
+
+      .module-viz-placeholder {
+        flex: 1;
+        min-height: 0;
+        border: 2px dashed #111827;
+        background: repeating-linear-gradient(
+          -45deg,
+          #f3f4f6,
+          #f3f4f6 12px,
+          #e5e7eb 12px,
+          #e5e7eb 24px
+        );
+      }
+
+      .module-detail-grid.no-fsm-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: minmax(0, 1.05fr) minmax(0, 0.95fr);
+        gap: 14px;
+        align-content: stretch;
+      }
+
+      .module-no-fsm-simple .media-box.module-simple-box {
+        height: 185px;
+      }
+
+      .module-no-fsm-viz {
+        grid-column: 1 / -1;
+        min-height: 0;
+      }
+
+      .module-detail-grid.parent-module-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: minmax(0, 1.05fr) minmax(0, 0.95fr);
+        gap: 12px;
+        align-content: stretch;
+      }
+
+      .module-detail-grid.no-fsm-layout .module-viz-placeholder-card,
+      .module-detail-grid.parent-module-layout .module-viz-placeholder-card {
+        min-height: 256px;
+        padding: 12px;
+      }
+
+      .module-child-module-card {
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        padding: 10px;
+        background: #f8f8f8;
+        overflow: hidden;
+      }
+
+      .module-child-module-card h3 {
+        margin-bottom: 4px;
+        font-size: 13px;
+      }
+
+      .child-module-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: repeat(var(--child-grid-rows, 4), minmax(0, 1fr));
+        gap: var(--child-grid-gap, 2px);
+        margin-top: 2px;
+        min-height: 0;
+        flex: 1 1 auto;
+        overflow: hidden;
+      }
+
+      .child-module-item {
+        border: 2px solid black;
+        background: linear-gradient(90deg, var(--primary-brand) 0 4px, #ffffff 4px 100%);
+        padding: var(--child-item-padding, 1px 4px);
+        min-height: 0;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.95);
+      }
+
+      .child-module-name {
+        margin: 0;
+        width: 100%;
+        font-size: var(--child-name-size, 8px);
+        font-weight: 900;
+        line-height: var(--child-name-line-height, 1.1);
+        font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+        color: #111827;
+        letter-spacing: 0.1px;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .module-parent-viz {
+        grid-column: 1 / -1;
+        min-height: 0;
+        margin-top: 2px;
+      }
+
+      .module-parent-note {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #374151;
+      }
+
+      .state-content {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+      }
+
+      .state-content ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .state-content li {
+        margin-bottom: 5px;
+      }
+
+      .state-size-lg {
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .state-size-md {
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .state-size-sm {
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      .state-size-xs {
+        font-size: 11px;
+        line-height: 1.35;
+      }
+
+      .report-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      .report-util-card {
+        margin-top: 12px;
+      }
+
+      .report-panel {
+        min-height: 255px;
+      }
+
+      .report-slide .report-grid {
+        gap: 12px;
+      }
+
+      .report-slide .report-panel {
+        min-height: 180px;
+        overflow: auto;
+      }
+
+      .report-slide .report-grid .report-panel {
+        min-height: 170px;
+        height: 170px;
+        max-height: 170px;
+      }
+
+      .report-slide .report-grid .report-panel .power-visual {
+        padding: 6px;
+      }
+
+      .report-slide .report-grid .report-panel .power-visual-title {
+        margin: 0 0 4px 0;
+        font-size: 11px;
+      }
+
+      .report-slide .report-grid .report-panel .power-visual-layout {
+        grid-template-columns: 44px 44px 1fr;
+        gap: 6px;
+      }
+
+      .report-slide .report-grid .report-panel .power-stack {
+        height: 118px;
+      }
+
+      .report-slide .report-grid .report-panel .power-segment-label {
+        font-size: 10px;
+      }
+
+      .report-slide .report-grid .report-panel .power-legend {
+        padding: 4px 5px;
+        gap: 2px;
+      }
+
+      .report-slide .report-grid .report-panel .power-legend-row {
+        gap: 4px;
+        font-size: 9px;
+      }
+
+      .report-slide .report-grid .report-panel .power-dot {
+        width: 8px;
+        height: 8px;
+      }
+
+      .report-slide .report-grid .report-panel .power-static-row {
+        margin-top: 4px;
+        gap: 6px;
+        font-size: 10px;
+      }
+
+      .report-slide .report-grid .report-panel .timing-kpi-grid {
+        gap: 5px;
+        margin-bottom: 0;
+        height: 100%;
+        align-content: stretch;
+        grid-auto-rows: minmax(0, 1fr);
+      }
+
+      .report-slide .report-grid .report-panel .timing-kpi {
+        border-width: 1px;
+        padding: 5px 6px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 0;
+      }
+
+      .report-slide .report-grid .report-panel .timing-kpi-label {
+        font-size: 8px;
+      }
+
+      .report-slide .report-grid .report-panel .timing-kpi-value {
+        margin-top: 1px;
+        font-size: 11px;
+      }
+
+      .report-slide .report-grid .report-panel .timing-kpi-status {
+        margin-top: 2px;
+        font-size: 8px;
+        padding: 1px 4px;
+      }
+
+      .report-slide .report-util-card {
+        margin-top: 6px;
+        padding: 16px;
+      }
+
+      .report-slide .report-util-card h3 {
+        margin-bottom: 8px;
+        font-size: 15px;
+      }
+
+      .report-slide .report-util-card .report-panel {
+        min-height: 200px;
+        height: 200px;
+        max-height: 200px;
+        overflow: auto;
+        box-sizing: border-box;
+        padding-bottom: 2px;
+      }
+
+      .report-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: 12px;
+      }
+
+      .report-table th,
+      .report-table td {
+        border-bottom: 1px solid #e5e7eb;
+        padding: 7px 6px;
+        text-align: left;
+        vertical-align: middle;
+      }
+
+      .report-table th {
+        font-weight: 800;
+        color: #111827;
+        background: #f3f4f6;
+      }
+
+      .report-value {
+        font-family: "Consolas", "Courier New", monospace;
+        font-weight: 700;
+        color: #111827;
+      }
+
+      .status-chip {
+        display: inline-block;
+        border: 2px solid black;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      .status-chip.met {
+        background: #dcfce7;
+        color: #166534;
+      }
+
+      .status-chip.bad {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+
+      .status-chip.na {
+        background: #f3f4f6;
+        color: #4b5563;
+      }
+
+      .report-source {
+        margin-top: 8px;
+        font-size: 11px;
+        color: #4b5563;
+        font-family: "Consolas", "Courier New", monospace;
+        word-break: break-all;
+      }
+
+      .report-helper {
+        margin-top: 8px;
+        padding: 8px 10px;
+        border: 2px dashed #111827;
+        background: #f9fafb;
+        font-size: 12px;
+        color: #374151;
+      }
+
+      .report-loading,
+      .report-error {
+        margin: 0;
+        padding: 10px;
+        border: 2px dashed black;
+        background: #f9fafb;
+        font-size: 12px;
+        color: #374151;
+      }
+
+      .report-slide .report-note {
+        margin-top: 8px;
+        padding: 8px 10px;
+        font-size: 12px;
+      }
+
+      .power-visual {
+        border: 1px solid #c9c9c9;
+        background: #f2f2f2;
+        padding: 8px;
+      }
+
+      .power-visual-title {
+        margin: 0 0 8px 0;
+        font-size: 13px;
+        font-weight: 700;
+        color: #111827;
+      }
+
+      .power-visual-layout {
+        display: grid;
+        grid-template-columns: 56px 56px 1fr;
+        gap: 10px;
+        align-items: start;
+      }
+
+      .power-stack {
+        height: 176px;
+        border: 1px solid #7b8794;
+        background: #ffffff;
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column-reverse;
+      }
+
+      .power-segment {
+        width: 100%;
+        position: relative;
+        min-height: 0;
+      }
+
+      .power-segment-label {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 12px;
+        font-weight: 800;
+        color: #111827;
+        white-space: nowrap;
+      }
+
+      .power-main-static {
+        background: #84b2dc;
+      }
+
+      .power-main-dynamic {
+        background: #e6e686;
+      }
+
+      .power-part-clocks {
+        background: #e88adf;
+      }
+
+      .power-part-signals {
+        background: #8de4ff;
+      }
+
+      .power-part-logic {
+        background: #4fd4a3;
+      }
+
+      .power-part-bram {
+        background: #5fa8ff;
+      }
+
+      .power-part-pll {
+        background: #9bef3e;
+      }
+
+      .power-part-io {
+        background: #c7f6d8;
+      }
+
+      .power-legend {
+        border: 1px solid #d1d5db;
+        background: #f8fafc;
+        padding: 6px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .power-legend-row {
+        display: grid;
+        grid-template-columns: auto 1fr auto auto;
+        gap: 6px;
+        align-items: center;
+        font-size: 11px;
+      }
+
+      .power-dot {
+        width: 10px;
+        height: 10px;
+        border: 1px solid #8b8b8b;
+      }
+
+      .power-legend-name {
+        color: #1f2937;
+        font-weight: 700;
+      }
+
+      .power-legend-value {
+        font-family: "Consolas", "Courier New", monospace;
+        font-weight: 700;
+        color: #111827;
+      }
+
+      .power-legend-pct {
+        color: #374151;
+      }
+
+      .power-static-row {
+        margin-top: 6px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+      }
+
+      .timing-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      .timing-kpi {
+        border: 2px solid #111827;
+        background: #f8fafc;
+        padding: 6px 8px;
+      }
+
+      .timing-kpi-label {
+        display: block;
+        font-size: 10px;
+        color: #374151;
+        font-weight: 700;
+      }
+
+      .timing-kpi-value {
+        display: block;
+        margin-top: 2px;
+        font-size: 14px;
+        font-weight: 900;
+        font-family: "Consolas", "Courier New", monospace;
+        color: #111827;
+      }
+
+      .timing-kpi-status {
+        display: inline-block;
+        margin-top: 4px;
+        font-size: 10px;
+        font-weight: 800;
+        padding: 1px 6px;
+        border: 1px solid #111827;
+      }
+
+      .timing-kpi-status.met {
+        background: #dcfce7;
+        color: #166534;
+      }
+
+      .timing-kpi-status.bad {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+
+      .timing-kpi-status.na {
+        background: #f3f4f6;
+        color: #4b5563;
+      }
+
+      .timing-table th {
+        font-size: 11px;
+      }
+
+      .timing-table td {
+        font-size: 11px;
+      }
+
+      .util-report-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.06fr);
+        gap: 8px;
+        align-items: stretch;
+        min-height: 0;
+        height: 100%;
+        --util-panel-pad: 8px;
+        --util-label-col: 34px;
+        --util-row-gap: 4px;
+        --util-chart-label-size: 10px;
+        --util-track-height: 16px;
+        --util-pct-size: 10px;
+        --util-pct-min-width: 34px;
+        --util-axis-gap: 3px;
+        --util-axis-size: 9px;
+        --util-axis-title-gap: 3px;
+        --util-axis-title-size: 10px;
+        --util-table-font-size: 8px;
+        --util-table-line-height: 1.15;
+        --util-table-pad-y: 2px;
+        --util-table-pad-x: 3px;
+      }
+
+      .util-chart-panel,
+      .util-count-panel {
+        border: 1px solid #cfd3d8;
+        background: #f3f4f6;
+        padding: var(--util-panel-pad);
+        min-width: 0;
+        min-height: 0;
+        box-sizing: border-box;
+      }
+
+      .util-count-panel {
+        overflow: hidden;
+        display: flex;
+        align-items: stretch;
+      }
+
+      .util-chart-panel {
+        overflow: auto;
+      }
+
+      .util-chart-row {
+        display: grid;
+        grid-template-columns: var(--util-label-col) 1fr;
+        align-items: center;
+        gap: var(--util-row-gap);
+        margin-bottom: var(--util-row-gap);
+      }
+
+      .util-chart-label {
+        font-size: var(--util-chart-label-size);
+        font-weight: 800;
+        color: #1f2937;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .util-bar-line {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: var(--util-row-gap);
+      }
+
+      .util-bar-track {
+        height: var(--util-track-height);
+        border: 1px solid #b7bdc7;
+        background: #e5e7eb;
+        overflow: hidden;
+      }
+
+      .util-bar-fill {
+        height: 100%;
+        background: #5dd65d;
+      }
+
+      .util-bar-pct {
+        font-size: var(--util-pct-size);
+        font-weight: 800;
+        color: #111827;
+        min-width: var(--util-pct-min-width);
+        text-align: right;
+      }
+
+      .util-axis {
+        margin-top: var(--util-axis-gap);
+        display: flex;
+        justify-content: space-between;
+        color: #4b5563;
+        font-size: var(--util-axis-size);
+        font-weight: 700;
+      }
+
+      .util-axis-title {
+        margin-top: var(--util-axis-title-gap);
+        text-align: center;
+        font-size: var(--util-axis-title-size);
+        color: #374151;
+        font-weight: 700;
+      }
+
+      .util-count-item {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        align-items: baseline;
+        border-bottom: 1px solid #d1d5db;
+        padding: 5px 0;
+      }
+
+      .util-count-item:last-child {
+        border-bottom: none;
+      }
+
+      .util-count-name {
+        font-size: 11px;
+        font-weight: 700;
+        color: #1f2937;
+      }
+
+      .util-count-value {
+        font-size: 13px;
+        font-weight: 900;
+        color: #111827;
+        font-family: "Consolas", "Courier New", monospace;
+      }
+
+      .util-count-meta {
+        display: block;
+        margin-top: 2px;
+        font-size: 10px;
+        color: #6b7280;
+      }
+
+      .util-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: var(--util-table-font-size);
+        line-height: var(--util-table-line-height);
+      }
+
+      .util-table th,
+      .util-table td {
+        border-bottom: 1px solid #d1d5db;
+        padding: var(--util-table-pad-y) var(--util-table-pad-x);
+        color: #1f2937;
+        white-space: nowrap;
+      }
+
+      .util-table th {
+        text-align: left;
+        font-weight: 800;
+        background: #e5e7eb;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+      }
+
+      .util-table td {
+        font-weight: 700;
+      }
+
+      .util-table-wrap {
+        width: 100%;
+        min-width: 0;
+        overflow: auto;
+        height: 100%;
+      }
+
+      .util-table th:nth-child(1),
+      .util-table td:nth-child(1) {
+        width: 28%;
+      }
+
+      .util-table th:nth-child(2),
+      .util-table td:nth-child(2),
+      .util-table th:nth-child(3),
+      .util-table td:nth-child(3),
+      .util-table th:nth-child(4),
+      .util-table td:nth-child(4) {
+        width: 24%;
+      }
+
+      .util-table .num {
+        text-align: right;
+        font-family: "Consolas", "Courier New", monospace;
+        font-weight: 800;
+      }
+
+      .util-report-layout.util-density-compact .util-chart-row {
+        grid-template-columns: 32px 1fr;
+        gap: 4px;
+        margin-bottom: 4px;
+      }
+
+      .util-report-layout.util-density-compact .util-chart-label {
+        font-size: 10px;
+      }
+
+      .util-report-layout.util-density-compact .util-bar-track {
+        height: 15px;
+      }
+
+      .util-report-layout.util-density-compact .util-bar-pct {
+        font-size: 10px;
+        min-width: 34px;
+      }
+
+      .util-report-layout.util-density-compact .util-axis {
+        font-size: 9px;
+      }
+
+      .util-report-layout.util-density-compact .util-axis-title {
+        font-size: 10px;
+        margin-top: 4px;
+      }
+
+      .util-report-layout.util-density-compact .util-table {
+        font-size: 8px;
+      }
+
+      .util-report-layout.util-density-compact .util-table th,
+      .util-report-layout.util-density-compact .util-table td {
+        padding: 2px 3px;
+      }
+
+      .util-report-layout.util-density-dense .util-chart-row {
+        grid-template-columns: 28px 1fr;
+        gap: 3px;
+        margin-bottom: 3px;
+      }
+
+      .util-report-layout.util-density-dense .util-chart-label {
+        font-size: 9px;
+      }
+
+      .util-report-layout.util-density-dense .util-bar-track {
+        height: 13px;
+      }
+
+      .util-report-layout.util-density-dense .util-bar-pct {
+        font-size: 9px;
+        min-width: 30px;
+      }
+
+      .util-report-layout.util-density-dense .util-axis {
+        font-size: 8px;
+      }
+
+      .util-report-layout.util-density-dense .util-axis-title {
+        font-size: 9px;
+        margin-top: 3px;
+      }
+
+      .util-report-layout.util-density-dense .util-table {
+        font-size: 7px;
+      }
+
+      .util-report-layout.util-density-dense .util-table th,
+      .util-report-layout.util-density-dense .util-table td {
+        padding: 1px 2px;
+      }
+
+      .testbench-layout {
+        gap: 10px;
+      }
+
+      .testbench-wave-card .media-caption {
+        margin-top: 6px;
+      }
+
+      .testbench-check-card {
+        padding-top: 14px;
+        padding-bottom: 14px;
+      }
+
+      .report-note {
+        margin-top: 12px;
+        padding: 10px 12px;
+        border: 2px dashed black;
+        background: #f8fafc;
+        font-size: 13px;
+        color: #374151;
+      }
+
+      .trouble-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-height: 0;
+      }
+
+      .trouble-case-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+
+      .reveal .controls {
+        color: #111111;
+      }
+
+      .reveal .progress {
+        color: #111111;
+        height: 5px;
+      }
+
+      @media (max-width: 1024px) {
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+        .feature-grid {
+          grid-template-columns: 1fr;
+        }
+        .report-grid {
+          grid-template-columns: 1fr;
+        }
+        .timing-kpi-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        .util-report-layout {
+          grid-template-columns: 1fr;
+        }
+        .power-visual-layout {
+          grid-template-columns: 56px 56px 1fr;
+        }
+        .module-detail-grid.no-fsm-layout,
+        .module-detail-grid.parent-module-layout {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto auto auto;
+        }
+        .module-no-fsm-viz,
+        .module-parent-viz {
+          grid-column: auto;
+        }
+        .child-module-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        .trouble-case-grid {
+          grid-template-columns: 1fr;
+        }
+        .flow-split-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="reveal">
+      <div class="slides" id="slides-root"></div>
+    </div>
+    <script id="presentation-config-json" type="application/json">
+{% if presentation_config is defined %}{{ presentation_config | tojson | safe }}{% endif %}
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.js"></script>
+    <script>
+      (() => {
+        const defaultUtilPreviewResources = [
+          { label: "Slice LUTs", used: 757, available: 20800, percent: 3.64 },
+          { label: "LUT as Logic", used: 757, available: 20800, percent: 3.64 },
+          { label: "LUT as Memory", used: 0, available: 9600, percent: 0.0 },
+          { label: "Slice Registers", used: 749, available: 41600, percent: 1.8 },
+          { label: "Register as Flip Flop", used: 743, available: 41600, percent: 1.79 },
+          { label: "Register as Latch", used: 6, available: 41600, percent: 0.01 },
+          { label: "F7 Muxes", used: 38, available: 16300, percent: 0.23 },
+          { label: "F8 Muxes", used: 5, available: 8150, percent: 0.06 },
+          { label: "Block RAM Tile", used: 0, available: 50, percent: 0.0 },
+          { label: "DSPs", used: 0, available: 90, percent: 0.0 },
+          { label: "Bonded IOB", used: 23, available: 106, percent: 21.7 },
+          { label: "BUFGCTRL", used: 1, available: 32, percent: 3.13 },
+          { label: "MMCME2_ADV", used: 0, available: 5, percent: 0.0 },
+          { label: "PLLE2_ADV", used: 0, available: 5, percent: 0.0 }
+        ];
+
+        const defaultUtilPreview = {
+          lutUsed: 2514,
+          lutAvailable: 364200,
+          lutPct: 0.69,
+          ffUsed: 1188,
+          ffAvailable: 728400,
+          ffPct: 0.16,
+          ioUsed: 37,
+          ioAvailable: 850,
+          ioPct: 4.35,
+          bufgUsed: 1,
+          bufgAvailable: 32,
+          bufgPct: 3.13,
+          utilResources: defaultUtilPreviewResources
+        };
+
+        const defaultPresentationConfig = {
+          meta: {
+            projectTitle: "핵심목표 : 발표자료 자동화 프로젝트",
+            projectSubtitle: "design_templates.html 디자인 베이스 / reveal.js 자동 생성 템플릿",
+            author: "작성자 이름",
+            date: "2026-02-16",
+            team: "온디바이스AI",
+            cover: {
+              titleLine1: "발표자료",
+              titleLine2: "자동화 템플릿",
+              subtitle: "",
+              dateLabel: "작성일",
+              authorLabel: "작성자"
+            }
+          },
+          developmentEnvironment: {
+            os: "Windows 11",
+            tools: ["Vivado"],
+            language: ["Verilog"]
+          },
+          featurePlaceholders: [
+            {
+              title: "기능 블록 #1",
+              description: "사용자가 구현 기능 설명을 입력하는 영역"
+            },
+            {
+              title: "기능 블록 #2",
+              description: "동작 흐름, 제약조건, 인터페이스 요약 입력"
+            },
+            {
+              title: "기능 블록 #3",
+              description: "검증 포인트 또는 데모 시나리오 입력"
+            },
+            {
+              title: "기능 블록 #4",
+              description: "추가 구현 기능/확장 계획 입력"
+            }
+          ],
+          constraints: [
+            "[예시] Clock Constraint: 시스템 클럭 주파수/주기 명시",
+            "[예시] I/O Constraint: 핀맵, I/O standard, drive/slew 조건",
+            "[예시] Timing Constraint: false path, multicycle path 조건",
+            "[예시] Resource/Power 목표: 사용률 및 전력 예산 기준"
+          ],
+          timingNotes: [
+            "[Input Needed] Align reference edges for clock/reset",
+            "[Input Needed] Highlight handshake controls (Enable/Valid/Ready)",
+            "[Input Needed] Record mismatch between measured timing and design intent"
+          ],
+          datapathFlowSteps: [
+            "[Input Needed] 입력 이벤트/신호 유입 지점",
+            "[Input Needed] 제어 신호 기반 데이터 선택/가공",
+            "[Input Needed] 하위 모듈 간 데이터 전달",
+            "[Input Needed] 최종 출력 인터페이스 반영"
+          ],
+          clockFlowSteps: [
+            "[Input Needed] 기준 CLK 생성 소스",
+            "[Input Needed] 분주/버퍼 경유 경로",
+            "[Input Needed] 하위 모듈 분배 순서",
+            "[Input Needed] 도메인 경계(CDC) 체크"
+          ],
+          resetFlowSteps: [
+            "[Input Needed] RESET 입력 및 극성 정의",
+            "[Input Needed] reset 동기화 체인",
+            "[Input Needed] 모듈별 reset 해제 순서",
+            "[Input Needed] 안정화 후 동작 시작 조건"
+          ],
+          clockResetFlowSteps: [
+            "[Input Needed] 기준 클럭 생성/분배 시작점",
+            "[Input Needed] 도메인별 클럭 전달 및 분기",
+            "[Input Needed] reset 동기화/해제 순서",
+            "[Input Needed] CDC/안정화 검증 포인트"
+          ],
+          datapathFlowBoxCount: null,
+          clockFlowBoxCount: null,
+          resetFlowBoxCount: null,
+          clockResetFlowBoxCount: null,
+          conclusionPoints: [
+            "[Input Needed] 프로젝트 핵심 성과 요약",
+            "[Input Needed] 목표 대비 달성 수준 및 한계",
+            "[Input Needed] 검증 결과 기반 최종 판단"
+          ],
+          conclusionNextSteps: [
+            "[Input Needed] 차기 개선 항목",
+            "[Input Needed] 확장 기능/성능 개선 계획",
+            "[Input Needed] 일정 및 담당 작업"
+          ],
+          assets: {
+            topBlockSvg: "TOP_detailed.svg",
+            testbenchWaveform: "assets/waveform/testbench_overview.png",
+            timingDiagramSvg: "assets/timing/custom_timing_diagram.svg",
+            clockResetTreeSvg: "assets/clock_reset/clock_reset_tree.svg",
+            powerReportRpt: "assets/reports/power_summary.rpt",
+            timingReportRpt: "assets/reports/timing_summary.rpt",
+            utilReportRpt: "assets/reports/utilization_summary.rpt"
+          },
+          reportPreview: {
+            enableOnLoadFail: true,
+            power: {
+              totalOnChipPowerW: 0.421,
+              dynamicPowerW: 0.176,
+              staticPowerW: 0.245,
+              clocksW: 0.013,
+              signalsW: 0.004,
+              logicW: 0.003,
+              bramW: 0.001,
+              pllW: 0.150,
+              ioW: 0.005,
+              junctionTempC: 25.5,
+              thermalMarginC: 59.5,
+              confidenceLevel: "Medium"
+            },
+            timing: {
+              wnsNs: 3.028,
+              tnsNs: 0.0,
+              whsNs: 0.066,
+              thsNs: 0.0,
+              wpwsNs: 0.820,
+              tpwsNs: 0.0,
+              failingEndpoints: 0,
+              totalEndpoints: 128
+            },
+            util: defaultUtilPreview
+          },
+          troubleShootings: [
+            {
+              title: "Trouble #1",
+              issueItems: [
+                "[예시] 증상: 특정 조건에서 출력 지연 발생",
+                "[예시] 재현 조건: reset 직후 mode 전환 시",
+                "[예시] 원인 분석: 제어 신호 동기화 지연"
+              ],
+              solutionItems: [
+                "[예시] 조치: 동기화 플롭/핸드셰이크 보강",
+                "[예시] 검증: 테스트벤치 및 FPGA 실측 재확인",
+                "[예시] 결과: 재현 불가, 타이밍 여유 확보"
+              ]
+            }
+          ],
+          modules: [
+            {
+              name: "MODULE_01",
+              role: "[예시] 모듈의 핵심 역할을 한 줄로 작성",
+              summary: [],
+              stateDescription: [
+                "[예시] IDLE: 초기 대기 상태",
+                "[예시] RUN: 조건 충족 시 메인 동작 수행",
+                "[예시] DONE/ERROR: 종료 또는 예외 처리"
+              ],
+              simpleDiagramSvg: "",
+              fsmImage: "assets/modules/module_01_fsm.svg"
+            },
+            {
+              name: "MODULE_02",
+              role: "",
+              summary: [],
+              stateDescription: [],
+              simpleDiagramSvg: "",
+              fsmImage: ""
+            },
+            {
+              name: "MODULE_03",
+              role: "[예시] 상위모듈: 하위모듈 제어/연결 및 데이터 경로 통합",
+              summary: [],
+              stateDescription: [],
+              detailLayout: "parent-module",
+              childModules: [
+                { name: "sub_uart_rx", role: "UART 수신 데이터 복원" },
+                { name: "sub_cmd_decoder", role: "수신 명령 디코딩" },
+                { name: "sub_control_fsm", role: "상태/제어 시퀀스 관리" },
+                { name: "sub_data_path", role: "연산 및 출력 데이터 경로" },
+                { name: "sub_timer_core", role: "타이머 카운터/분주 처리" },
+                { name: "sub_display_mux", role: "표시 데이터 선택 및 정렬" },
+                { name: "sub_uart_tx", role: "UART 송신 프레임 생성" },
+                { name: "sub_error_guard", role: "예외 조건 감시 및 보호 처리" }
+              ],
+              integrationPoints: [],
+              simpleDiagramSvg: "",
+              fsmImage: ""
+            }
+          ]
+        };
+        function isPlainObject(value) {
+          return Object.prototype.toString.call(value) === "[object Object]";
+        }
+
+        function deepClone(value) {
+          if (Array.isArray(value)) return value.map((item) => deepClone(item));
+          if (isPlainObject(value)) {
+            const cloned = {};
+            Object.keys(value).forEach((key) => {
+              cloned[key] = deepClone(value[key]);
+            });
+            return cloned;
+          }
+          return value;
+        }
+
+        function mergeConfig(base, injected) {
+          if (Array.isArray(base)) {
+            return Array.isArray(injected) ? deepClone(injected) : deepClone(base);
+          }
+          if (isPlainObject(base)) {
+            const merged = {};
+            const injectedObj = isPlainObject(injected) ? injected : {};
+            const keys = new Set([...Object.keys(base), ...Object.keys(injectedObj)]);
+            keys.forEach((key) => {
+              const baseValue = base[key];
+              const injectedValue = injectedObj[key];
+              if (injectedValue === undefined) {
+                merged[key] = deepClone(baseValue);
+              } else if (isPlainObject(baseValue) && isPlainObject(injectedValue)) {
+                merged[key] = mergeConfig(baseValue, injectedValue);
+              } else if (Array.isArray(baseValue) && Array.isArray(injectedValue)) {
+                merged[key] = deepClone(injectedValue);
+              } else {
+                merged[key] = deepClone(injectedValue);
+              }
+            });
+            return merged;
+          }
+          return injected === undefined ? deepClone(base) : deepClone(injected);
+        }
+
+        function readInjectedConfigFromDom() {
+          const scriptNode = document.getElementById("presentation-config-json");
+          if (!scriptNode) return null;
+          const raw = String(scriptNode.textContent || "").trim();
+          const unresolvedExprToken = `${String.fromCharCode(123)}${String.fromCharCode(123)}`;
+          const unresolvedStmtToken = `${String.fromCharCode(123)}%`;
+          if (!raw || raw.includes(unresolvedExprToken) || raw.includes(unresolvedStmtToken)) return null;
+          try {
+            const parsed = JSON.parse(raw);
+            return isPlainObject(parsed) ? parsed : null;
+          } catch (_) {
+            return null;
+          }
+        }
+
+        function resolvePresentationConfig(defaultConfig) {
+          const injectedFromWindow = isPlainObject(window.__PRESENTATION_CONFIG__)
+            ? window.__PRESENTATION_CONFIG__
+            : null;
+          const injectedFromDom = readInjectedConfigFromDom();
+          const injected = injectedFromWindow || injectedFromDom;
+          return isPlainObject(injected) ? mergeConfig(defaultConfig, injected) : deepClone(defaultConfig);
+        }
+
+        const presentationConfig = resolvePresentationConfig(defaultPresentationConfig);
+
+        function escapeHtml(value) {
+          return String(value ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+        }
+
+        function ensureText(value, fallback = "") {
+          const normalized = String(value ?? "").trim();
+          return normalized.length > 0 ? normalized : fallback;
+        }
+
+        function resolveCoverMeta(meta) {
+          const safeMeta = meta && typeof meta === "object" ? meta : {};
+          const safeCover = safeMeta.cover && typeof safeMeta.cover === "object" ? safeMeta.cover : {};
+          const titleLine1 = ensureText(safeCover.titleLine1, "발표자료");
+          const titleLine2 = ensureText(safeCover.titleLine2, "자동화 템플릿");
+          const subtitleFallback = ensureText(safeMeta.projectSubtitle, ensureText(safeMeta.projectTitle, ""));
+          return {
+            team: ensureText(safeCover.team, ensureText(safeMeta.team, "TEAM")),
+            titleLine1,
+            titleLine2,
+            subtitle: ensureText(safeCover.subtitle, subtitleFallback),
+            dateLabel: ensureText(safeCover.dateLabel, "작성일"),
+            authorLabel: ensureText(safeCover.authorLabel, "작성자"),
+            date: ensureText(safeMeta.date, ""),
+            author: ensureText(safeMeta.author, "")
+          };
+        }
+
+        function renderHeader(chapterTag, title, chapterNumber) {
+          return `
+            <span class="chapter-number">${escapeHtml(chapterNumber)}</span>
+            <header class="slide-header">
+              <span class="chapter-tag">${escapeHtml(chapterTag)}</span>
+              <h1>${escapeHtml(title)}</h1>
+            </header>
+          `;
+        }
+
+        function renderBulletList(items) {
+          return items.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+        }
+
+        function toOptionalBoxCount(value) {
+          if (value === null || value === undefined || String(value).trim() === "") return null;
+          const parsed = Number(value);
+          if (!Number.isFinite(parsed)) return null;
+          return Math.max(0, Math.floor(parsed));
+        }
+
+        function buildFlowSteps(rawItems, fallbackItems, boxCount, labelPrefix) {
+          const normalized = Array.isArray(rawItems)
+            ? rawItems
+                .map((item) => String(item || "").trim())
+                .filter((item) => item.length > 0)
+            : [];
+          if (boxCount === null) {
+            return normalized.length > 0 ? normalized : fallbackItems;
+          }
+          if (boxCount === 0) return [];
+          const result = normalized.slice(0, boxCount);
+          for (let idx = result.length; idx < boxCount; idx += 1) {
+            result.push(`[Input Needed] ${labelPrefix} #${idx + 1}`);
+          }
+          return result;
+        }
+
+        function resolveFlowChainStyle(stepCount) {
+          const count = Math.max(1, Number(stepCount) || 1);
+          let preset;
+          if (count <= 4) {
+            preset = {
+              chainPadding: 12,
+              gap: 4,
+              minHeight: 42,
+              padY: 8,
+              padRight: 10,
+              padLeft: 38,
+              fontSize: 11,
+              lineHeight: 1.24,
+              textLines: 2,
+              boxFlex: 1,
+              arrowFlex: 0.16,
+              indexSize: 18,
+              indexFont: 10,
+              indexLeft: 9,
+              indexBorder: 2,
+              arrowStemW: 3,
+              arrowStemH: 9,
+              arrowHeadW: 6,
+              arrowHeadH: 7
+            };
+          } else if (count <= 6) {
+            preset = {
+              chainPadding: 10,
+              gap: 3,
+              minHeight: 34,
+              padY: 6,
+              padRight: 9,
+              padLeft: 34,
+              fontSize: 10.2,
+              lineHeight: 1.18,
+              textLines: 2,
+              boxFlex: 1,
+              arrowFlex: 0.13,
+              indexSize: 16,
+              indexFont: 9,
+              indexLeft: 8,
+              indexBorder: 2,
+              arrowStemW: 3,
+              arrowStemH: 8,
+              arrowHeadW: 5,
+              arrowHeadH: 6
+            };
+          } else if (count <= 8) {
+            preset = {
+              chainPadding: 8,
+              gap: 2,
+              minHeight: 28,
+              padY: 4,
+              padRight: 8,
+              padLeft: 30,
+              fontSize: 9.2,
+              lineHeight: 1.14,
+              textLines: 2,
+              boxFlex: 1,
+              arrowFlex: 0.1,
+              indexSize: 14,
+              indexFont: 8,
+              indexLeft: 7,
+              indexBorder: 2,
+              arrowStemW: 2,
+              arrowStemH: 6,
+              arrowHeadW: 5,
+              arrowHeadH: 5
+            };
+          } else if (count <= 10) {
+            preset = {
+              chainPadding: 7,
+              gap: 1,
+              minHeight: 24,
+              padY: 3,
+              padRight: 7,
+              padLeft: 27,
+              fontSize: 8.3,
+              lineHeight: 1.1,
+              textLines: 1,
+              boxFlex: 1,
+              arrowFlex: 0.08,
+              indexSize: 13,
+              indexFont: 7,
+              indexLeft: 6,
+              indexBorder: 1,
+              arrowStemW: 2,
+              arrowStemH: 5,
+              arrowHeadW: 4,
+              arrowHeadH: 4
+            };
+          } else if (count <= 12) {
+            preset = {
+              chainPadding: 6,
+              gap: 1,
+              minHeight: 20,
+              padY: 2,
+              padRight: 6,
+              padLeft: 24,
+              fontSize: 7.7,
+              lineHeight: 1.05,
+              textLines: 1,
+              boxFlex: 1,
+              arrowFlex: 0.06,
+              indexSize: 11,
+              indexFont: 6.5,
+              indexLeft: 6,
+              indexBorder: 1,
+              arrowStemW: 2,
+              arrowStemH: 4,
+              arrowHeadW: 3,
+              arrowHeadH: 3
+            };
+          } else {
+            preset = {
+              chainPadding: 5,
+              gap: 1,
+              minHeight: 16,
+              padY: 1,
+              padRight: 5,
+              padLeft: 21,
+              fontSize: 7,
+              lineHeight: 1,
+              textLines: 1,
+              boxFlex: 1,
+              arrowFlex: 0.05,
+              indexSize: 10,
+              indexFont: 6,
+              indexLeft: 5,
+              indexBorder: 1,
+              arrowStemW: 1,
+              arrowStemH: 3,
+              arrowHeadW: 3,
+              arrowHeadH: 3
+            };
+          }
+          return [
+            `--flow-chain-padding:${preset.chainPadding}px`,
+            `--flow-chain-gap:${preset.gap}px`,
+            `--flow-step-min-h:${preset.minHeight}px`,
+            `--flow-step-pad-y:${preset.padY}px`,
+            `--flow-step-pad-right:${preset.padRight}px`,
+            `--flow-step-pad-left:${preset.padLeft}px`,
+            `--flow-font-size:${preset.fontSize}px`,
+            `--flow-line-height:${preset.lineHeight}`,
+            `--flow-text-lines:${preset.textLines}`,
+            `--flow-box-flex:${preset.boxFlex}`,
+            `--flow-arrow-flex:${preset.arrowFlex}`,
+            `--flow-index-size:${preset.indexSize}px`,
+            `--flow-index-font:${preset.indexFont}px`,
+            `--flow-index-left:${preset.indexLeft}px`,
+            `--flow-index-border:${preset.indexBorder}px`,
+            `--flow-arrow-stem-w:${preset.arrowStemW}px`,
+            `--flow-arrow-stem-h:${preset.arrowStemH}px`,
+            `--flow-arrow-head-w:${preset.arrowHeadW}px`,
+            `--flow-arrow-head-h:${preset.arrowHeadH}px`
+          ].join(";");
+        }
+
+        function renderFlowChain(items) {
+          const steps = Array.isArray(items) ? items : [];
+          return steps
+            .map((item, idx) => {
+              const arrowHtml = idx < steps.length - 1 ? '<div class="flow-step-arrow" aria-hidden="true"></div>' : "";
+              return `
+                <div class="flow-step-box">
+                  <p class="flow-step-text">${escapeHtml(item)}</p>
+                </div>
+                ${arrowHtml}
+              `;
+            })
+            .join("");
+        }
+
+        function renderMediaBox(src, altText, caption, boxClass = "media-box") {
+          const normalizedSrc = String(src || "").trim();
+          const hasSrc = normalizedSrc.length > 0;
+          const safeAlt = escapeHtml(altText);
+          const safeCaption = escapeHtml(caption || "");
+          const safeSrc = escapeHtml(normalizedSrc);
+          const emptyLabel = hasSrc
+            ? `파일을 찾을 수 없습니다: ${safeSrc}`
+            : "링크를 입력하면 이미지가 이 영역에 표시됩니다.";
+
+          return `
+            <div class="${boxClass}${hasSrc ? "" : " is-empty"}">
+              ${hasSrc ? `<img src="${safeSrc}" alt="${safeAlt}" loading="lazy" />` : ""}
+              <p class="empty-label">${emptyLabel}</p>
+            </div>
+            ${safeCaption ? `<p class="media-caption">${safeCaption}</p>` : ""}
+          `;
+        }
+
+        function buildSlides(config) {
+          const safeConfig = isPlainObject(config) ? config : {};
+          const metaConfig = isPlainObject(safeConfig.meta) ? safeConfig.meta : {};
+          const assets = isPlainObject(safeConfig.assets) ? safeConfig.assets : {};
+          const modules = Array.isArray(safeConfig.modules) ? safeConfig.modules : [];
+          const moduleCount = modules.length;
+          const coverMeta = resolveCoverMeta(metaConfig);
+          const coverTitleHtml = coverMeta.titleLine2
+            ? `${escapeHtml(coverMeta.titleLine1)}<br />${escapeHtml(coverMeta.titleLine2)}`
+            : escapeHtml(coverMeta.titleLine1);
+          const featureSource = Array.isArray(safeConfig.featurePlaceholders) ? safeConfig.featurePlaceholders : [];
+          const normalizedFeatures =
+            featureSource.length > 0
+              ? featureSource.map((feature, idx) => {
+                  if (typeof feature === "string") {
+                    return {
+                      title: `기능 블록 #${idx + 1}`,
+                      description: ensureText(feature, "[입력 필요] 기능 설명을 입력하세요.")
+                    };
+                  }
+                  const safeFeature = isPlainObject(feature) ? feature : {};
+                  return {
+                    title: ensureText(safeFeature.title, `기능 블록 #${idx + 1}`),
+                    description: ensureText(safeFeature.description, "[입력 필요] 기능 설명을 입력하세요.")
+                  };
+                })
+              : [
+                  {
+                    title: "기능 블록 #1",
+                    description: "[입력 필요] 기능 항목을 입력하세요."
+                  }
+                ];
+          const featureItems = normalizedFeatures
+            .map(
+              (feature, idx) => `
+                <div class="feature-item">
+                  <strong>${idx + 1}. ${escapeHtml(feature.title)}</strong>
+                  <p>${escapeHtml(feature.description)}</p>
+                </div>
+              `
+            )
+            .join("");
+          const env = isPlainObject(safeConfig.developmentEnvironment) ? safeConfig.developmentEnvironment : {};
+          const osText = ensureText(env.os, "-");
+          const tools = Array.isArray(env.tools)
+            ? env.tools.filter((item) => String(item || "").trim().length > 0)
+            : [];
+          const languages = Array.isArray(env.language)
+            ? env.language.filter((item) => String(item || "").trim().length > 0)
+            : [];
+          const toolsText = tools.length > 0 ? tools.join(", ") : "-";
+          const languageText = languages.length > 0 ? languages.join(", ") : "-";
+          const constraints = Array.isArray(safeConfig.constraints)
+            ? safeConfig.constraints.filter((item) => String(item || "").trim().length > 0)
+            : [];
+          const constraintsHtml = renderBulletList(
+            constraints.length > 0
+              ? constraints
+              : ["[입력 필요] 제약 조건 목록을 constraints 배열에 입력하세요."]
+          );
+
+          const timingNotes = Array.isArray(safeConfig.timingNotes)
+            ? safeConfig.timingNotes.filter((item) => String(item || "").trim().length > 0)
+            : [];
+          const timingNotesHtml = renderBulletList(
+            timingNotes.length > 0
+              ? timingNotes
+              : ["[Input Needed] Fill timingNotes array for this memo section."]
+          );
+
+          const defaultDatapathFlow = [
+            "[Input Needed] Datapath step #1",
+            "[Input Needed] Datapath step #2",
+            "[Input Needed] Datapath step #3"
+          ];
+          const defaultClockFlow = [
+            "[Input Needed] CLK step #1",
+            "[Input Needed] CLK step #2",
+            "[Input Needed] CLK step #3"
+          ];
+          const defaultResetFlow = [
+            "[Input Needed] RESET step #1",
+            "[Input Needed] RESET step #2",
+            "[Input Needed] RESET step #3"
+          ];
+
+          const rawDatapathFlowSteps = Array.isArray(safeConfig.datapathFlowSteps)
+            ? safeConfig.datapathFlowSteps
+            : [];
+          const rawClockFlowSteps = Array.isArray(safeConfig.clockFlowSteps) ? safeConfig.clockFlowSteps : [];
+          const rawResetFlowSteps = Array.isArray(safeConfig.resetFlowSteps) ? safeConfig.resetFlowSteps : [];
+          const rawClockResetFlowSteps = Array.isArray(safeConfig.clockResetFlowSteps)
+            ? safeConfig.clockResetFlowSteps
+            : [];
+
+          const datapathFlowBoxCount = toOptionalBoxCount(safeConfig.datapathFlowBoxCount);
+          const clockFlowBoxCount = toOptionalBoxCount(safeConfig.clockFlowBoxCount);
+          const resetFlowBoxCount = toOptionalBoxCount(safeConfig.resetFlowBoxCount);
+          const clockResetFlowBoxCount = toOptionalBoxCount(safeConfig.clockResetFlowBoxCount);
+
+          const legacySplitIndex = Math.ceil(rawClockResetFlowSteps.length / 2);
+          const legacyClockFlow = rawClockResetFlowSteps.slice(0, legacySplitIndex);
+          const legacyResetFlow = rawClockResetFlowSteps.slice(legacySplitIndex);
+          const legacyClockBoxCount =
+            clockResetFlowBoxCount === null ? null : Math.ceil(clockResetFlowBoxCount / 2);
+          const legacyResetBoxCount =
+            clockResetFlowBoxCount === null ? null : Math.floor(clockResetFlowBoxCount / 2);
+
+          const datapathFlowSteps = buildFlowSteps(
+            rawDatapathFlowSteps,
+            defaultDatapathFlow,
+            datapathFlowBoxCount,
+            "Datapath step"
+          );
+          const clockFlowSource = rawClockFlowSteps.length > 0 ? rawClockFlowSteps : legacyClockFlow;
+          const resetFlowSource = rawResetFlowSteps.length > 0 ? rawResetFlowSteps : legacyResetFlow;
+          const effectiveClockFlowBoxCount =
+            clockFlowBoxCount !== null
+              ? clockFlowBoxCount
+              : rawClockFlowSteps.length > 0
+                ? null
+                : legacyClockBoxCount;
+          const effectiveResetFlowBoxCount =
+            resetFlowBoxCount !== null
+              ? resetFlowBoxCount
+              : rawResetFlowSteps.length > 0
+                ? null
+                : legacyResetBoxCount;
+          const clockFlowSteps = buildFlowSteps(
+            clockFlowSource,
+            defaultClockFlow,
+            effectiveClockFlowBoxCount,
+            "CLK step"
+          );
+          const resetFlowSteps = buildFlowSteps(
+            resetFlowSource,
+            defaultResetFlow,
+            effectiveResetFlowBoxCount,
+            "RESET step"
+          );
+
+          const datapathFlowHtml = renderFlowChain(datapathFlowSteps);
+          const clockFlowHtml = renderFlowChain(clockFlowSteps);
+          const resetFlowHtml = renderFlowChain(resetFlowSteps);
+          const datapathFlowStyle = resolveFlowChainStyle(datapathFlowSteps.length);
+          const clockFlowStyle = resolveFlowChainStyle(clockFlowSteps.length);
+          const resetFlowStyle = resolveFlowChainStyle(resetFlowSteps.length);
+
+          const conclusionPoints = Array.isArray(safeConfig.conclusionPoints)
+            ? safeConfig.conclusionPoints.filter((item) => String(item || "").trim().length > 0)
+            : [];
+          const conclusionPointsHtml = renderBulletList(
+            conclusionPoints.length > 0
+              ? conclusionPoints
+              : ["[Input Needed] Fill conclusionPoints array."]
+          );
+          const conclusionNextSteps = Array.isArray(safeConfig.conclusionNextSteps)
+            ? safeConfig.conclusionNextSteps.filter((item) => String(item || "").trim().length > 0)
+            : [];
+          const conclusionNextStepsHtml = renderBulletList(
+            conclusionNextSteps.length > 0
+              ? conclusionNextSteps
+              : ["[Input Needed] Fill conclusionNextSteps array."]
+          );
+
+          const moduleSlides = modules
+            .map((module, idx) => {
+              const safeModule = isPlainObject(module) ? module : {};
+              const moduleName =
+                String(safeModule.name || "").trim() || `MODULE_${String(idx + 1).padStart(2, "0")}`;
+              const roleText = String(safeModule.role || "").trim();
+              const summaryItems = Array.isArray(safeModule.summary)
+                ? safeModule.summary.filter((item) => String(item || "").trim().length > 0)
+                : [];
+              const simpleDiagramSvg = ensureText(safeModule.simpleDiagramSvg, "");
+              const fsmImage = ensureText(safeModule.fsmImage, "");
+              const hasFsmImage = fsmImage.length > 0;
+              const detailLayout = String(safeModule.detailLayout || "").trim().toLowerCase();
+              const hasChildModules = Array.isArray(safeModule.childModules) && safeModule.childModules.length > 0;
+              const isParentModuleLayout = !hasFsmImage && (detailLayout === "parent-module" || hasChildModules);
+              const summaryHtml =
+                summaryItems.length > 0
+                  ? `<ul style="margin-top:10px;">${renderBulletList(summaryItems)}</ul>`
+                  : "";
+              const stateItems = Array.isArray(safeModule.stateDescription)
+                ? safeModule.stateDescription.filter((item) => String(item || "").trim().length > 0)
+                : [];
+              const stateFontClass =
+                stateItems.length <= 4
+                  ? "state-size-lg"
+                  : stateItems.length <= 7
+                    ? "state-size-md"
+                    : stateItems.length <= 10
+                      ? "state-size-sm"
+                      : "state-size-xs";
+              const stateHtml =
+                stateItems.length > 0
+                  ? `<div class="state-content ${stateFontClass}"><ul>${renderBulletList(stateItems)}</ul></div>`
+                  : `<div class="state-content state-size-md"><p>[입력 필요] FSM의 state별 동작/전이 조건을 작성하세요.</p></div>`;
+              const childModules = Array.isArray(safeModule.childModules)
+                ? safeModule.childModules.filter((item) => item !== null && item !== undefined)
+                : [];
+              const childModuleCount = childModules.length;
+              const childRowCount = Math.max(1, Math.ceil(childModuleCount / 2));
+              const childLayoutPreset =
+                childRowCount <= 2
+                  ? { nameSizePx: 11, gapPx: 4, itemPadding: "3px 6px", lineHeight: 1.2 }
+                  : childRowCount === 3
+                    ? { nameSizePx: 10, gapPx: 3, itemPadding: "2px 5px", lineHeight: 1.15 }
+                    : childRowCount === 4
+                      ? { nameSizePx: 9, gapPx: 2, itemPadding: "2px 4px", lineHeight: 1.1 }
+                      : childRowCount <= 6
+                        ? { nameSizePx: 8, gapPx: 2, itemPadding: "1px 3px", lineHeight: 1.05 }
+                        : { nameSizePx: 7, gapPx: 1, itemPadding: "1px 2px", lineHeight: 1 };
+              const childGridStyle = [
+                `--child-grid-rows:${childRowCount}`,
+                `--child-grid-gap:${childLayoutPreset.gapPx}px`,
+                `--child-item-padding:${childLayoutPreset.itemPadding}`,
+                `--child-name-size:${childLayoutPreset.nameSizePx}px`,
+                `--child-name-line-height:${childLayoutPreset.lineHeight}`
+              ].join(";");
+              const childModulesHtml =
+                childModuleCount > 0
+                  ? `<div class="child-module-grid" style="${childGridStyle}">${childModules
+                      .map((child, childIdx) => {
+                        if (typeof child === "string") {
+                          return `<div class="child-module-item"><p class="child-module-name">${escapeHtml(child)}</p></div>`;
+                        }
+                        const childName = String(child.name || "").trim() || `sub_module_${childIdx + 1}`;
+                        return `<div class="child-module-item"><p class="child-module-name">${escapeHtml(childName)}</p></div>`;
+                      })
+                      .join("")}</div>`
+                  : `<p>[입력 필요] 하위모듈 목록(childModules)을 입력하세요.</p>`;
+              const roleCardBody = `
+                <h3>모듈 역할</h3>
+                <div class="module-role-input-box">${roleText ? escapeHtml(roleText) : ""}</div>
+                <div class="split-meta">
+                  <div class="meta-pill">모듈명: ${escapeHtml(moduleName)}</div>
+                  <div class="meta-pill">페이지: 1 모듈 / 1 슬라이드</div>
+                </div>
+                ${summaryHtml}
+              `;
+              const simpleCardHtml = `
+                <div class="card module-simple-card">
+                  <h3>Block Diagram</h3>
+                  ${renderMediaBox(
+                    simpleDiagramSvg,
+                    `${moduleName} simple diagram`,
+                    "",
+                    "media-box module-simple-box"
+                  )}
+                </div>
+              `;
+              const fsmLayoutHtml = `
+                <div class="col-flex module-left-col">
+                  ${simpleCardHtml}
+                  <div class="card accent module-role-card">
+                    ${roleCardBody}
+                  </div>
+                </div>
+                <div class="col-flex module-right-col">
+                  <div class="card module-fsm-card">
+                    <h3>FSM</h3>
+                    ${renderMediaBox(
+                      fsmImage,
+                      `${moduleName} FSM`,
+                      "FSM이 있는 모듈만 fsmImage 링크를 입력하세요.",
+                      "media-box module-fsm-box"
+                    )}
+                  </div>
+                  <div class="card module-state-card">
+                    <h3>STATE</h3>
+                    ${stateHtml}
+                  </div>
+                </div>
+              `;
+              const noFsmLayoutHtml = `
+                <div class="card module-simple-card module-no-fsm-simple">
+                  <h3>Block Diagram</h3>
+                  ${renderMediaBox(
+                    simpleDiagramSvg,
+                    `${moduleName} simple diagram`,
+                    "",
+                    "media-box module-simple-box"
+                  )}
+                </div>
+                <div class="card accent module-role-card module-no-fsm-role">
+                  ${roleCardBody}
+                </div>
+                <div class="card module-viz-placeholder-card module-no-fsm-viz">
+                  <h3>INFORGRAPHIC</h3>
+                  <div class="module-viz-placeholder"></div>
+                </div>
+              `;
+              const parentModuleLayoutHtml = `
+                <div class="card accent module-role-card module-parent-role">
+                  ${roleCardBody}
+                </div>
+                <div class="card module-child-module-card">
+                  <h3>하위모듈 구성</h3>
+                  ${childModulesHtml}
+                </div>
+                <div class="card module-viz-placeholder-card module-parent-viz">
+                  <h3>Hierarchy Visualization</h3>
+                  <div class="module-viz-placeholder"></div>
+                </div>
+              `;
+              const moduleLayoutClass = hasFsmImage
+                ? "grid-2 module-detail-grid"
+                : isParentModuleLayout
+                  ? "module-detail-grid parent-module-layout"
+                  : "module-detail-grid no-fsm-layout";
+              const moduleLayoutHtml = hasFsmImage
+                ? fsmLayoutHtml
+                : isParentModuleLayout
+                  ? parentModuleLayoutHtml
+                  : noFsmLayoutHtml;
+
+              return `
+                <section>
+                  <div class="slide-frame">
+                    ${renderHeader(
+                      "Module Detail",
+                      `6-${idx + 1}. ${moduleName}`,
+                      "06"
+                    )}
+                    <div class="${moduleLayoutClass}">
+                      ${moduleLayoutHtml}
+                    </div>
+                  </div>
+                </section>
+              `;
+            })
+            .join("");
+          const troubleCases = Array.isArray(safeConfig.troubleShootings)
+            ? safeConfig.troubleShootings.filter((item) => item !== null && item !== undefined)
+            : [];
+          const normalizedTroubleCases =
+            troubleCases.length > 0
+              ? troubleCases
+              : [
+                  {
+                    title: "Trouble #1",
+                    issueItems: ["[입력 필요] 문제 현상/원인을 입력하세요."],
+                    solutionItems: ["[입력 필요] 조치 사항/개선 결과를 입력하세요."]
+                  }
+                ];
+          const troubleCasesHtml = normalizedTroubleCases
+            .map((item, idx) => {
+              const title =
+                typeof item === "string"
+                  ? item
+                  : String(item.title || "").trim() || `Trouble #${idx + 1}`;
+              const issueItems = Array.isArray(item.issueItems)
+                ? item.issueItems.filter((line) => String(line || "").trim().length > 0)
+                : [];
+              const solutionItems = Array.isArray(item.solutionItems)
+                ? item.solutionItems.filter((line) => String(line || "").trim().length > 0)
+                : [];
+              const issueHtml =
+                issueItems.length > 0
+                  ? renderBulletList(issueItems)
+                  : "<li>[입력 필요] 문제 현상/원인을 입력하세요.</li>";
+              const solutionHtml =
+                solutionItems.length > 0
+                  ? renderBulletList(solutionItems)
+                  : "<li>[입력 필요] 조치 사항/개선 결과를 입력하세요.</li>";
+
+              return `
+                <div class="trouble-case-grid">
+                  <div class="card">
+                    <h3>${escapeHtml(title)} - 문제 현상 / 원인</h3>
+                    <ul>${issueHtml}</ul>
+                  </div>
+                  <div class="card accent">
+                    <h3>${escapeHtml(title)} - 조치 사항 / 개선 결과</h3>
+                    <ul>${solutionHtml}</ul>
+                  </div>
+                </div>
+              `;
+            })
+            .join("");
+
+          return `
+            <section>
+              <div class="slide-frame cover-slide">
+                <div class="cover-container">
+                  <div class="cover-top">
+                    <div class="cover-logo-text" data-cover-key="team">${escapeHtml(coverMeta.team)}</div>
+                    <div class="cover-logo-circle"></div>
+                  </div>
+                  <div>
+                    <h1 class="cover-title" data-cover-key="title">${coverTitleHtml}</h1>
+                    <div class="cover-divider"></div>
+                    <p class="cover-subtitle" data-cover-key="subtitle">${escapeHtml(coverMeta.subtitle)}</p>
+                  </div>
+                  <div class="cover-footer">
+                    <span data-cover-key="date">${escapeHtml(coverMeta.dateLabel)}: ${escapeHtml(coverMeta.date)}</span>
+                    <span data-cover-key="author">${escapeHtml(coverMeta.authorLabel)}: ${escapeHtml(coverMeta.author)}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <div class="slide-frame">
+                ${renderHeader("목차", "2. 발표자료 구조", "02")}
+                <div class="col-flex">
+                  <div class="card toc-card-large">
+                    <h3>목차</h3>
+                    <ol>
+                      <li>표지</li>
+                      <li>목차</li>
+                      <li>개발환경 및 제약조건</li>
+                      <li>구현기능</li>
+                      <li>전체 TOP 블록 다이어그램</li>
+                      <li>5.1 DataPath</li>
+                      <li>5.2 CLK/RESET TREE</li>
+                      <li>세부모듈 설명 (${moduleCount} 페이지)</li>
+                      <li>테스트벤치</li>
+                      <li>타이밍 다이어그램</li>
+                      <li>Power / Timing / UTILIZATION Report</li>
+                      <li>Trouble Shooting</li>
+                      <li>결론</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <div class="slide-frame">
+                ${renderHeader("Development & Constraints", "3. 개발환경 및 제약조건", "03")}
+                <div class="col-flex">
+                  <div class="grid-2">
+                    <div class="card">
+                      <h3>개발환경</h3>
+                      <ul>
+                        <li><strong>OS</strong>: ${escapeHtml(osText)}</li>
+                        <li><strong>Tools</strong>: ${escapeHtml(toolsText)}</li>
+                        <li><strong>Language</strong>: ${escapeHtml(languageText)}</li>
+                      </ul>
+                    </div>
+                    <div class="card">
+                      <h3>환경 설명 메모</h3>
+                      <p>보드, 시뮬레이터, 합성 옵션, 제약파일 관리 방식 등 프로젝트별 세부 조건을 기록합니다.</p>
+                    </div>
+                  </div>
+                  <div class="card accent">
+                    <h3>제약조건</h3>
+                    <ul>${constraintsHtml}</ul>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <div class="slide-frame">
+                ${renderHeader("Implementation", "4. 구현기능", "04")}
+                <div class="col-flex">
+                  <div class="card">
+                    <h3>기능 작성 영역</h3>
+                    <div class="feature-grid">${featureItems}</div>
+                  </div>
+                  <div class="card diagram-blank-slot"></div>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <div class="slide-frame">
+                ${renderHeader("Architecture", "5. 전체 TOP 블록 다이어그램", "05")}
+                <div class="card plain top-diagram-card">
+                  ${renderMediaBox(
+                    assets.topBlockSvg,
+                    "Top block diagram",
+                    "",
+                    "media-box top-diagram-box"
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <div class="slide-frame">
+                ${renderHeader("Data Path", "5.1 DataPath", "05")}
+                <div class="grid-2 path-flow-grid">
+                  <div class="card flow-mix-card">
+                    <h3>Datapath</h3>
+                    <div class="flow-chain" style="${datapathFlowStyle}">
+                      ${datapathFlowHtml}
+                    </div>
+                  </div>
+                  <div class="card plain">
+                    <h3>Topology</h3>
+                    <div class="datapath-overlay-box">
+                      <img src="${escapeHtml(assets.topBlockSvg)}" alt="Datapath base diagram" loading="lazy" />
+                      <svg class="datapath-overlay-svg" viewBox="0 0 1000 700" role="img" aria-label="datapath overlay area">
+                        <text x="500" y="350" text-anchor="middle" class="datapath-overlay-text">
+                          화살표 오버레이 작성 영역
+                        </text>
+                      </svg>
+                    </div>
+                    <p class="media-caption">우측 영역에서 Top SVG 위에 datapath 화살표를 직접 추가해 설명합니다.</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+            <section>
+              <div class="slide-frame">
+                ${renderHeader("Clock & Reset", "5-2. clk / RESET Tree", "05")}
+                <div class="grid-2 path-flow-grid">
+                  <div class="card flow-mix-card">
+                    <h3>CLK/RESET TREE</h3>
+                    <div class="flow-split-grid">
+                      <div class="flow-split-col">
+                        <p class="flow-split-title">CLK</p>
+                        <div class="flow-chain" style="${clockFlowStyle}">
+                          ${clockFlowHtml}
+                        </div>
+                      </div>
+                      <div class="flow-split-col">
+                        <p class="flow-split-title">RESET</p>
+                        <div class="flow-chain" style="${resetFlowStyle}">
+                          ${resetFlowHtml}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="card plain">
+                    <h3>Topology</h3>
+                    <div class="datapath-overlay-box">
+                      <img src="${escapeHtml(assets.topBlockSvg)}" alt="Clock reset base diagram" loading="lazy" />
+                      <svg class="datapath-overlay-svg" viewBox="0 0 1000 700" role="img" aria-label="clock reset overlay area">
+                        <text x="500" y="350" text-anchor="middle" class="datapath-overlay-text">
+                          clock/reset overlay authoring area
+                        </text>
+                      </svg>
+                    </div>
+                    <p class="media-caption">Annotate clk/reset tree arrows directly over the Top SVG in this area.</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            ${moduleSlides}
+
+            <section>
+              <div class="slide-frame">
+                ${renderHeader("Testbench", "7. 테스트벤치", "07")}
+                <div class="col-flex testbench-layout">
+                  <div class="card testbench-wave-card">
+                    <h3>Waveform</h3>
+                    ${renderMediaBox(
+                      assets.testbenchWaveform,
+                      "Testbench waveform",
+                      "상단 영역: 기존 파형 스크린샷 링크를 assets.testbenchWaveform에 입력",
+                      "media-box tall"
+                    )}
+                  </div>
+                  <div class="card accent testbench-check-card">
+                    <h3>검증 포인트</h3>
+                    <ul>
+                      <li>[예시] 초기화/리셋 이후 정상 동작 여부</li>
+                      <li>[예시] 주요 제어 신호의 타이밍 일치 여부</li>
+                      <li>[예시] 경계값 또는 예외 입력 처리 결과</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <div class="slide-frame">
+                ${renderHeader("Timing", "8. 타이밍 다이어그램", "08")}
+                <div class="grid-2">
+                  <div class="card">
+                    <h3>Timing Diagram</h3>
+                    ${renderMediaBox(
+                      assets.timingDiagramSvg,
+                      "Timing diagram",
+                      "wavedorm 등으로 제작한 SVG를 assets.timingDiagramSvg에 연결"
+                    )}
+                  </div>
+                  <div class="card">
+                    <h3>설명</h3>
+                    <ul>${timingNotesHtml}</ul>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <div class="slide-frame report-slide">
+                ${renderHeader("Report", "9. Power / Timing / UTILIZATION Report", "09")}
+                <div class="report-grid">
+                  <div class="card">
+                    <h3>Power Report</h3>
+                    <div id="power-report-view" class="report-panel">
+                      <p class="report-loading">Power .rpt 로딩 대기 중...</p>
+                    </div>
+                  </div>
+                  <div class="card">
+                    <h3>Timing Report</h3>
+                    <div id="timing-report-view" class="report-panel">
+                      <p class="report-loading">Timing .rpt 로딩 대기 중...</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="card report-util-card">
+                  <h3>UTILIZATION REPORT</h3>
+                  <div id="util-report-view" class="report-panel">
+                    <p class="report-loading">Loading Utilization .rpt...</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <div class="slide-frame">
+                ${renderHeader("Trouble Shooting", "10. Trouble Shooting", "10")}
+                <div class="trouble-list">
+                  ${troubleCasesHtml}
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <div class="slide-frame">
+                ${renderHeader("Conclusion", "11. 결론", "11")}
+                <div class="grid-2">
+                  <div class="card">
+                    <h3>핵심 결론</h3>
+                    <ul>${conclusionPointsHtml}</ul>
+                  </div>
+                  <div class="card accent">
+                    <h3>향후 계획</h3>
+                    <ul>${conclusionNextStepsHtml}</ul>
+                  </div>
+                </div>
+              </div>
+            </section>
+          `;
+        }
+
+        function toNumber(raw) {
+          if (raw === null || raw === undefined) return null;
+          const normalized = String(raw).replace(/,/g, "").trim();
+          if (!normalized) return null;
+          const value = Number(normalized);
+          return Number.isFinite(value) ? value : null;
+        }
+
+        function findMetricValue(text, labelRegex) {
+          const lines = text.split(/\r?\n/);
+          for (const line of lines) {
+            const matched = line.match(labelRegex);
+            if (!matched || matched.index === undefined) continue;
+            const tail = line.slice(matched.index + matched[0].length);
+            const numberMatch = tail.match(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/);
+            if (numberMatch) return toNumber(numberMatch[0]);
+          }
+          return null;
+        }
+
+        function findMetricText(text, labelRegex) {
+          const lines = text.split(/\r?\n/);
+          for (const line of lines) {
+            const matched = line.match(labelRegex);
+            if (!matched || matched.index === undefined) continue;
+            const tail = line
+              .slice(matched.index + matched[0].length)
+              .replace(/[|:=]/g, " ")
+              .trim();
+            if (!tail) continue;
+            const pieces = tail.split(/\s{2,}/).filter(Boolean);
+            return (pieces[0] || tail).trim();
+          }
+          return "";
+        }
+
+        function findMetricNumbers(text, labelRegex) {
+          const lines = text.split(/\r?\n/);
+          for (const line of lines) {
+            const matched = line.match(labelRegex);
+            if (!matched || matched.index === undefined) continue;
+            const tail = line.slice(matched.index + matched[0].length);
+            const numberMatches = tail.match(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/g);
+            if (!numberMatches || numberMatches.length === 0) continue;
+            return numberMatches.map((raw) => toNumber(raw)).filter((v) => v !== null);
+          }
+          return [];
+        }
+
+        function parseUtilRow(text, labelRegex) {
+          const numbers = findMetricNumbers(text, labelRegex);
+          const used = numbers.length > 0 ? numbers[0] : null;
+          const available = numbers.length > 1 ? numbers[1] : null;
+          let percent = numbers.length > 2 ? numbers[2] : percentOf(used, available);
+          return { used, available, percent };
+        }
+
+        function normalizeUtilLabel(rawLabel) {
+          return String(rawLabel || "")
+            .replace(/\*/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
+        }
+
+        function parseUtilTableRows(text) {
+          const lines = text.split(/\r?\n/);
+          const parsedRows = [];
+          let insideSiteTypeTable = false;
+
+          for (const line of lines) {
+            if (
+              /\|\s*Site Type\s*\|/i.test(line) &&
+              /\|\s*Used\s*\|/i.test(line) &&
+              /\|\s*Available\s*\|/i.test(line) &&
+              /\|\s*Util%?\s*\|/i.test(line)
+            ) {
+              insideSiteTypeTable = true;
+              continue;
+            }
+
+            if (!insideSiteTypeTable) continue;
+
+            const trimmedLine = line.trim();
+            if (!trimmedLine) {
+              insideSiteTypeTable = false;
+              continue;
+            }
+
+            if (!line.includes("|")) continue;
+            if (/^\+-+/.test(trimmedLine)) continue;
+
+            const rawCells = line.split("|").slice(1, -1);
+            if (rawCells.length < 6) continue;
+
+            const rawLabelCell = rawCells[0];
+            const label = normalizeUtilLabel(rawLabelCell);
+            if (!label || /^site\s*type$/i.test(label)) continue;
+
+            const used = toNumber(rawCells[1]);
+            const available = toNumber(rawCells[4]);
+            const percentRaw = toNumber(rawCells[5]);
+            const percent = Number.isFinite(percentRaw) ? percentRaw : percentOf(used, available);
+
+            if (used === null && available === null && percent === null) continue;
+
+            parsedRows.push({
+              label,
+              used,
+              available,
+              percent
+            });
+          }
+
+          const dedupedRows = [];
+          const seenLabels = new Set();
+          for (const row of parsedRows) {
+            const key = row.label.toLowerCase();
+            if (seenLabels.has(key)) continue;
+            seenLabels.add(key);
+            dedupedRows.push(row);
+          }
+          return dedupedRows;
+        }
+
+        function findUtilRow(rows, labelRegex) {
+          for (const row of rows || []) {
+            if (!row || !row.label) continue;
+            if (labelRegex.test(row.label)) return row;
+          }
+          return null;
+        }
+
+        function parsePowerReport(text) {
+          return {
+            totalOnChipPowerW: findMetricValue(text, /Total\s+On[- ]Chip\s+Power/i),
+            dynamicPowerW: findMetricValue(text, /(?:Total\s+)?Dynamic(?:\s+On[- ]Chip)?(?:\s+Power)?\b/i),
+            staticPowerW: findMetricValue(text, /(?:Device\s+)?Static(?:\s+Power)?\b/i),
+            clocksW: findMetricValue(text, /Clocks?\b/i),
+            signalsW: findMetricValue(text, /Signals?\b/i),
+            logicW: findMetricValue(text, /Logic\b/i),
+            bramW: findMetricValue(text, /BRAM\b/i),
+            pllW: findMetricValue(text, /PLL\b/i),
+            ioW: findMetricValue(text, /(?:I\/O|IO)\b/i),
+            junctionTempC: findMetricValue(text, /Junction\s+Temperature/i),
+            thermalMarginC: findMetricValue(text, /Thermal\s+Margin/i),
+            confidenceLevel: findMetricText(text, /Confidence\s+Level/i)
+          };
+        }
+
+        function parseTimingReport(text) {
+          return {
+            wnsNs: findMetricValue(text, /\bWNS(?:\s*\(ns\))?\b/i),
+            tnsNs: findMetricValue(text, /\bTNS(?:\s*\(ns\))?\b/i),
+            whsNs: findMetricValue(text, /\bWHS(?:\s*\(ns\))?\b/i),
+            thsNs: findMetricValue(text, /\bTHS(?:\s*\(ns\))?\b/i),
+            wpwsNs: findMetricValue(text, /\bWPWS(?:\s*\(ns\))?\b/i),
+            tpwsNs: findMetricValue(text, /\bTPWS(?:\s*\(ns\))?\b/i),
+            failingEndpoints: findMetricValue(text, /Failing\s+Endpoints/i),
+            totalEndpoints: findMetricValue(text, /Total\s+Endpoints/i)
+          };
+        }
+
+        function parseUtilReport(text) {
+          const utilResources = parseUtilTableRows(text);
+          const lutFromRows = findUtilRow(utilResources, /\b(?:slice\s+luts?|luts?)\b/i);
+          const ffFromRows = findUtilRow(utilResources, /\b(?:slice\s+registers?|registers?|ff)\b/i);
+          const ioFromRows = findUtilRow(utilResources, /\b(?:bonded\s+iobs?|i\/o|io)\b/i);
+          const bufgFromRows = findUtilRow(utilResources, /\b(?:bufgctrl|bufg)\b/i);
+
+          const lut = lutFromRows || parseUtilRow(text, /(?:^|[|\s])(?:Slice\s+LUTs?|LUT)\b(?!RAM)/i);
+          const ff = ffFromRows || parseUtilRow(text, /(?:^|[|\s])(?:Slice\s+Registers?|FF)\b/i);
+          const io = ioFromRows || parseUtilRow(text, /(?:^|[|\s])(?:Bonded\s+IOBs?|I\/O|IO)\b/i);
+          const bufg = bufgFromRows || parseUtilRow(text, /(?:^|[|\s])BUFG(?:CTRL)?s?\b/i);
+
+          return {
+            lutUsed: lut.used,
+            lutAvailable: lut.available,
+            lutPct: lut.percent,
+            ffUsed: ff.used,
+            ffAvailable: ff.available,
+            ffPct: ff.percent,
+            ioUsed: io.used,
+            ioAvailable: io.available,
+            ioPct: io.percent,
+            bufgUsed: bufg.used,
+            bufgAvailable: bufg.available,
+            bufgPct: bufg.percent,
+            utilResources,
+            // Backward-compatible keys
+            sliceLuts: lut.used,
+            sliceRegisters: ff.used,
+            bondedIob: io.used,
+            bufg: bufg.used
+          };
+        }
+
+        function formatMetric(value, unit = "", digits = 3) {
+          if (value === null || value === undefined || Number.isNaN(value)) return "-";
+          const text = Number(value).toFixed(digits);
+          return unit ? `${text} ${unit}` : text;
+        }
+
+        function formatCount(value) {
+          if (value === null || value === undefined || Number.isNaN(value)) return "-";
+          return String(Math.round(value));
+        }
+
+        function percentOf(part, total) {
+          if (
+            part === null ||
+            part === undefined ||
+            total === null ||
+            total === undefined ||
+            Number.isNaN(part) ||
+            Number.isNaN(total) ||
+            Number(total) <= 0
+          ) {
+            return null;
+          }
+          const raw = (Number(part) / Number(total)) * 100;
+          return Math.max(0, Math.min(100, raw));
+        }
+
+        function getSlackStatus(value) {
+          if (value === null || value === undefined || Number.isNaN(value)) {
+            return { text: "N/A", className: "na" };
+          }
+          if (value >= 0) return { text: "Met", className: "met" };
+          return { text: "Violation", className: "bad" };
+        }
+
+        function getFailEndpointStatus(value) {
+          if (value === null || value === undefined || Number.isNaN(value)) {
+            return { text: "N/A", className: "na" };
+          }
+          if (value === 0) return { text: "Clean", className: "met" };
+          return { text: "Fail", className: "bad" };
+        }
+
+        function renderReportRow(metric, value, status) {
+          return `
+            <tr>
+              <td>${escapeHtml(metric)}</td>
+              <td class="report-value">${escapeHtml(value)}</td>
+              <td><span class="status-chip ${escapeHtml(status.className)}">${escapeHtml(status.text)}</span></td>
+            </tr>
+          `;
+        }
+
+        function renderPowerReport(target, parsed, sourcePath) {
+          const safeDynamic = Number.isFinite(parsed.dynamicPowerW) ? parsed.dynamicPowerW : null;
+          const safeStatic = Number.isFinite(parsed.staticPowerW) ? parsed.staticPowerW : null;
+          const derivedTotal =
+            (safeDynamic !== null ? safeDynamic : 0) + (safeStatic !== null ? safeStatic : 0);
+          const safeTotal =
+            Number.isFinite(parsed.totalOnChipPowerW) && parsed.totalOnChipPowerW > 0
+              ? parsed.totalOnChipPowerW
+              : derivedTotal > 0
+                ? derivedTotal
+                : null;
+
+          const powerParts = [
+            { key: "clocksW", label: "Clocks", css: "power-part-clocks", fallbackRatio: 0.08 },
+            { key: "signalsW", label: "Signals", css: "power-part-signals", fallbackRatio: 0.02 },
+            { key: "logicW", label: "Logic", css: "power-part-logic", fallbackRatio: 0.02 },
+            { key: "bramW", label: "BRAM", css: "power-part-bram", fallbackRatio: 0.01 },
+            { key: "pllW", label: "PLL", css: "power-part-pll", fallbackRatio: 0.86 },
+            { key: "ioW", label: "I/O", css: "power-part-io", fallbackRatio: 0.01 }
+          ];
+
+          let dynamicPartItems = powerParts.map((item) => ({
+            ...item,
+            value: Number.isFinite(parsed[item.key]) ? parsed[item.key] : null
+          }));
+
+          const explicitPartSum = dynamicPartItems.reduce(
+            (sum, item) => sum + (item.value !== null ? item.value : 0),
+            0
+          );
+          const hasExplicitParts = explicitPartSum > 0;
+          const dynamicBase =
+            safeDynamic !== null && safeDynamic > 0
+              ? safeDynamic
+              : hasExplicitParts
+                ? explicitPartSum
+                : null;
+
+          if (!hasExplicitParts && dynamicBase !== null && dynamicBase > 0) {
+            dynamicPartItems = dynamicPartItems.map((item) => ({
+              ...item,
+              value: dynamicBase * item.fallbackRatio
+            }));
+          }
+
+          const dynamicPct = percentOf(safeDynamic, safeTotal);
+          const staticPct = percentOf(safeStatic, safeTotal);
+          const mainDynamicPct = dynamicPct !== null ? dynamicPct : safeStatic !== null ? Math.max(0, 100 - (staticPct || 0)) : 42;
+          const mainStaticPct = staticPct !== null ? staticPct : Math.max(0, 100 - mainDynamicPct);
+
+          const dynamicSegmentsHtml = dynamicPartItems
+            .map((item) => {
+              const pct = percentOf(item.value, dynamicBase);
+              if (pct === null || pct <= 0) return "";
+              return `<div class="power-segment ${item.css}" style="height:${pct.toFixed(2)}%"></div>`;
+            })
+            .join("");
+
+          const legendRowsHtml = dynamicPartItems
+            .map((item) => {
+              const pct = percentOf(item.value, dynamicBase);
+              const pctText = pct === null ? "-" : `${Math.round(pct)}%`;
+              return `
+                <div class="power-legend-row">
+                  <span class="power-dot ${item.css}"></span>
+                  <span class="power-legend-name">${escapeHtml(item.label)}:</span>
+                  <span class="power-legend-value">${escapeHtml(formatMetric(item.value, "W"))}</span>
+                  <span class="power-legend-pct">(${escapeHtml(pctText)})</span>
+                </div>
+              `;
+            })
+            .join("");
+
+          target.innerHTML = `
+            <div class="power-visual">
+              <p class="power-visual-title">On-Chip Power</p>
+              <div class="power-visual-layout">
+                <div class="power-stack">
+                  <div class="power-segment power-main-static" style="height:${mainStaticPct.toFixed(2)}%">
+                    <span class="power-segment-label">${Math.round(mainStaticPct)}%</span>
+                  </div>
+                  <div class="power-segment power-main-dynamic" style="height:${mainDynamicPct.toFixed(2)}%">
+                    <span class="power-segment-label">${Math.round(mainDynamicPct)}%</span>
+                  </div>
+                </div>
+                <div class="power-stack">
+                  ${dynamicSegmentsHtml}
+                </div>
+                <div class="power-legend">
+                  <div class="power-legend-row">
+                    <span class="power-dot power-main-dynamic"></span>
+                    <span class="power-legend-name">Dynamic:</span>
+                    <span class="power-legend-value">${escapeHtml(formatMetric(safeDynamic, "W"))}</span>
+                    <span class="power-legend-pct">(${escapeHtml(dynamicPct === null ? "-" : `${Math.round(dynamicPct)}%`)})</span>
+                  </div>
+                  ${legendRowsHtml}
+                </div>
+              </div>
+              <div class="power-static-row">
+                <span class="power-dot power-main-static"></span>
+                <span class="power-legend-name">Device Static:</span>
+                <span class="power-legend-value">${escapeHtml(formatMetric(safeStatic, "W"))}</span>
+                <span class="power-legend-pct">(${escapeHtml(staticPct === null ? "-" : `${Math.round(staticPct)}%`)})</span>
+              </div>
+            </div>
+          `;
+        }
+
+        function renderTimingReport(target, parsed, sourcePath) {
+          const kpiItems = [
+            { label: "WNS (setup)", value: formatMetric(parsed.wnsNs, "ns"), status: getSlackStatus(parsed.wnsNs) },
+            { label: "TNS (setup)", value: formatMetric(parsed.tnsNs, "ns"), status: getSlackStatus(parsed.tnsNs) },
+            { label: "WHS (hold)", value: formatMetric(parsed.whsNs, "ns"), status: getSlackStatus(parsed.whsNs) },
+            { label: "THS (hold)", value: formatMetric(parsed.thsNs, "ns"), status: getSlackStatus(parsed.thsNs) },
+            { label: "WPWS (pulse)", value: formatMetric(parsed.wpwsNs, "ns"), status: getSlackStatus(parsed.wpwsNs) },
+            { label: "TPWS (pulse)", value: formatMetric(parsed.tpwsNs, "ns"), status: getSlackStatus(parsed.tpwsNs) },
+            {
+              label: "Failing Endpoints",
+              value: formatCount(parsed.failingEndpoints),
+              status: getFailEndpointStatus(parsed.failingEndpoints)
+            },
+            {
+              label: "Total Endpoints",
+              value: formatCount(parsed.totalEndpoints),
+              status: {
+                text: parsed.totalEndpoints === null ? "N/A" : "Read",
+                className: parsed.totalEndpoints === null ? "na" : "met"
+              }
+            }
+          ];
+
+          const kpiHtml = kpiItems
+            .map(
+              (item) => `
+                <div class="timing-kpi">
+                  <span class="timing-kpi-label">${escapeHtml(item.label)}</span>
+                  <span class="timing-kpi-value">${escapeHtml(item.value)}</span>
+                  <span class="timing-kpi-status ${escapeHtml(item.status.className)}">${escapeHtml(item.status.text)}</span>
+                </div>
+              `
+            )
+            .join("");
+
+          target.innerHTML = `
+            <div class="timing-kpi-grid">${kpiHtml}</div>
+          `;
+        }
+
+        function compactUtilLabel(label) {
+          const normalized = normalizeUtilLabel(label);
+          const lower = normalized.toLowerCase();
+
+          if ((/\bslice\s+luts?\b/.test(lower) || /^luts?$/.test(lower)) && !/lutram/.test(lower)) {
+            return "LUT";
+          }
+          if (/\bslice\s+registers?\b/.test(lower) || /^ff$/.test(lower) || /flip\s*flop/.test(lower)) {
+            return "FF";
+          }
+          if (/block\s+ram|ramb/.test(lower)) return "BRAM";
+          if (/^dsp/.test(lower)) return "DSP";
+          if (/bonded\s+iob|(^|[\s/_-])i\/?o($|[\s/_-])/.test(lower)) return "IO";
+          if (/bufg/.test(lower)) return "BUFG";
+          if (/mmcm/.test(lower)) return "MMCM";
+          if (/pll/.test(lower)) return "PLL";
+
+          const tokens = normalized
+            .replace(/[^A-Za-z0-9/_-]+/g, " ")
+            .split(/\s+/)
+            .filter(Boolean);
+          if (!tokens.length) return "-";
+          if (tokens.length === 1) return tokens[0].toUpperCase().slice(0, 7);
+
+          const acronym = tokens.map((token) => token[0]).join("").toUpperCase();
+          return acronym.slice(0, 7) || tokens[0].toUpperCase().slice(0, 7);
+        }
+
+        function renderUtilReport(target, parsed, sourcePath) {
+          const fallbackResources = [
+            {
+              label: "LUT",
+              used: Number.isFinite(parsed.lutUsed) ? parsed.lutUsed : parsed.sliceLuts,
+              available: parsed.lutAvailable,
+              percent: parsed.lutPct
+            },
+            {
+              label: "FF",
+              used: Number.isFinite(parsed.ffUsed) ? parsed.ffUsed : parsed.sliceRegisters,
+              available: parsed.ffAvailable,
+              percent: parsed.ffPct
+            },
+            {
+              label: "IO",
+              used: Number.isFinite(parsed.ioUsed) ? parsed.ioUsed : parsed.bondedIob,
+              available: parsed.ioAvailable,
+              percent: parsed.ioPct
+            },
+            {
+              label: "BUFG",
+              used: Number.isFinite(parsed.bufgUsed) ? parsed.bufgUsed : parsed.bufg,
+              available: parsed.bufgAvailable,
+              percent: parsed.bufgPct
+            }
+          ];
+
+          const dynamicResources =
+            Array.isArray(parsed.utilResources) && parsed.utilResources.length > 0
+              ? parsed.utilResources
+              : [];
+          const baseResources = dynamicResources.length > 0 ? dynamicResources : fallbackResources;
+
+          let normalized = baseResources
+            .map((item) => {
+              const label = normalizeUtilLabel(item?.label || "");
+              const used = Number.isFinite(item?.used) ? item.used : null;
+              const available = Number.isFinite(item?.available) ? item.available : null;
+              const percentRaw = Number.isFinite(item?.percent) ? item.percent : percentOf(used, available);
+              const percent =
+                percentRaw === null || Number.isNaN(percentRaw)
+                  ? null
+                  : Math.max(0, Math.min(100, percentRaw));
+              const percentText =
+                percent === null ? "-" : `${percent.toFixed(percent < 10 ? 2 : 1).replace(/\.0$/, "")}%`;
+
+              return {
+                label,
+                chartLabel: compactUtilLabel(label),
+                used,
+                available,
+                percent,
+                percentText
+              };
+            })
+            .filter(
+              (item) =>
+                item.label &&
+                (item.used !== null || item.available !== null || item.percent !== null)
+            );
+
+          if (normalized.length === 0) {
+            normalized = fallbackResources.map((item) => {
+              const used = Number.isFinite(item.used) ? item.used : null;
+              const available = Number.isFinite(item.available) ? item.available : null;
+              const percentRaw = Number.isFinite(item.percent) ? item.percent : percentOf(used, available);
+              const percent =
+                percentRaw === null || Number.isNaN(percentRaw)
+                  ? null
+                  : Math.max(0, Math.min(100, percentRaw));
+              const percentText =
+                percent === null ? "-" : `${percent.toFixed(percent < 10 ? 2 : 1).replace(/\.0$/, "")}%`;
+              const label = normalizeUtilLabel(item.label);
+              return {
+                label,
+                chartLabel: compactUtilLabel(label),
+                used,
+                available,
+                percent,
+                percentText
+              };
+            });
+          }
+
+          const maxVisibleResources = 14;
+          const visibleResources = normalized.slice(0, maxVisibleResources);
+          const visibleCount = Math.max(1, visibleResources.length);
+          const densityRatio = (visibleCount - 1) / (maxVisibleResources - 1);
+          const lerp = (max, min) => max - (max - min) * densityRatio;
+          const roundPx = (value) => `${Math.max(0, value).toFixed(2)}px`;
+          const roundNum = (value) => Math.max(0, value).toFixed(2);
+
+          const layoutStyle = [
+            `--util-panel-pad:${roundPx(lerp(9, 4.5))}`,
+            `--util-label-col:${roundPx(lerp(38, 24))}`,
+            `--util-row-gap:${roundPx(lerp(6, 1))}`,
+            `--util-chart-label-size:${roundPx(lerp(12, 8))}`,
+            `--util-track-height:${roundPx(lerp(22, 10))}`,
+            `--util-pct-size:${roundPx(lerp(12, 8))}`,
+            `--util-pct-min-width:${roundPx(lerp(44, 26))}`,
+            `--util-axis-gap:${roundPx(lerp(5, 1))}`,
+            `--util-axis-size:${roundPx(lerp(11, 7))}`,
+            `--util-axis-title-gap:${roundPx(lerp(5, 1))}`,
+            `--util-axis-title-size:${roundPx(lerp(12, 8))}`,
+            `--util-table-font-size:${roundPx(lerp(10, 6.5))}`,
+            `--util-table-line-height:${roundNum(lerp(1.28, 1.05))}`,
+            `--util-table-pad-y:${roundPx(lerp(4, 1))}`,
+            `--util-table-pad-x:${roundPx(lerp(5, 2))}`
+          ].join(";");
+
+          const barRowsHtml = visibleResources
+            .map(
+              (item) => `
+                <div class="util-chart-row">
+                  <span class="util-chart-label" title="${escapeHtml(item.label)}">${escapeHtml(item.chartLabel)}</span>
+                  <div class="util-bar-line">
+                    <div class="util-bar-track">
+                      <div class="util-bar-fill" style="width:${item.percent === null ? 0 : item.percent.toFixed(2)}%"></div>
+                    </div>
+                    <span class="util-bar-pct">${escapeHtml(item.percentText)}</span>
+                  </div>
+                </div>
+              `
+            )
+            .join("");
+
+          const tableRowsHtml = visibleResources
+            .map(
+              (item) => `
+                <tr>
+                  <td title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</td>
+                  <td class="num">${escapeHtml(formatCount(item.used))}</td>
+                  <td class="num">${escapeHtml(formatCount(item.available))}</td>
+                  <td class="num">${escapeHtml(item.percentText)}</td>
+                </tr>
+              `
+            )
+            .join("");
+
+          target.innerHTML = `
+            <div class="util-report-layout" style="${layoutStyle}">
+              <div class="util-chart-panel">
+                ${barRowsHtml}
+                <div class="util-axis">
+                  <span>0</span><span>25</span><span>50</span><span>75</span><span>100</span>
+                </div>
+                <div class="util-axis-title">Estimated Utilization (%)</div>
+              </div>
+              <div class="util-count-panel">
+                <div class="util-table-wrap">
+                  <table class="util-table">
+                    <thead>
+                      <tr>
+                        <th>Resource</th>
+                        <th>Utilization</th>
+                        <th>Available</th>
+                        <th>Utilization %</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${tableRowsHtml}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        function renderReportLoadError(target, sourcePath, errorText) {
+          target.innerHTML = `
+            <p class="report-error">
+              파일 로드 실패: ${escapeHtml(sourcePath || "(경로 미지정)")}
+            </p>
+            <div class="report-helper">
+              ${escapeHtml(errorText || "브라우저에서 .rpt 파일을 읽지 못했습니다.")}
+              <br />
+              로컬 파일 직접 열기(file://) 환경에서는 fetch가 차단될 수 있으니, 로컬 서버로 실행하거나 경로를 확인하세요.
+            </div>
+          `;
+        }
+
+        function renderReportPreviewHint(target, sourcePath, errorText) {
+          target.insertAdjacentHTML(
+            "afterbegin",
+            `
+              <div class="report-helper" style="margin-bottom:8px;">
+                파일 로드 실패로 예시 데이터(Preview)를 표시 중입니다.
+                <br />
+                Source: ${escapeHtml(sourcePath || "(경로 미지정)")}, Error: ${escapeHtml(errorText || "-")}
+              </div>
+            `
+          );
+        }
+
+        async function fetchTextReport(path) {
+          if (!path || !String(path).trim()) {
+            return { ok: false, error: "리포트 경로가 비어 있습니다." };
+          }
+
+          try {
+            const response = await fetch(path, { cache: "no-store" });
+            if (!response.ok) {
+              return { ok: false, error: `HTTP ${response.status}` };
+            }
+            const text = await response.text();
+            return { ok: true, text };
+          } catch (error) {
+            return { ok: false, error: error?.message || "알 수 없는 로드 오류" };
+          }
+        }
+
+        async function loadVivadoReports(config) {
+          const powerTarget = document.getElementById("power-report-view");
+          const timingTarget = document.getElementById("timing-report-view");
+          const utilTarget = document.getElementById("util-report-view");
+          if (!powerTarget || !timingTarget || !utilTarget) return;
+
+          const powerPath = config.assets?.powerReportRpt || "";
+          const timingPath = config.assets?.timingReportRpt || "";
+          const utilPath = config.assets?.utilReportRpt || "";
+          const previewEnabled = config.reportPreview?.enableOnLoadFail !== false;
+          const previewPower = config.reportPreview?.power || {
+            totalOnChipPowerW: 0.421,
+            dynamicPowerW: 0.176,
+            staticPowerW: 0.245,
+            clocksW: 0.013,
+            signalsW: 0.004,
+            logicW: 0.003,
+            bramW: 0.001,
+            pllW: 0.150,
+            ioW: 0.005,
+            junctionTempC: 25.5,
+            thermalMarginC: 59.5,
+            confidenceLevel: "Medium"
+          };
+          const previewTiming = config.reportPreview?.timing || {
+            wnsNs: 3.028,
+            tnsNs: 0.0,
+            whsNs: 0.066,
+            thsNs: 0.0,
+            wpwsNs: 0.820,
+            tpwsNs: 0.0,
+            failingEndpoints: 0,
+            totalEndpoints: 128
+          };
+          const previewUtil = config.reportPreview?.util || defaultUtilPreview;
+
+          const [powerLoaded, timingLoaded, utilLoaded] = await Promise.all([
+            fetchTextReport(powerPath),
+            fetchTextReport(timingPath),
+            fetchTextReport(utilPath)
+          ]);
+
+          if (powerLoaded.ok) {
+            const parsedPower = parsePowerReport(powerLoaded.text);
+            renderPowerReport(powerTarget, parsedPower, powerPath);
+          } else {
+            const fallbackPower = previewEnabled ? previewPower : {};
+            renderPowerReport(powerTarget, fallbackPower, "");
+          }
+
+          if (timingLoaded.ok) {
+            const parsedTiming = parseTimingReport(timingLoaded.text);
+            renderTimingReport(timingTarget, parsedTiming, timingPath);
+          } else {
+            const fallbackTiming = previewEnabled ? previewTiming : {};
+            renderTimingReport(timingTarget, fallbackTiming, "");
+          }
+
+          if (utilLoaded.ok) {
+            const parsedUtil = parseUtilReport(utilLoaded.text);
+            renderUtilReport(utilTarget, parsedUtil, utilPath);
+          } else {
+            const fallbackUtil = previewEnabled ? previewUtil : {};
+            renderUtilReport(utilTarget, fallbackUtil, "");
+          }
+        }
+
+        function bindImageFallback() {
+          document.querySelectorAll(".media-box img").forEach((img) => {
+            img.addEventListener("error", () => {
+              const box = img.closest(".media-box");
+              if (!box) return;
+              box.classList.add("is-empty");
+            });
+          });
+        }
+
+        const slidesRoot = document.getElementById("slides-root");
+        slidesRoot.innerHTML = buildSlides(presentationConfig);
+        bindImageFallback();
+        loadVivadoReports(presentationConfig);
+
+        const deck = new Reveal({
+          hash: true,
+          controls: true,
+          progress: true,
+          center: false,
+          width: 1000,
+          height: 700,
+          margin: 0.04,
+          slideNumber: "c/t",
+          transition: "slide",
+          backgroundTransition: "fade"
+        });
+
+        deck.initialize();
+      })();
+    </script>
+  </body>
+</html>
