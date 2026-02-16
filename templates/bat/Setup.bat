@@ -1,6 +1,7 @@
 @echo off
 setlocal
 set "SYNC_BAT=%~dp0..\..\SyncProjectsToSourceProject.bat"
+set "PRESENTATION_TEMPLATE_DIR=%~dp0..\Presentation"
 
 :PROMPT
 set /p ProjectName="Enter project name: "
@@ -33,6 +34,9 @@ if not exist "%ProjectName%\report_assets" mkdir "%ProjectName%\report_assets"
 if not exist "%ProjectName%\src" mkdir "%ProjectName%\src"
 if not exist "%ProjectName%\skills" mkdir "%ProjectName%\skills"
 if not exist "%ProjectName%\tb" mkdir "%ProjectName%\tb"
+if exist "%PRESENTATION_TEMPLATE_DIR%\" (
+    xcopy "%PRESENTATION_TEMPLATE_DIR%" "%ProjectName%\Presentation\" /E /I /Y >nul
+)
 
 echo.
 echo ------------------------------------------------
@@ -54,6 +58,9 @@ echo - report_assets
 echo - src
 echo - skills
 echo - tb
+if exist "%PRESENTATION_TEMPLATE_DIR%\" (
+    echo - Presentation
+)
 echo ------------------------------------------------
 echo.
 
