@@ -1,5 +1,6 @@
 @echo off
 setlocal
+set "SYNC_BAT=%~dp0..\..\SyncProjectsToSourceProject.bat"
 
 :PROMPT
 set /p ProjectName="Enter project name: "
@@ -54,6 +55,15 @@ echo - src
 echo - skills
 echo - tb
 echo ------------------------------------------------
+echo.
+
+if exist "%SYNC_BAT%" (
+    echo [INFO] Running auto sync to SOURCE_PROJECT...
+    call "%SYNC_BAT%"
+    if errorlevel 1 (
+        echo [WARN] Auto sync reported errors. Please check output above.
+    )
+)
 
 pause
 endlocal

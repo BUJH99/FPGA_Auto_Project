@@ -2,6 +2,7 @@
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 title FPGA Automation - MAIN
+set "SETUP_BAT=%CD%\templates\bat\Setup.bat"
 
 :: Define ESC character for ANSI colors
 for /F %%a in ('echo prompt $E ^| cmd') do set "ESC=%%a"
@@ -48,7 +49,7 @@ for /d %%D in (*) do (
 if !PROJ_COUNT! equ 0 (
     echo.
     echo %Red%[No Projects Found]%Reset%
-    echo Create a new project using 'Setup.bat' first.
+    echo Create a new project using 'templates\bat\Setup.bat' first.
     echo.
     pause
     exit /b 0
@@ -64,7 +65,14 @@ set /p "PROJ_INPUT=%Cyan%Select Project (Number) or Option: %Reset%"
 
 if /i "!PROJ_INPUT!"=="Q" goto :EXIT
 if /i "!PROJ_INPUT!"=="S" (
-    call Setup.bat
+    if not exist "!SETUP_BAT!" (
+        echo.
+        echo %Red%[ERROR] Setup script not found: !SETUP_BAT!%Reset%
+        echo.
+        pause
+        goto :MASTER_MENU
+    )
+    call "!SETUP_BAT!"
     goto :MASTER_MENU
 )
 

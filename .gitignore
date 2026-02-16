@@ -3,10 +3,12 @@
 
 # But exclude (allow) these files and directories
 !/.gitignore
-!/Setup.bat
 !/ReadMe.md
 !/templates/
 !/MAIN.bat
+
+# Ignore local sync helper script
+/SyncProjectsToSourceProject.bat
 
 # Do not keep generated sample outputs in templates
 /templates/output/**
