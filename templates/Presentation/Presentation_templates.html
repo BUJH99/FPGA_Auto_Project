@@ -659,6 +659,28 @@
         flex: 0 0 auto;
       }
 
+      .module-no-fsm-role .module-summary-grid,
+      .module-parent-role .module-summary-grid {
+        gap: 6px;
+        margin-top: 6px;
+      }
+
+      .module-no-fsm-role .module-summary-box,
+      .module-parent-role .module-summary-box {
+        min-height: 64px;
+        padding: 6px;
+      }
+
+      .module-no-fsm-role .module-summary-title,
+      .module-parent-role .module-summary-title {
+        font-size: 10px;
+      }
+
+      .module-no-fsm-role .module-summary-text,
+      .module-parent-role .module-summary-text {
+        font-size: 10px;
+      }
+
       .module-role-input-box {
         width: 100%;
         min-height: 40px;
@@ -670,6 +692,39 @@
         line-height: 1.35;
         padding: 8px 10px;
         overflow: hidden;
+      }
+
+      .module-summary-grid {
+        margin-top: 10px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        min-height: 0;
+      }
+
+      .module-summary-box {
+        border: 2px solid black;
+        background: #ffffff;
+        padding: 8px;
+        min-height: 72px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .module-summary-title {
+        margin: 0;
+        font-size: 11px;
+        font-weight: 900;
+        color: #111827;
+      }
+
+      .module-summary-text {
+        margin: 0;
+        font-size: 11px;
+        line-height: 1.35;
+        color: #111827;
+        font-weight: 700;
       }
 
       .module-detail-grid {
@@ -1674,185 +1729,66 @@
 
         const defaultPresentationConfig = {
           meta: {
-            projectTitle: "핵심목표 : 발표자료 자동화 프로젝트",
-            projectSubtitle: "design_templates.html 디자인 베이스 / reveal.js 자동 생성 템플릿",
-            author: "작성자 이름",
-            date: "2026-02-16",
-            team: "온디바이스AI",
+            projectTitle: "Project Presentation",
+            projectSubtitle: "Auto-generated reveal.js slide deck",
+            author: "Author",
+            date: "2026-02-17",
+            team: "FPGA Team",
             cover: {
-              titleLine1: "발표자료",
-              titleLine2: "자동화 템플릿",
+              titleLine1: "Project",
+              titleLine2: "Presentation",
               subtitle: "",
-              dateLabel: "작성일",
-              authorLabel: "작성자"
+              dateLabel: "Date",
+              authorLabel: "Author"
             }
           },
           developmentEnvironment: {
-            os: "Windows 11",
+            os: "Windows",
             tools: ["Vivado"],
             language: ["Verilog"]
           },
           featurePlaceholders: [
-            {
-              title: "기능 블록 #1",
-              description: "사용자가 구현 기능 설명을 입력하는 영역"
-            },
-            {
-              title: "기능 블록 #2",
-              description: "동작 흐름, 제약조건, 인터페이스 요약 입력"
-            },
-            {
-              title: "기능 블록 #3",
-              description: "검증 포인트 또는 데모 시나리오 입력"
-            },
-            {
-              title: "기능 블록 #4",
-              description: "추가 구현 기능/확장 계획 입력"
-            }
+            { title: "Feature #1", description: "[Input Needed]" },
+            { title: "Feature #2", description: "[Input Needed]" },
+            { title: "Feature #3", description: "[Input Needed]" },
+            { title: "Feature #4", description: "[Input Needed]" }
           ],
-          constraints: [
-            "[예시] Clock Constraint: 시스템 클럭 주파수/주기 명시",
-            "[예시] I/O Constraint: 핀맵, I/O standard, drive/slew 조건",
-            "[예시] Timing Constraint: false path, multicycle path 조건",
-            "[예시] Resource/Power 목표: 사용률 및 전력 예산 기준"
-          ],
-          timingNotes: [
-            "[Input Needed] Align reference edges for clock/reset",
-            "[Input Needed] Highlight handshake controls (Enable/Valid/Ready)",
-            "[Input Needed] Record mismatch between measured timing and design intent"
-          ],
+          constraints: ["[Input Needed]"],
+          timingNotes: ["[Input Needed]"],
           datapathFlowSteps: [
-            "[Input Needed] 입력 이벤트/신호 유입 지점",
-            "[Input Needed] 제어 신호 기반 데이터 선택/가공",
-            "[Input Needed] 하위 모듈 간 데이터 전달",
-            "[Input Needed] 최종 출력 인터페이스 반영"
+            "[Input Needed] Datapath step #1",
+            "[Input Needed] Datapath step #2",
+            "[Input Needed] Datapath step #3"
           ],
           clockFlowSteps: [
-            "[Input Needed] 기준 CLK 생성 소스",
-            "[Input Needed] 분주/버퍼 경유 경로",
-            "[Input Needed] 하위 모듈 분배 순서",
-            "[Input Needed] 도메인 경계(CDC) 체크"
+            "[Input Needed] CLK step #1",
+            "[Input Needed] CLK step #2",
+            "[Input Needed] CLK step #3"
           ],
           resetFlowSteps: [
-            "[Input Needed] RESET 입력 및 극성 정의",
-            "[Input Needed] reset 동기화 체인",
-            "[Input Needed] 모듈별 reset 해제 순서",
-            "[Input Needed] 안정화 후 동작 시작 조건"
+            "[Input Needed] RESET step #1",
+            "[Input Needed] RESET step #2",
+            "[Input Needed] RESET step #3"
           ],
-          clockResetFlowSteps: [
-            "[Input Needed] 기준 클럭 생성/분배 시작점",
-            "[Input Needed] 도메인별 클럭 전달 및 분기",
-            "[Input Needed] reset 동기화/해제 순서",
-            "[Input Needed] CDC/안정화 검증 포인트"
-          ],
-          datapathFlowBoxCount: null,
-          clockFlowBoxCount: null,
-          resetFlowBoxCount: null,
-          clockResetFlowBoxCount: null,
-          conclusionPoints: [
-            "[Input Needed] 프로젝트 핵심 성과 요약",
-            "[Input Needed] 목표 대비 달성 수준 및 한계",
-            "[Input Needed] 검증 결과 기반 최종 판단"
-          ],
-          conclusionNextSteps: [
-            "[Input Needed] 차기 개선 항목",
-            "[Input Needed] 확장 기능/성능 개선 계획",
-            "[Input Needed] 일정 및 담당 작업"
-          ],
+          conclusionPoints: ["[Input Needed]"],
+          conclusionNextSteps: ["[Input Needed]"],
           assets: {
-            topBlockSvg: "TOP_detailed.svg",
-            testbenchWaveform: "assets/waveform/testbench_overview.png",
-            timingDiagramSvg: "assets/timing/custom_timing_diagram.svg",
-            clockResetTreeSvg: "assets/clock_reset/clock_reset_tree.svg",
-            powerReportRpt: "assets/reports/power_summary.rpt",
-            timingReportRpt: "assets/reports/timing_summary.rpt",
-            utilReportRpt: "assets/reports/utilization_summary.rpt"
-          },
-          reportPreview: {
-            enableOnLoadFail: true,
-            power: {
-              totalOnChipPowerW: 0.421,
-              dynamicPowerW: 0.176,
-              staticPowerW: 0.245,
-              clocksW: 0.013,
-              signalsW: 0.004,
-              logicW: 0.003,
-              bramW: 0.001,
-              pllW: 0.150,
-              ioW: 0.005,
-              junctionTempC: 25.5,
-              thermalMarginC: 59.5,
-              confidenceLevel: "Medium"
-            },
-            timing: {
-              wnsNs: 3.028,
-              tnsNs: 0.0,
-              whsNs: 0.066,
-              thsNs: 0.0,
-              wpwsNs: 0.820,
-              tpwsNs: 0.0,
-              failingEndpoints: 0,
-              totalEndpoints: 128
-            },
-            util: defaultUtilPreview
+            topBlockSvg: "",
+            testbenchWaveform: "",
+            timingDiagramSvg: "",
+            clockResetTreeSvg: "",
+            powerReportRpt: "",
+            timingReportRpt: "",
+            utilReportRpt: ""
           },
           troubleShootings: [
             {
               title: "Trouble #1",
-              issueItems: [
-                "[예시] 증상: 특정 조건에서 출력 지연 발생",
-                "[예시] 재현 조건: reset 직후 mode 전환 시",
-                "[예시] 원인 분석: 제어 신호 동기화 지연"
-              ],
-              solutionItems: [
-                "[예시] 조치: 동기화 플롭/핸드셰이크 보강",
-                "[예시] 검증: 테스트벤치 및 FPGA 실측 재확인",
-                "[예시] 결과: 재현 불가, 타이밍 여유 확보"
-              ]
+              issueItems: ["[Input Needed]"],
+              solutionItems: ["[Input Needed]"]
             }
           ],
-          modules: [
-            {
-              name: "MODULE_01",
-              role: "[예시] 모듈의 핵심 역할을 한 줄로 작성",
-              summary: [],
-              stateDescription: [
-                "[예시] IDLE: 초기 대기 상태",
-                "[예시] RUN: 조건 충족 시 메인 동작 수행",
-                "[예시] DONE/ERROR: 종료 또는 예외 처리"
-              ],
-              simpleDiagramSvg: "",
-              fsmImage: "assets/modules/module_01_fsm.svg"
-            },
-            {
-              name: "MODULE_02",
-              role: "",
-              summary: [],
-              stateDescription: [],
-              simpleDiagramSvg: "",
-              fsmImage: ""
-            },
-            {
-              name: "MODULE_03",
-              role: "[예시] 상위모듈: 하위모듈 제어/연결 및 데이터 경로 통합",
-              summary: [],
-              stateDescription: [],
-              detailLayout: "parent-module",
-              childModules: [
-                { name: "sub_uart_rx", role: "UART 수신 데이터 복원" },
-                { name: "sub_cmd_decoder", role: "수신 명령 디코딩" },
-                { name: "sub_control_fsm", role: "상태/제어 시퀀스 관리" },
-                { name: "sub_data_path", role: "연산 및 출력 데이터 경로" },
-                { name: "sub_timer_core", role: "타이머 카운터/분주 처리" },
-                { name: "sub_display_mux", role: "표시 데이터 선택 및 정렬" },
-                { name: "sub_uart_tx", role: "UART 송신 프레임 생성" },
-                { name: "sub_error_guard", role: "예외 조건 감시 및 보호 처리" }
-              ],
-              integrationPoints: [],
-              simpleDiagramSvg: "",
-              fsmImage: ""
-            }
-          ]
+          modules: []
         };
         function isPlainObject(value) {
           return Object.prototype.toString.call(value) === "[object Object]";
@@ -1939,16 +1875,16 @@
         function resolveCoverMeta(meta) {
           const safeMeta = meta && typeof meta === "object" ? meta : {};
           const safeCover = safeMeta.cover && typeof safeMeta.cover === "object" ? safeMeta.cover : {};
-          const titleLine1 = ensureText(safeCover.titleLine1, "발표자료");
-          const titleLine2 = ensureText(safeCover.titleLine2, "자동화 템플릿");
+          const titleLine1 = ensureText(safeCover.titleLine1, "Presentation");
+          const titleLine2 = ensureText(safeCover.titleLine2, "Automation Template");
           const subtitleFallback = ensureText(safeMeta.projectSubtitle, ensureText(safeMeta.projectTitle, ""));
           return {
             team: ensureText(safeCover.team, ensureText(safeMeta.team, "TEAM")),
             titleLine1,
             titleLine2,
             subtitle: ensureText(safeCover.subtitle, subtitleFallback),
-            dateLabel: ensureText(safeCover.dateLabel, "작성일"),
-            authorLabel: ensureText(safeCover.authorLabel, "작성자"),
+            dateLabel: ensureText(safeCover.dateLabel, "Date"),
+            authorLabel: ensureText(safeCover.authorLabel, "Author"),
             date: ensureText(safeMeta.date, ""),
             author: ensureText(safeMeta.author, "")
           };
@@ -2190,7 +2126,11 @@
           const metaConfig = isPlainObject(safeConfig.meta) ? safeConfig.meta : {};
           const assets = isPlainObject(safeConfig.assets) ? safeConfig.assets : {};
           const modules = Array.isArray(safeConfig.modules) ? safeConfig.modules : [];
-          const moduleCount = modules.length;
+          const moduleCount = modules.filter((item) => {
+            const safeItem = isPlainObject(item) ? item : {};
+            const kind = String(safeItem.slideKind || "module").trim().toLowerCase();
+            return kind !== "testbench";
+          }).length;
           const coverMeta = resolveCoverMeta(metaConfig);
           const coverTitleHtml = coverMeta.titleLine2
             ? `${escapeHtml(coverMeta.titleLine1)}<br />${escapeHtml(coverMeta.titleLine2)}`
@@ -2350,175 +2290,248 @@
               : ["[Input Needed] Fill conclusionNextSteps array."]
           );
 
-          const moduleSlides = modules
-            .map((module, idx) => {
-              const safeModule = isPlainObject(module) ? module : {};
-              const moduleName =
-                String(safeModule.name || "").trim() || `MODULE_${String(idx + 1).padStart(2, "0")}`;
-              const roleText = String(safeModule.role || "").trim();
-              const summaryItems = Array.isArray(safeModule.summary)
-                ? safeModule.summary.filter((item) => String(item || "").trim().length > 0)
-                : [];
-              const simpleDiagramSvg = ensureText(safeModule.simpleDiagramSvg, "");
-              const fsmImage = ensureText(safeModule.fsmImage, "");
-              const hasFsmImage = fsmImage.length > 0;
-              const detailLayout = String(safeModule.detailLayout || "").trim().toLowerCase();
-              const hasChildModules = Array.isArray(safeModule.childModules) && safeModule.childModules.length > 0;
-              const isParentModuleLayout = !hasFsmImage && (detailLayout === "parent-module" || hasChildModules);
-              const summaryHtml =
-                summaryItems.length > 0
-                  ? `<ul style="margin-top:10px;">${renderBulletList(summaryItems)}</ul>`
-                  : "";
-              const stateItems = Array.isArray(safeModule.stateDescription)
-                ? safeModule.stateDescription.filter((item) => String(item || "").trim().length > 0)
-                : [];
-              const stateFontClass =
-                stateItems.length <= 4
-                  ? "state-size-lg"
-                  : stateItems.length <= 7
-                    ? "state-size-md"
-                    : stateItems.length <= 10
-                      ? "state-size-sm"
-                      : "state-size-xs";
-              const stateHtml =
-                stateItems.length > 0
-                  ? `<div class="state-content ${stateFontClass}"><ul>${renderBulletList(stateItems)}</ul></div>`
-                  : `<div class="state-content state-size-md"><p>[입력 필요] FSM의 state별 동작/전이 조건을 작성하세요.</p></div>`;
-              const childModules = Array.isArray(safeModule.childModules)
-                ? safeModule.childModules.filter((item) => item !== null && item !== undefined)
-                : [];
-              const childModuleCount = childModules.length;
-              const childRowCount = Math.max(1, Math.ceil(childModuleCount / 2));
-              const childLayoutPreset =
-                childRowCount <= 2
-                  ? { nameSizePx: 11, gapPx: 4, itemPadding: "3px 6px", lineHeight: 1.2 }
-                  : childRowCount === 3
-                    ? { nameSizePx: 10, gapPx: 3, itemPadding: "2px 5px", lineHeight: 1.15 }
-                    : childRowCount === 4
-                      ? { nameSizePx: 9, gapPx: 2, itemPadding: "2px 4px", lineHeight: 1.1 }
-                      : childRowCount <= 6
-                        ? { nameSizePx: 8, gapPx: 2, itemPadding: "1px 3px", lineHeight: 1.05 }
-                        : { nameSizePx: 7, gapPx: 1, itemPadding: "1px 2px", lineHeight: 1 };
-              const childGridStyle = [
-                `--child-grid-rows:${childRowCount}`,
-                `--child-grid-gap:${childLayoutPreset.gapPx}px`,
-                `--child-item-padding:${childLayoutPreset.itemPadding}`,
-                `--child-name-size:${childLayoutPreset.nameSizePx}px`,
-                `--child-name-line-height:${childLayoutPreset.lineHeight}`
-              ].join(";");
-              const childModulesHtml =
-                childModuleCount > 0
-                  ? `<div class="child-module-grid" style="${childGridStyle}">${childModules
-                      .map((child, childIdx) => {
-                        if (typeof child === "string") {
-                          return `<div class="child-module-item"><p class="child-module-name">${escapeHtml(child)}</p></div>`;
-                        }
-                        const childName = String(child.name || "").trim() || `sub_module_${childIdx + 1}`;
-                        return `<div class="child-module-item"><p class="child-module-name">${escapeHtml(childName)}</p></div>`;
-                      })
-                      .join("")}</div>`
-                  : `<p>[입력 필요] 하위모듈 목록(childModules)을 입력하세요.</p>`;
-              const roleCardBody = `
-                <h3>모듈 역할</h3>
-                <div class="module-role-input-box">${roleText ? escapeHtml(roleText) : ""}</div>
-                <div class="split-meta">
-                  <div class="meta-pill">모듈명: ${escapeHtml(moduleName)}</div>
-                  <div class="meta-pill">페이지: 1 모듈 / 1 슬라이드</div>
-                </div>
-                ${summaryHtml}
-              `;
-              const simpleCardHtml = `
-                <div class="card module-simple-card">
-                  <h3>Block Diagram</h3>
-                  ${renderMediaBox(
-                    simpleDiagramSvg,
-                    `${moduleName} simple diagram`,
-                    "",
-                    "media-box module-simple-box"
-                  )}
-                </div>
-              `;
-              const fsmLayoutHtml = `
-                <div class="col-flex module-left-col">
-                  ${simpleCardHtml}
-                  <div class="card accent module-role-card">
-                    ${roleCardBody}
-                  </div>
-                </div>
-                <div class="col-flex module-right-col">
-                  <div class="card module-fsm-card">
-                    <h3>FSM</h3>
-                    ${renderMediaBox(
-                      fsmImage,
-                      `${moduleName} FSM`,
-                      "FSM이 있는 모듈만 fsmImage 링크를 입력하세요.",
-                      "media-box module-fsm-box"
-                    )}
-                  </div>
-                  <div class="card module-state-card">
-                    <h3>STATE</h3>
-                    ${stateHtml}
-                  </div>
-                </div>
-              `;
-              const noFsmLayoutHtml = `
-                <div class="card module-simple-card module-no-fsm-simple">
-                  <h3>Block Diagram</h3>
-                  ${renderMediaBox(
-                    simpleDiagramSvg,
-                    `${moduleName} simple diagram`,
-                    "",
-                    "media-box module-simple-box"
-                  )}
-                </div>
-                <div class="card accent module-role-card module-no-fsm-role">
-                  ${roleCardBody}
-                </div>
-                <div class="card module-viz-placeholder-card module-no-fsm-viz">
-                  <h3>INFORGRAPHIC</h3>
-                  <div class="module-viz-placeholder"></div>
-                </div>
-              `;
-              const parentModuleLayoutHtml = `
-                <div class="card accent module-role-card module-parent-role">
-                  ${roleCardBody}
-                </div>
-                <div class="card module-child-module-card">
-                  <h3>하위모듈 구성</h3>
-                  ${childModulesHtml}
-                </div>
-                <div class="card module-viz-placeholder-card module-parent-viz">
-                  <h3>Hierarchy Visualization</h3>
-                  <div class="module-viz-placeholder"></div>
-                </div>
-              `;
-              const moduleLayoutClass = hasFsmImage
-                ? "grid-2 module-detail-grid"
-                : isParentModuleLayout
-                  ? "module-detail-grid parent-module-layout"
-                  : "module-detail-grid no-fsm-layout";
-              const moduleLayoutHtml = hasFsmImage
-                ? fsmLayoutHtml
-                : isParentModuleLayout
-                  ? parentModuleLayoutHtml
-                  : noFsmLayoutHtml;
+          const moduleSlides = (() => {
+            let moduleDetailIndex = 0;
+            let testbenchIndex = 0;
+            return modules
+              .map((module, idx) => {
+                const safeModule = isPlainObject(module) ? module : {};
+                const moduleName =
+                  String(safeModule.name || "").trim() || `MODULE_${String(idx + 1).padStart(2, "0")}`;
+                const slideKind = String(safeModule.slideKind || "module").trim().toLowerCase();
 
-              return `
-                <section>
-                  <div class="slide-frame">
-                    ${renderHeader(
-                      "Module Detail",
-                      `6-${idx + 1}. ${moduleName}`,
-                      "06"
-                    )}
-                    <div class="${moduleLayoutClass}">
-                      ${moduleLayoutHtml}
+                if (slideKind === "testbench") {
+                  testbenchIndex += 1;
+                  const linkedModule = ensureText(safeModule.linkedModule, moduleName);
+                  const tbWave = ensureText(
+                    safeModule.testbenchWaveform,
+                    ensureText(assets.testbenchWaveform, "")
+                  );
+                  const tbFiles = Array.isArray(safeModule.testbenchFiles)
+                    ? safeModule.testbenchFiles.filter((item) => String(item || "").trim().length > 0)
+                    : [];
+                  const tbChecks = Array.isArray(safeModule.testbenchChecks)
+                    ? safeModule.testbenchChecks.filter((item) => String(item || "").trim().length > 0)
+                    : [];
+                  const tbFileListHtml =
+                    tbFiles.length > 0
+                      ? `<ul>${renderBulletList(tbFiles)}</ul>`
+                      : "<p>[Input Needed] testbenchFiles 를 입력하세요.</p>";
+                  const tbChecksHtml = renderBulletList(
+                    tbChecks.length > 0
+                      ? tbChecks
+                      : [
+                          "[Input Needed] Reset/Startup check",
+                          "[Input Needed] Main datapath/control check",
+                          "[Input Needed] Boundary/error handling check"
+                        ]
+                  );
+
+                  return `
+                    <section>
+                      <div class="slide-frame">
+                        ${renderHeader("Testbench", `7-${testbenchIndex}. ${linkedModule}`, "07")}
+                        <div class="col-flex testbench-layout">
+                          <div class="card testbench-wave-card">
+                            <h3>Waveform</h3>
+                            ${renderMediaBox(
+                              tbWave,
+                              `${linkedModule} testbench waveform`,
+                              "",
+                              "media-box tall"
+                            )}
+                          </div>
+                          <div class="grid-2">
+                            <div class="card">
+                              <h3>Linked Module</h3>
+                              <p>${escapeHtml(linkedModule)}</p>
+                              <h3 style="margin-top:10px;">Testbench Files</h3>
+                              ${tbFileListHtml}
+                            </div>
+                            <div class="card accent testbench-check-card">
+                              <h3>Verification Checks</h3>
+                              <ul>${tbChecksHtml}</ul>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                  `;
+                }
+
+                moduleDetailIndex += 1;
+                const roleText = String(safeModule.role || "").trim();
+                const summaryItems = Array.isArray(safeModule.summary)
+                  ? safeModule.summary.filter((item) => String(item || "").trim().length > 0)
+                  : [];
+                const summaryLeft = summaryItems.length > 0 ? summaryItems[0] : "[Input Needed] Summary #1";
+                const summaryRight =
+                  summaryItems.length > 1
+                    ? summaryItems.slice(1).join(" / ")
+                    : "[Input Needed] Summary #2";
+                const simpleDiagramSvg = ensureText(safeModule.simpleDiagramSvg, "");
+                const fsmImage = ensureText(safeModule.fsmImage, "");
+                const hasFsmImage = fsmImage.length > 0;
+                const detailLayout = String(safeModule.detailLayout || "").trim().toLowerCase();
+                const hasChildModules = Array.isArray(safeModule.childModules) && safeModule.childModules.length > 0;
+                const isParentModuleLayout = detailLayout === "parent-module" || hasChildModules;
+                const isFsmModuleLayout = !isParentModuleLayout && (detailLayout === "fsm-module" || hasFsmImage);
+                const stateItems = Array.isArray(safeModule.stateDescription)
+                  ? safeModule.stateDescription.filter((item) => String(item || "").trim().length > 0)
+                  : [];
+                const stateFontClass =
+                  stateItems.length <= 4
+                    ? "state-size-lg"
+                    : stateItems.length <= 7
+                      ? "state-size-md"
+                      : stateItems.length <= 10
+                        ? "state-size-sm"
+                        : "state-size-xs";
+                const stateHtml =
+                  stateItems.length > 0
+                    ? `<div class="state-content ${stateFontClass}"><ul>${renderBulletList(stateItems)}</ul></div>`
+                    : `<div class="state-content state-size-md"><p>[Input Needed] FSM state description을 입력하세요.</p></div>`;
+                const childModules = Array.isArray(safeModule.childModules)
+                  ? safeModule.childModules.filter((item) => item !== null && item !== undefined)
+                  : [];
+                const childModuleCount = childModules.length;
+                const childRowCount = Math.max(1, Math.ceil(childModuleCount / 2));
+                const childLayoutPreset =
+                  childRowCount <= 2
+                    ? { nameSizePx: 11, gapPx: 4, itemPadding: "3px 6px", lineHeight: 1.2 }
+                    : childRowCount === 3
+                      ? { nameSizePx: 10, gapPx: 3, itemPadding: "2px 5px", lineHeight: 1.15 }
+                      : childRowCount === 4
+                        ? { nameSizePx: 9, gapPx: 2, itemPadding: "2px 4px", lineHeight: 1.1 }
+                        : childRowCount <= 6
+                          ? { nameSizePx: 8, gapPx: 2, itemPadding: "1px 3px", lineHeight: 1.05 }
+                          : { nameSizePx: 7, gapPx: 1, itemPadding: "1px 2px", lineHeight: 1 };
+                const childGridStyle = [
+                  `--child-grid-rows:${childRowCount}`,
+                  `--child-grid-gap:${childLayoutPreset.gapPx}px`,
+                  `--child-item-padding:${childLayoutPreset.itemPadding}`,
+                  `--child-name-size:${childLayoutPreset.nameSizePx}px`,
+                  `--child-name-line-height:${childLayoutPreset.lineHeight}`
+                ].join(";");
+                const childModulesHtml =
+                  childModuleCount > 0
+                    ? `<div class="child-module-grid" style="${childGridStyle}">${childModules
+                        .map((child, childIdx) => {
+                          if (typeof child === "string") {
+                            return `<div class="child-module-item"><p class="child-module-name">${escapeHtml(child)}</p></div>`;
+                          }
+                          const childName = String(child.name || "").trim() || `sub_module_${childIdx + 1}`;
+                          return `<div class="child-module-item"><p class="child-module-name">${escapeHtml(childName)}</p></div>`;
+                        })
+                        .join("")}</div>`
+                    : `<p>[Input Needed] childModules 목록을 입력하세요.</p>`;
+                const roleCardBody = `
+                  <h3>Module Role</h3>
+                  <div class="module-role-input-box">${escapeHtml(roleText || "[Input Needed] Role description")}</div>
+                  <div class="module-summary-grid">
+                    <div class="module-summary-box">
+                      <p class="module-summary-title">Summary 1</p>
+                      <p class="module-summary-text">${escapeHtml(summaryLeft)}</p>
+                    </div>
+                    <div class="module-summary-box">
+                      <p class="module-summary-title">Summary 2</p>
+                      <p class="module-summary-text">${escapeHtml(summaryRight)}</p>
                     </div>
                   </div>
-                </section>
-              `;
-            })
-            .join("");
+                `;
+                const simpleCardHtml = `
+                  <div class="card module-simple-card">
+                    <h3>Block Diagram</h3>
+                    ${renderMediaBox(
+                      simpleDiagramSvg,
+                      `${moduleName} simple diagram`,
+                      "",
+                      "media-box module-simple-box"
+                    )}
+                  </div>
+                `;
+                const fsmLayoutHtml = `
+                  <div class="col-flex module-left-col">
+                    ${simpleCardHtml}
+                    <div class="card accent module-role-card">
+                      ${roleCardBody}
+                    </div>
+                  </div>
+                  <div class="col-flex module-right-col">
+                    <div class="card module-fsm-card">
+                      <h3>FSM</h3>
+                      ${renderMediaBox(
+                        fsmImage,
+                        `${moduleName} FSM`,
+                        "fsmImage 경로를 입력하세요.",
+                        "media-box module-fsm-box"
+                      )}
+                    </div>
+                    <div class="card module-state-card">
+                      <h3>STATE</h3>
+                      ${stateHtml}
+                    </div>
+                  </div>
+                `;
+                const noFsmLayoutHtml = `
+                  <div class="card module-simple-card module-no-fsm-simple">
+                    <h3>Block Diagram</h3>
+                    ${renderMediaBox(
+                      simpleDiagramSvg,
+                      `${moduleName} simple diagram`,
+                      "",
+                      "media-box module-simple-box"
+                    )}
+                  </div>
+                  <div class="card accent module-role-card module-no-fsm-role">
+                    ${roleCardBody}
+                  </div>
+                  <div class="card module-viz-placeholder-card module-no-fsm-viz">
+                    <h3>INFOGRAPHIC</h3>
+                    <div class="module-viz-placeholder"></div>
+                  </div>
+                `;
+                const parentModuleLayoutHtml = `
+                  <div class="card accent module-role-card module-parent-role">
+                    ${roleCardBody}
+                  </div>
+                  <div class="card module-child-module-card">
+                    <h3>Sub-module Structure</h3>
+                    ${childModulesHtml}
+                  </div>
+                  <div class="card module-viz-placeholder-card module-parent-viz">
+                    <h3>Hierarchy Visualization</h3>
+                    <div class="module-viz-placeholder"></div>
+                  </div>
+                `;
+                const moduleLayoutClass = isFsmModuleLayout
+                  ? "grid-2 module-detail-grid"
+                  : isParentModuleLayout
+                    ? "module-detail-grid parent-module-layout"
+                    : "module-detail-grid no-fsm-layout";
+                const moduleLayoutHtml = isFsmModuleLayout
+                  ? fsmLayoutHtml
+                  : isParentModuleLayout
+                    ? parentModuleLayoutHtml
+                    : noFsmLayoutHtml;
+
+                return `
+                  <section>
+                    <div class="slide-frame">
+                      ${renderHeader(
+                        "Module Detail",
+                        `6-${moduleDetailIndex}. ${moduleName}`,
+                        "06"
+                      )}
+                      <div class="${moduleLayoutClass}">
+                        ${moduleLayoutHtml}
+                      </div>
+                    </div>
+                  </section>
+                `;
+              })
+              .join("");
+          })();
           const troubleCases = Array.isArray(safeConfig.troubleShootings)
             ? safeConfig.troubleShootings.filter((item) => item !== null && item !== undefined)
             : [];
@@ -2656,7 +2669,7 @@
 
             <section>
               <div class="slide-frame">
-                ${renderHeader("Architecture", "5. 전체 TOP 블록 다이어그램", "05")}
+                ${renderHeader("Architecture", "5. Top Block Diagram", "05")}
                 <div class="card plain top-diagram-card">
                   ${renderMediaBox(
                     assets.topBlockSvg,
@@ -2734,23 +2747,23 @@
 
             <section>
               <div class="slide-frame">
-                ${renderHeader("Testbench", "7. 테스트벤치", "07")}
+                ${renderHeader("Testbench", "7. Testbench", "07")}
                 <div class="col-flex testbench-layout">
                   <div class="card testbench-wave-card">
                     <h3>Waveform</h3>
                     ${renderMediaBox(
                       assets.testbenchWaveform,
                       "Testbench waveform",
-                      "상단 영역: 기존 파형 스크린샷 링크를 assets.testbenchWaveform에 입력",
+                      "Link assets.testbenchWaveform to a waveform image.",
                       "media-box tall"
                     )}
                   </div>
                   <div class="card accent testbench-check-card">
-                    <h3>검증 포인트</h3>
+                    <h3>Verification Checklist</h3>
                     <ul>
-                      <li>[예시] 초기화/리셋 이후 정상 동작 여부</li>
-                      <li>[예시] 주요 제어 신호의 타이밍 일치 여부</li>
-                      <li>[예시] 경계값 또는 예외 입력 처리 결과</li>
+                      <li>[Example] Reset release and startup behavior</li>
+                      <li>[Example] Main control/data-path handshake</li>
+                      <li>[Example] Boundary and error input handling</li>
                     </ul>
                   </div>
                 </div>
@@ -2759,7 +2772,7 @@
 
             <section>
               <div class="slide-frame">
-                ${renderHeader("Timing", "8. 타이밍 다이어그램", "08")}
+                ${renderHeader("Timing", "8. Timing Diagram", "08")}
                 <div class="grid-2">
                   <div class="card">
                     <h3>Timing Diagram</h3>

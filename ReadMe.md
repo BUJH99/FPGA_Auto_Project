@@ -28,6 +28,7 @@ To fully utilize this toolkit, the following tools need to be installed.
 3.  **GTKWave**: For viewing simulation waveforms.
 4.  **Node.js & npm**: Required for schematic generation features (`netlistsvg`, `svg2drawio`).
 5.  **Yosys** (Optional): Required for generating Detailed Schematics (Recommended: `yowasp-yosys`).
+6.  **Python 3 + Jinja2**: Required for presentation generation (`bat\generate_presentation.bat`).
 
 #### Using templates after clone (netlistsvg patch)
 
@@ -77,6 +78,7 @@ Use the launcher from the repository root.
 *   **`bat\generate_verilog_module.bat`**: Create a new module file (assists with port definition, etc.).
 *   **`bat\generate_verilog_testbench.bat`**: Analyze an existing module to automatically generate a testbench shell.
 *   **`bat\browse_verilog_hierarchy.bat`**: Check the module hierarchy of the project.
+*   **`bat\generate_presentation.bat`**: Scan RTL and generate presentation HTML/JSON into each project's `Presentation/` folder.
 
 ---
 
@@ -144,6 +146,7 @@ set top_module "Top"               ; # Top Module Name
 3.  **GTKWave**: 시뮬레이션 파형 확인용.
 4.  **Node.js & npm**: 회로도 생성(`netlistsvg`, `svg2drawio`) 기능을 위해 필요.
 5.  **Yosys** (선택): 상세 회로도(Detailed Schematic) 생성을 위해 필요 (`yowasp-yosys` 권장).
+6.  **Python 3 + Jinja2**: 발표자료 자동 생성(`bat\generate_presentation.bat`)을 위해 필요.
 
 #### clone 후 templates 사용 (netlistsvg 패치)
 
@@ -193,6 +196,7 @@ Enter project name: MyFPGAProject
 *   **`bat\generate_verilog_module.bat`**: 새 모듈 파일 생성 (포트 정의 등 보조).
 *   **`bat\generate_verilog_testbench.bat`**: 기존 모듈을 분석하여 테스트벤치 껍데기 자동 생성.
 *   **`bat\browse_verilog_hierarchy.bat`**: 프로젝트의 모듈 계층 구조 확인.
+*   **`bat\generate_presentation.bat`**: RTL 스캔 기반 발표자료 HTML/JSON을 각 프로젝트 `Presentation/` 폴더에 생성.
 
 ---
 
