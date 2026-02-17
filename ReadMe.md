@@ -1,225 +1,181 @@
 # FPGA Automation Toolkit
 
-Verilog/SystemVerilog FPGA 개발을 위한 배치 기반 자동화 툴킷입니다.  
-현재 구조는 `MAIN.bat`를 중심으로, 프로젝트별 작업은 `templates/bat/*.bat` 스크립트를 통해 실행됩니다.
+<div align="center">
 
-## 1. 현재 자동화 구조
+![FPGA](https://img.shields.io/badge/FPGA-Verilog%20%2F%20SystemVerilog-blue) 
+![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-실행 진입점
-- `MAIN.bat`: 저장소 루트의 통합 런처
-- `templates/bat/Setup.bat`: 신규 프로젝트 생성
+**Batch-based Automation Toolkit for Verilog/SystemVerilog Development**
 
-`MAIN.bat` 메뉴 그룹(실제 반영 기준)
-- `Code & Schematic Generation`
-- `Simulation`
-- `Report Automation (One Source)`
-- `Legacy Report (Vivado HTML / Old Docs)`
-- `Vivado Flow & FPGA`
+[English Version](#english-version) | [한국어 버전](#한국어-버전)
 
-핵심 원칙
-- 스크립트/툴은 저장소 `templates/`에 중앙화
-- 프로젝트별 산출물은 각 프로젝트 폴더 하위에 저장
-- One Source 리포트 흐름(`report.md` 중심) 우선 사용
+</div>
 
 ---
 
-## 2. 빠른 시작
+<div id="english-version"></div>
 
-### 2.1 필수 준비
+## 🇬🇧 English Version
 
-필수 도구
-- Xilinx Vivado (PATH 등록)
-- Node.js + npm
-- Python 3
+### Overview
+This project is a batch-script-based automation toolkit designed to streamline **Verilog/SystemVerilog FPGA development**. 
+The workflow is centralized around `MAIN.bat`, with project-specific tasks executed via scripts located in `templates/bat/*.bat`.
 
-기능별 추가 도구
-- Icarus Verilog (`iverilog`, `vvp`)
-- GTKWave (`gtkwave`)
-- Yosys 또는 yowasp-yosys (회로도 생성)
-- Pandoc (HTML/DOCX 리포트 생성)
-- Python `jinja2` (프레젠테이션 생성)
+### 📂 Directory Structure
+The automation system follows a strict directory structure:
+- **`MAIN.bat`**: The central launcher located at the repository root.
+- **`templates/`**: Contains all shared scripts, tools, and configurations.
+  - **`bat/`**: Core execution scripts.
+  - **`tools/`**: Helper scripts (Powershell, Python, etc.).
 
-### 2.2 템플릿 의존성 설치
+### 🚀 Quick Start
 
-`draw_schematic.bat` 등 Node 기반 스크립트 사용 전 1회 실행:
+#### 1. Prerequisites
+Ensure the following tools are installed and added to your system `PATH`:
+- **Xilinx Vivado**: For synthesis and implementation.
+- **Node.js (+ npm)**: For schematic generation tools.
+- **Python 3**: For various automation tasks.
 
+**Optional Extras for Full Functionality:**
+- **Icarus Verilog (`iverilog`)**: For lightweight simulation.
+- **GTKWave**: For viewing waveforms.
+- **Yosys** (or `yowasp-yosys`): For schematic generation.
+- **Pandoc**: For converting reports (Markdown → HTML/DOCX).
+
+#### 2. Installation (Dependencies)
+Before using Node-based tools (like `draw_schematic.bat`), run the installation once:
+```batch
+cd templates
+npm install
+```
+
+#### 3. How to Use
+1. Run **`MAIN.bat`** in the repository root.
+2. Select your target project.
+3. Choose a task from the menu:
+   - **Code & Schematic Generation**: Create module templates, TBs, diagrams.
+   - **Simulation**: Run simulations with Icarus Verilog.
+   - **Report Automation**: Generate comprehensive documentation.
+   - **Vivado Flow**: synthesis, implementation, and programming.
+
+### 🛠️ Key Workflows
+
+#### A. One Source Reporting (Recommended)
+Generates high-quality HTML/DOCX reports from a single Markdown source (`report.md`), combining source code, testbenches, and waveforms.
+1. `annotate_hdl_info.bat`
+2. `generate_report_md.bat`
+3. `mdToReport.bat`
+
+#### B. Vivado Build & Program
+- **Step-by-step**: Run `run_vivado_build_flow.bat`, then `program_fpga_device.bat`.
+- **One-click**: Run `auto_build_and_program.bat`.
+
+#### C. Simulation
+- **Interactive**: `run_icarus_simulation.bat` lets you select a testbench and view waveforms.
+- **Automated**: `auto_sim_and_report.bat` runs simulations and generates result reports automatically.
+
+### 📁 Project Layout
+When you create a new project using `Setup.bat`, the following structure is generated:
+```text
+[ProjectName]/
+├── src/                # Design sources (.v, .sv)
+├── tb/                 # Testbenches
+├── constrs/            # Constraint files (.xdc)
+├── ip/                 # IP cores
+├── output/             # Build outputs (Bitstreams, Reports)
+│   ├── docs/           # Generated documentation
+│   ├── Diagram/        # Schematics (Simple/Detailed)
+│   └── FINALReport/    # Vivado reports
+└── Presentation/       # Presentation slides data
+```
+
+### ❓ Troubleshooting
+- **`netlistsvg not found`**: Run `npm install` inside the `templates` directory.
+- **DOCX Generation Failed**: Close Microsoft Word if `report.docx` is open.
+- **Vivado/Icarus not found**: Verify that their `bin` directories are added to your System Environment `PATH`.
+
+---
+<br>
+
+<div id="한국어-버전"></div>
+
+## 🇰🇷 한국어 버전
+
+### 개요
+이 프로젝트는 **Verilog/SystemVerilog FPGA 개발**을 효율화하기 위한 배치 스크립트 기반 자동화 툴킷입니다.
+모든 작업은 `MAIN.bat`를 중심으로 이루어지며, 실제 기능은 `templates/bat/*.bat` 경로의 스크립트들을 통해 실행됩니다.
+
+[English Version](#english-version) 으로 돌아가기
+
+### 📂 디렉토리 구조
+자동화 시스템은 다음 구조를 따릅니다:
+- **`MAIN.bat`**: 저장소 루트에 위치한 통합 실행 런처입니다.
+- **`templates/`**: 공용 스크립트, 툴, 설정 파일이 중앙화된 폴더입니다.
+  - **`bat/`**: 핵심 실행 스크립트
+  - **`tools/`**: 보조 스크립트 (Powershell, Python 등)
+
+### 🚀 빠른 시작 (Quick Start)
+
+#### 1. 필수 준비물
+다음 도구들이 설치되어 있고 시스템 `PATH`에 등록되어 있어야 합니다:
+- **Xilinx Vivado**: 합성 및 구현용
+- **Node.js (+ npm)**: 회로도 생성 툴용
+- **Python 3**: 다목적 자동화용
+
+**권장 추가 도구:**
+- **Icarus Verilog (`iverilog`)**: 시뮬레이션용
+- **GTKWave**: 파형 확인용
+- **Pandoc**: 문서 변환용 (Markdown → HTML/DOCX)
+
+#### 2. 의존성 설치
+`draw_schematic.bat` 등 Node 기반 툴을 사용하기 전 1회 실행이 필요합니다:
 ```cmd
 cd templates
 npm install
 ```
 
-### 2.3 프로젝트 생성
+#### 3. 사용 방법
+1. 저장소 루트에서 **`MAIN.bat`**를 실행합니다.
+2. 작업할 프로젝트를 선택합니다.
+3. 원하는 메뉴를 선택하여 작업을 수행합니다:
+   - **Code & Schematic**: 모듈/TB 템플릿 생성, 다이어그램 작성
+   - **Simulation**: Icarus Verilog 시뮬레이션 수행
+   - **Report Automation**: 통합 문서 생성
+   - **Vivado Flow**: 비트스트림 생성 및 FPGA 프로그래밍
 
-권장: `MAIN.bat` 실행 후 `S`(Setup New Project) 선택  
-직접 실행도 가능:
+### 🛠️ 주요 워크플로우
 
-```cmd
-templates\bat\Setup.bat
-```
-
-### 2.4 기본 사용 방식
-
-1. 저장소 루트에서 `MAIN.bat` 실행
-2. 프로젝트 선택
-3. 필요한 메뉴 번호 선택 후 스크립트 실행
-
----
-
-## 3. 권장 워크플로우
-
-### 3.1 One Source 리포트 (권장)
-
-목적
-- `src/`, `tb/`, 다이어그램/파형 자산을 기반으로
-- 하나의 원본 `output/docs/report.md`에서
-- `report.html`, `report.docx`를 생성
-
-순서
+#### A. One Source 리포트 (권장)
+소스 코드, 테스트벤치, 파형 등을 하나의 Markdown(`report.md`)으로 통합하여 HTML/DOCX 리포트를 생성합니다.
 1. `annotate_hdl_info.bat`
 2. `generate_report_md.bat`
 3. `mdToReport.bat`
 
-직접 실행 예시
+#### B. Vivado 빌드 및 프로그램
+- **단계별 실행**: `run_vivado_build_flow.bat` 실행 후 `program_fpga_device.bat` 실행
+- **원클릭 실행**: `auto_build_and_program.bat` (빌드 후 자동 업로드)
 
-```cmd
-templates\bat\annotate_hdl_info.bat <ProjectPath>
-templates\bat\generate_report_md.bat <ProjectPath>
-templates\bat\mdToReport.bat <ProjectPath>
-```
+#### C. 시뮬레이션
+- **대화형**: `run_icarus_simulation.bat` - 테스트벤치 선택 및 Waveform 확인
+- **자동화**: `auto_sim_and_report.bat` - 시뮬레이션 수행 후 결과 리포트 자동 생성
 
-주요 출력
-- `output/docs/report.md`
-- `output/docs/github.css`
-- `output/docs/report.html`
-- `output/docs/report.docx`
-
-참고
-- `mdToReport.bat`는 DOCX 생성 시 표지 중복을 자동 정리해 앞부분을 단일 표지 구조로 맞춥니다.
-- `report.docx`가 열려 있으면 Word 변환이 실패할 수 있습니다(파일 잠금).
-
-### 3.2 Vivado 빌드/구현/프로그램
-
-단계형
-1. `run_vivado_build_flow.bat`
-2. 필요 시 `program_fpga_device.bat`
-
-원클릭
-- `auto_build_and_program.bat` (빌드 후 자동 프로그램)
-
-주요 출력
-- 비트스트림 및 빌드 산출물: `output/`
-- 최종 HTML 리포트: `output/FINALReport/Final_Build_Report.html`
-- 로그: `log/`
-
-### 3.3 시뮬레이션
-
-- `run_icarus_simulation.bat`: TB 선택, 컴파일/시뮬레이션, VCD/GTKWave, WaveDrom JSON 생성(설정 시)
-- `auto_sim_and_report.bat`: TB 시나리오 파싱 기반 자동 시뮬레이션 + 리포트 생성
-
-### 3.4 코드/다이어그램/프레젠테이션
-
-- `generate_verilog_module.bat`: 모듈 템플릿 생성
-- `create_tb_template.bat`: TB 템플릿 생성
-- `draw_schematic.bat`: Simple/Detailed/JSON 다이어그램 생성
-- `draw_fsm.bat`: FSM 다이어그램 생성
-- `browse_verilog_hierarchy.bat`, `print_verilog_hierarchy.bat`: 계층 확인
-- `generate_presentation.bat`: `Presentation/` HTML/JSON 생성
-
----
-
-## 4. 배치 스크립트 맵 (`templates/bat`)
-
-Code & Schematic
-- `generate_verilog_module.bat`
-- `create_tb_template.bat`
-- `draw_schematic.bat`
-- `browse_verilog_hierarchy.bat`
-- `print_verilog_hierarchy.bat`
-- `draw_fsm.bat`
-- `generate_presentation.bat`
-
-Simulation
-- `run_icarus_simulation.bat`
-- `auto_sim_and_report.bat`
-
-Report Automation (One Source)
-- `annotate_hdl_info.bat`
-- `generate_report_md.bat`
-- `mdToReport.bat`
-
-Legacy Report
-- `generate_report.bat`
-- `generate_docs.bat`
-
-Vivado Flow & FPGA
-- `launch_ipi_gui.bat`
-- `run_vivado_build_flow.bat`
-- `finalize_block_design.bat`
-- `retarget_ip_to_part.bat`
-- `program_fpga_device.bat`
-- `auto_build_and_program.bat`
-
----
-
-## 5. 프로젝트 디렉터리 구조 (`Setup.bat` 기준)
-
+### 📁 프로젝트 폴더 구조
+`Setup.bat`로 프로젝트 생성 시 아래와 같은 구조가 생성됩니다:
 ```text
 [ProjectName]/
-  constrs/
-  ip/
-  md/
-  log/
-  report_assets/
-  skills/
-  src/
-  tb/
-  Presentation/                 # 템플릿이 있으면 복사됨
-  output/
-    docs/
-    Diagram/
-      Simple/
-      Detailed/
-      JSON/
-    fsm/
-      svg/
-      drawio/
-    FINALReport/
+├── src/                # 설계 소스 (.v, .sv)
+├── tb/                 # 테스트벤치
+├── constrs/            # 제약 조건 파일 (.xdc)
+├── ip/                 # IP 코어
+├── output/             # 빌드 결과물 (Bitstream 등)
+│   ├── docs/           # 생성된 문서 (Report)
+│   ├── Diagram/        # 회로도 (Simple/Detailed)
+│   └── FINALReport/    # Vivado 최종 리포트
+└── Presentation/       # 프레젠테이션 데이터
 ```
 
----
-
-## 6. 설정 포인트
-
-FPGA/프로젝트 빌드 설정
-- `templates/tcl/project_build_config.tcl`
-  - `part_number`
-  - `top_module`
-  - 기타 Vivado 프로젝트 파라미터
-
-프로젝트 동기화 경로(선택)
-- `SyncProjectsToSourceProject.bat`
-  - `DEST_ROOT`가 로컬 환경 경로로 고정되어 있으므로 필요 시 수정
-
----
-
-## 7. 트러블슈팅
-
-`draw_schematic.bat`에서 `netlistsvg not found`
-- `cd templates && npm install` 실행
-
-`mdToReport.bat`에서 DOCX 생성 실패(permission denied)
-- `output/docs/report.docx`를 열고 있는 프로그램(Word 등) 종료 후 재실행
-
-`run_vivado_build_flow.bat`에서 Vivado 미탐지
-- Vivado `bin` 경로 PATH 등록 확인
-
-`run_icarus_simulation.bat`에서 `iverilog` 미탐지
-- Icarus Verilog 설치 및 PATH 등록 확인
-
----
-
-## 8. 권장 운영 방식
-
-- 일상 작업은 `MAIN.bat`에서 실행
-- 리포트는 One Source 흐름(`annotate -> report_md -> mdToReport`) 사용
-- Legacy 리포트(`generate_report.bat`, `generate_docs.bat`)는 유지보수/호환 용도로만 사용
+### ❓ 트러블슈팅
+- **`netlistsvg not found` 오류**: `templates` 폴더에서 `npm install`을 실행하세요.
+- **DOCX 생성 실패 (Permission denied)**: `report.docx` 파일이 Word에서 열려 있다면 종료 후 다시 시도하세요.
+- **Vivado/Icarus 미탐지**: 설치 경로의 `bin` 폴더가 환경 변수 `PATH`에 등록되었는지 확인하세요.
