@@ -49,6 +49,10 @@ set "REPORT_HTML=%DOCS_DIR%\report.html"
 set "REPORT_DOCX=%DOCS_DIR%\report.docx"
 set "PANDOC_RESOURCE_PATH=%TARGET_PROJECT%;%DOCS_DIR%"
 set "DOCX_STYLE_POST=%TEMPLATE_ROOT%tools\postprocess_docx_style.ps1"
+set "MD_PREP_SCRIPT=%TEMPLATE_ROOT%tools\prepare_report_markdown.ps1"
+set "REPORT_MD_WORK=%REPORT_MD%"
+set "TEMP_REPORT_MD="
+for %%I in ("%TARGET_PROJECT%") do set "PROJECT_NAME=%%~nI"
 
 if not exist "%REPORT_MD%" (
     if exist "%REPORT_MD_LEGACY%" (
@@ -90,18 +94,20 @@ if not defined PANDOC_CMD (
 
 if not defined PANDOC_CMD (
     echo [WARNING] pandoc not available. Skip HTML/DOCX generation.
+    call :CLEANUP_TEMP_REPORT
     if "%NO_PAUSE%"=="0" pause
     exit /b 0
 )
 
 set "HTML_EMBED_OPT=--embed-resources"
 call :RESOLVE_PANDOC_EMBED_OPT
+call :PREPARE_REPORT_MD
 
 if defined CSS_FILE (
-    "%PANDOC_CMD%" "%REPORT_MD%" -s --toc --toc-depth=3 %HTML_EMBED_OPT% --resource-path="%PANDOC_RESOURCE_PATH%" -c "%CSS_FILE%" -o "%REPORT_HTML%"
+    "%PANDOC_CMD%" "%REPORT_MD_WORK%" -s --toc --toc-depth=3 %HTML_EMBED_OPT% --resource-path="%PANDOC_RESOURCE_PATH%" -c "%CSS_FILE%" -o "%REPORT_HTML%"
 ) else (
     echo [WARNING] github.css not found. Building HTML without CSS.
-    "%PANDOC_CMD%" "%REPORT_MD%" -s --toc --toc-depth=3 %HTML_EMBED_OPT% --resource-path="%PANDOC_RESOURCE_PATH%" -o "%REPORT_HTML%"
+    "%PANDOC_CMD%" "%REPORT_MD_WORK%" -s --toc --toc-depth=3 %HTML_EMBED_OPT% --resource-path="%PANDOC_RESOURCE_PATH%" -o "%REPORT_HTML%"
 )
 
 if errorlevel 1 (
@@ -110,7 +116,7 @@ if errorlevel 1 (
     echo [SUCCESS] report HTML: %REPORT_HTML%
 )
 
-"%PANDOC_CMD%" "%REPORT_MD%" -s --toc --toc-depth=3 --resource-path="%PANDOC_RESOURCE_PATH%" -o "%REPORT_DOCX%"
+"%PANDOC_CMD%" "%REPORT_MD_WORK%" -s --toc --toc-depth=3 --resource-path="%PANDOC_RESOURCE_PATH%" -o "%REPORT_DOCX%"
 if errorlevel 1 (
     echo [WARNING] pandoc Word conversion failed.
 ) else (
@@ -129,6 +135,7 @@ if errorlevel 1 (
 
 echo.
 echo [DONE] Report build finished.
+call :CLEANUP_TEMP_REPORT
 if "%NO_PAUSE%"=="0" pause
 exit /b 0
 
@@ -202,4 +209,32 @@ if not errorlevel 1 (
 
 set "HTML_EMBED_OPT="
 echo [WARNING] pandoc does not support embed option. HTML may reference external assets.
+exit /b 0
+
+:PREPARE_REPORT_MD
+set "REPORT_MD_WORK=%REPORT_MD%"
+set "TEMP_REPORT_MD=%TEMP%\report_for_pandoc_%RANDOM%_%RANDOM%.md"
+if not exist "%MD_PREP_SCRIPT%" (
+    echo [WARNING] Markdown preprocess script not found: %MD_PREP_SCRIPT%
+    set "TEMP_REPORT_MD="
+    exit /b 0
+)
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%MD_PREP_SCRIPT%" -InputPath "%REPORT_MD%" -OutputPath "%TEMP_REPORT_MD%" -ProjectName "%PROJECT_NAME%"
+if errorlevel 1 (
+    echo [WARNING] Markdown preprocess failed. Using original source: %REPORT_MD%
+    call :CLEANUP_TEMP_REPORT
+    set "REPORT_MD_WORK=%REPORT_MD%"
+    exit /b 0
+)
+
+set "REPORT_MD_WORK=%TEMP_REPORT_MD%"
+echo [INFO] Using prepared report source: %REPORT_MD_WORK%
+exit /b 0
+
+:CLEANUP_TEMP_REPORT
+if defined TEMP_REPORT_MD (
+    if exist "%TEMP_REPORT_MD%" del /f /q "%TEMP_REPORT_MD%" >nul 2>&1
+)
+set "TEMP_REPORT_MD="
 exit /b 0

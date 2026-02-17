@@ -1,228 +1,225 @@
-[🇺🇸 English](#fpga-automation-toolkit) | [🇰🇷 Korean (한국어)](#fpga-verilog-%EC%9E%90%EB%8F%99%ED%99%94-%ED%88%B4%ED%82%B7-fpga-automation-toolkit)
-
 # FPGA Automation Toolkit
 
-This project provides a **comprehensive automated environment** for Verilog-based FPGA development.
-It aims to maximize development productivity by automating the entire process from project creation, simulation, synthesis, implementation, to schematic visualization using scripts.
+Verilog/SystemVerilog FPGA 개발을 위한 배치 기반 자동화 툴킷입니다.  
+현재 구조는 `MAIN.bat`를 중심으로, 프로젝트별 작업은 `templates/bat/*.bat` 스크립트를 통해 실행됩니다.
 
-## 🚀 Key Features
+## 1. 현재 자동화 구조
 
-*   **Automated Project Creation**: Instantly create a workspace with a standardized directory structure and scripts via `Setup.bat`.
-*   **One-Click Build**: Executes synthesis, implementation, and bitstream generation at once by controlling Vivado in batch mode.
-*   **Powerful Visualization (Schematic)**: Analyzes Verilog code and automatically converts it into **SVG** and **Draw.io** formats.
-    *   **Simple Mode**: Block diagram focused on I/O ports (for Leaf modules).
-    *   **Detailed Mode**: Detailed representation of internal logic and signal flow (Yosys-based, including submodules).
-    *   *Latest Feature: Dynamic sizing and optimized arrow routing applied.*
-*   **Code Template Generation**: Quickly generates basic code for modules (.v) and testbenches (.tb) via an interactive interface.
-*   **Open Source Simulation**: Provides a lightweight and fast verification environment through Icarus Verilog + GTKWave integration.
-*   **Hierarchy Exploration**: Visualizes dependencies and hierarchy between modules in the project as a tree structure.
+실행 진입점
+- `MAIN.bat`: 저장소 루트의 통합 런처
+- `templates/bat/Setup.bat`: 신규 프로젝트 생성
+
+`MAIN.bat` 메뉴 그룹(실제 반영 기준)
+- `Code & Schematic Generation`
+- `Simulation`
+- `Report Automation (One Source)`
+- `Legacy Report (Vivado HTML / Old Docs)`
+- `Vivado Flow & FPGA`
+
+핵심 원칙
+- 스크립트/툴은 저장소 `templates/`에 중앙화
+- 프로젝트별 산출물은 각 프로젝트 폴더 하위에 저장
+- One Source 리포트 흐름(`report.md` 중심) 우선 사용
 
 ---
 
-## 🛠️ Prerequisites
+## 2. 빠른 시작
 
-To fully utilize this toolkit, the following tools need to be installed.
+### 2.1 필수 준비
 
-1.  **Xilinx Vivado**: Essential for FPGA synthesis and bitstream generation (Must be in PATH).
-2.  **Icarus Verilog**: Recommended for a lightweight simulation environment.
-3.  **GTKWave**: For viewing simulation waveforms.
-4.  **Node.js & npm**: Required for schematic generation features (`netlistsvg`, `svg2drawio`).
-5.  **Yosys** (Optional): Required for generating Detailed Schematics (Recommended: `yowasp-yosys`).
-6.  **Python 3 + Jinja2**: Required for presentation generation (`bat\generate_presentation.bat`).
+필수 도구
+- Xilinx Vivado (PATH 등록)
+- Node.js + npm
+- Python 3
 
-#### Using templates after clone (netlistsvg patch)
+기능별 추가 도구
+- Icarus Verilog (`iverilog`, `vvp`)
+- GTKWave (`gtkwave`)
+- Yosys 또는 yowasp-yosys (회로도 생성)
+- Pandoc (HTML/DOCX 리포트 생성)
+- Python `jinja2` (프레젠테이션 생성)
 
-To use schematic generation (e.g. `draw_schematic.bat`) after cloning the repo, install template dependencies once:
+### 2.2 템플릿 의존성 설치
+
+`draw_schematic.bat` 등 Node 기반 스크립트 사용 전 1회 실행:
 
 ```cmd
 cd templates
 npm install
 ```
 
-- The repo includes `templates/node_modules/` and `templates/patches/netlistsvg+1.0.2.patch`, so clone 후 바로 사용 가능. 새로 의존성 설치 시에는 `cd templates` 후 `npm install` 하면 패치가 자동 적용됨.
+### 2.3 프로젝트 생성
 
----
+권장: `MAIN.bat` 실행 후 `S`(Setup New Project) 선택  
+직접 실행도 가능:
 
-## 🚦 Getting Started
-
-### 1. Create Project
-Run the `Setup.bat` file in the repository root.
 ```cmd
-> Setup.bat
-Enter project name: MyFPGAProject
+templates\bat\Setup.bat
 ```
-A folder with the entered name will be created with **project-only working directories**.
-Automation scripts/tools remain centralized under `templates/` in the repository root.
 
-### 2. Development Workflow
+### 2.4 기본 사용 방식
 
-Use the launcher from the repository root.
-
-*   **`MAIN.bat`**: Interactive launcher in repository root. It scans project folders and runs scripts from `templates/bat/` for the selected project.
-
-#### 🏗️ Build & Implementation
-*   **`bat\run_vivado_build_flow.bat`**: Generates a Vivado project and builds up to the bitstream in one go. Build artifacts are saved under `output/`, and final report assets are saved under `output/FINALReport/`. At the end, it asks whether to run device programming (`Y/N`).
-*   **`bat\program_fpga_device.bat`**: Downloads the generated bitstream to the board.
-*   **`bat\launch_ipi_gui.bat`**: Opens the configured project in the Vivado GUI environment.
-
-#### 🎨 Visualization (Schematic)
-*   **`bat\draw_schematic.bat`**: Analyzes source code to generate diagrams.
-    *   **Input**: Verilog files in the `src/` folder.
-    *   **Output**: `Diagram/Simple/` (Block diagram), `Diagram/Detailed/` (Detailed schematic).
-    *   **Feature**: The generated `.drawio` files can be opened and edited directly in [draw.io](https://app.diagrams.net/).
-
-#### 🧪 Simulation
-*   **`bat\run_icarus_simulation.bat`**: Compiles the testbench and performs simulation. GTKWave automatically runs upon completion.
-
-#### 📝 Code Assistance
-*   **`bat\generate_verilog_module.bat`**: Create a new module file (assists with port definition, etc.).
-*   **`bat\generate_verilog_testbench.bat`**: Analyze an existing module to automatically generate a testbench shell.
-*   **`bat\browse_verilog_hierarchy.bat`**: Check the module hierarchy of the project.
-*   **`bat\generate_presentation.bat`**: Scan RTL and generate presentation HTML/JSON into each project's `Presentation/` folder.
+1. 저장소 루트에서 `MAIN.bat` 실행
+2. 프로젝트 선택
+3. 필요한 메뉴 번호 선택 후 스크립트 실행
 
 ---
 
-## 📂 Directory Structure
+## 3. 권장 워크플로우
 
-The structure of the project created by `Setup.bat` is as follows:
+### 3.1 One Source 리포트 (권장)
 
+목적
+- `src/`, `tb/`, 다이어그램/파형 자산을 기반으로
+- 하나의 원본 `output/docs/report.md`에서
+- `report.html`, `report.docx`를 생성
+
+순서
+1. `annotate_hdl_info.bat`
+2. `generate_report_md.bat`
+3. `mdToReport.bat`
+
+직접 실행 예시
+
+```cmd
+templates\bat\annotate_hdl_info.bat <ProjectPath>
+templates\bat\generate_report_md.bat <ProjectPath>
+templates\bat\mdToReport.bat <ProjectPath>
 ```
+
+주요 출력
+- `output/docs/report.md`
+- `output/docs/github.css`
+- `output/docs/report.html`
+- `output/docs/report.docx`
+
+참고
+- `mdToReport.bat`는 DOCX 생성 시 표지 중복을 자동 정리해 앞부분을 단일 표지 구조로 맞춥니다.
+- `report.docx`가 열려 있으면 Word 변환이 실패할 수 있습니다(파일 잠금).
+
+### 3.2 Vivado 빌드/구현/프로그램
+
+단계형
+1. `run_vivado_build_flow.bat`
+2. 필요 시 `program_fpga_device.bat`
+
+원클릭
+- `auto_build_and_program.bat` (빌드 후 자동 프로그램)
+
+주요 출력
+- 비트스트림 및 빌드 산출물: `output/`
+- 최종 HTML 리포트: `output/FINALReport/Final_Build_Report.html`
+- 로그: `log/`
+
+### 3.3 시뮬레이션
+
+- `run_icarus_simulation.bat`: TB 선택, 컴파일/시뮬레이션, VCD/GTKWave, WaveDrom JSON 생성(설정 시)
+- `auto_sim_and_report.bat`: TB 시나리오 파싱 기반 자동 시뮬레이션 + 리포트 생성
+
+### 3.4 코드/다이어그램/프레젠테이션
+
+- `generate_verilog_module.bat`: 모듈 템플릿 생성
+- `create_tb_template.bat`: TB 템플릿 생성
+- `draw_schematic.bat`: Simple/Detailed/JSON 다이어그램 생성
+- `draw_fsm.bat`: FSM 다이어그램 생성
+- `browse_verilog_hierarchy.bat`, `print_verilog_hierarchy.bat`: 계층 확인
+- `generate_presentation.bat`: `Presentation/` HTML/JSON 생성
+
+---
+
+## 4. 배치 스크립트 맵 (`templates/bat`)
+
+Code & Schematic
+- `generate_verilog_module.bat`
+- `create_tb_template.bat`
+- `draw_schematic.bat`
+- `browse_verilog_hierarchy.bat`
+- `print_verilog_hierarchy.bat`
+- `draw_fsm.bat`
+- `generate_presentation.bat`
+
+Simulation
+- `run_icarus_simulation.bat`
+- `auto_sim_and_report.bat`
+
+Report Automation (One Source)
+- `annotate_hdl_info.bat`
+- `generate_report_md.bat`
+- `mdToReport.bat`
+
+Legacy Report
+- `generate_report.bat`
+- `generate_docs.bat`
+
+Vivado Flow & FPGA
+- `launch_ipi_gui.bat`
+- `run_vivado_build_flow.bat`
+- `finalize_block_design.bat`
+- `retarget_ip_to_part.bat`
+- `program_fpga_device.bat`
+- `auto_build_and_program.bat`
+
+---
+
+## 5. 프로젝트 디렉터리 구조 (`Setup.bat` 기준)
+
+```text
 [ProjectName]/
-├── constrs/         # XDC constraints
-├── Diagram/         # Generated schematic images
-├── ip/              # Exported/managed IP files (.xci)
-├── md/              # Markdown outputs/notes
-├── output/          # Build artifacts and report data
-│   └── FINALReport/ # Final report HTML/CSS/JS/JSON and diagram assets
-├── report_assets/   # Reserved project asset folder
-├── src/             # Verilog source code (.v/.sv) - User written
-├── skills/          # Project-specific skill notes/assets
-└── tb/              # Testbench code (.v/.sv) - User written
+  constrs/
+  ip/
+  md/
+  log/
+  report_assets/
+  skills/
+  src/
+  tb/
+  Presentation/                 # 템플릿이 있으면 복사됨
+  output/
+    docs/
+    Diagram/
+      Simple/
+      Detailed/
+      JSON/
+    fsm/
+      svg/
+      drawio/
+    FINALReport/
 ```
-
-## ⚙️ Configuration
-
-You can change the FPGA part number or project settings in `templates/tcl/project_build_config.tcl`.
-
-```tcl
-set part_number "xc7a35tcpg236-1"  ; # Target FPGA Part
-set top_module "Top"               ; # Top Module Name
-```
-
-<br><br><br>
-
----
----
-
-<br><br><br>
-
-[🇺🇸 English](#fpga-automation-toolkit) | [🇰🇷 Korean (한국어)](#fpga-verilog-%EC%9E%90%EB%8F%99%ED%99%94-%ED%88%B4%ED%82%B7-fpga-automation-toolkit)
-
-# FPGA Verilog 자동화 툴킷 (FPGA Automation Toolkit)
-
-이 프로젝트는 Verilog 기반 FPGA 개발을 위한 **종합 자동화 환경**입니다.
-프로젝트 생성부터 시뮬레이션, 합성, 구현, 그리고 회로도(Schematic) 시각화까지의 전 과정을 스크립트로 자동화하여 개발 효율성을 극대화합니다.
-
-## 🚀 주요 기능 (Key Features)
-
-*   **프로젝트 자동 생성**: `Setup.bat`을 통해 표준화된 디렉토리 구조와 스크립트가 포함된 작업 공간을 즉시 생성합니다.
-*   **원클릭 빌드 (One-Click Build)**: Vivado를 배치 모드로 제어하여 합성(Synthesis), 구현(Implementation), 비트스트림(Bitstream) 생성을 한 번에 수행합니다.
-*   **강력한 시각화 (Schematic Visualization)**: Verilog 코드를 분석하여 회로도를 **SVG** 및 **Draw.io** 포맷으로 자동 변환합니다.
-    *   **Simple Mode**: 모듈의 입출력 포트 위주의 블록 다이어그램 (Leaf 모듈용)
-    *   **Detailed Mode**: 내부 로직과 신호 흐름을 상세히 표현 (Yosys 기반, 서브모듈 포함 시)
-    *   *최신 기능: 동적 사이즈 조절 및 최적화된 화살표 라우팅 적용*
-*   **코드 템플릿 생성**: 대화형 인터페이스로 모듈(.v)과 테스트벤치(.tb) 기본 코드를 빠르게 생성합니다.
-*   **오픈소스 시뮬레이션**: Icarus Verilog + GTKWave 연동을 통해 가볍고 빠른 검증 환경을 제공합니다.
-*   **계층 구조 탐색**: 프로젝트 내 모듈 간의 의존성 및 계층 구조를 트리 형태로 시각화합니다.
 
 ---
 
-## 🛠️ 필수 도구 (Prerequisites)
+## 6. 설정 포인트
 
-이 툴킷을 100% 활용하기 위해 다음 도구들의 설치가 필요합니다.
+FPGA/프로젝트 빌드 설정
+- `templates/tcl/project_build_config.tcl`
+  - `part_number`
+  - `top_module`
+  - 기타 Vivado 프로젝트 파라미터
 
-1.  **Xilinx Vivado**: FPGA 합성 및 비트스트림 생성을 위해 필수 (PATH 등록 필요).
-2.  **Icarus Verilog**: 가벼운 시뮬레이션 환경을 위해 권장.
-3.  **GTKWave**: 시뮬레이션 파형 확인용.
-4.  **Node.js & npm**: 회로도 생성(`netlistsvg`, `svg2drawio`) 기능을 위해 필요.
-5.  **Yosys** (선택): 상세 회로도(Detailed Schematic) 생성을 위해 필요 (`yowasp-yosys` 권장).
-6.  **Python 3 + Jinja2**: 발표자료 자동 생성(`bat\generate_presentation.bat`)을 위해 필요.
-
-#### clone 후 templates 사용 (netlistsvg 패치)
-
-레포를 clone한 뒤 회로도 생성(`draw_schematic.bat` 등)을 쓰려면, **templates에서 의존성 설치를 한 번** 해주세요.
-
-```cmd
-cd templates
-npm install
-```
-
-- 레포에 `templates/node_modules/`와 `templates/patches/netlistsvg+1.0.2.patch`가 포함되어 있어 clone 후 바로 사용 가능. 새로 의존성 설치할 때는 `cd templates` 후 `npm install` 하면 패치가 자동 적용됨.
+프로젝트 동기화 경로(선택)
+- `SyncProjectsToSourceProject.bat`
+  - `DEST_ROOT`가 로컬 환경 경로로 고정되어 있으므로 필요 시 수정
 
 ---
 
-## 🚦 시작하기 (Getting Started)
+## 7. 트러블슈팅
 
-### 1. 프로젝트 생성
-레포지토리 루트의 `Setup.bat` 파일을 실행합니다.
-```cmd
-> Setup.bat
-Enter project name: MyFPGAProject
-```
-입력한 이름으로 폴더가 생성되며, **프로젝트 작업용 디렉토리만** 만들어집니다.
-자동화 실행 파일은 레포지토리 루트의 `templates/`에 중앙화되어 유지됩니다.
+`draw_schematic.bat`에서 `netlistsvg not found`
+- `cd templates && npm install` 실행
 
-### 2. 개발 워크플로우
+`mdToReport.bat`에서 DOCX 생성 실패(permission denied)
+- `output/docs/report.docx`를 열고 있는 프로그램(Word 등) 종료 후 재실행
 
-레포지토리 루트에서 런처를 사용하세요.
+`run_vivado_build_flow.bat`에서 Vivado 미탐지
+- Vivado `bin` 경로 PATH 등록 확인
 
-*   **`MAIN.bat`**: 레포지토리 루트의 대화형 런처입니다. 프로젝트 폴더를 선택하면 `templates/bat/`의 스크립트를 해당 프로젝트 컨텍스트로 실행합니다.
-
-#### 🏗️ 빌드 및 구현
-*   **`bat\run_vivado_build_flow.bat`**: Vivado 프로젝트를 생성하고 비트스트림까지 일괄 빌드합니다. 빌드 산출물은 `output/`에, 최종 리포트 관련 파일은 `output/FINALReport/`에 저장되며, 마지막에 디바이스 프로그래밍 실행 여부를 `Y/N`으로 묻습니다.
-*   **`bat\program_fpga_device.bat`**: 생성된 비트스트림을 보드에 다운로드합니다.
-*   **`bat\launch_ipi_gui.bat`**: 설정된 프로젝트를 Vivado GUI 환경에서 엽니다.
-
-#### 🎨 시각화 (Schematic)
-*   **`bat\draw_schematic.bat`**: 소스 코드를 분석하여 다이어그램을 생성합니다.
-    *   **입력**: `src/` 폴더 내의 Verilog 파일들
-    *   **출력**: `Diagram/Simple/` (블록도), `Diagram/Detailed/` (상세 회로도)
-    *   **특징**: 생성된 `.drawio` 파일은 [draw.io](https://app.diagrams.net/)에서 바로 열어 수정 가능합니다.
-
-#### 🧪 시뮬레이션
-*   **`bat\run_icarus_simulation.bat`**: 테스트벤치를 컴파일하고 시뮬레이션을 수행합니다. 완료 후 GTKWave가 자동 실행됩니다.
-
-#### 📝 코드 작성 보조
-*   **`bat\generate_verilog_module.bat`**: 새 모듈 파일 생성 (포트 정의 등 보조).
-*   **`bat\generate_verilog_testbench.bat`**: 기존 모듈을 분석하여 테스트벤치 껍데기 자동 생성.
-*   **`bat\browse_verilog_hierarchy.bat`**: 프로젝트의 모듈 계층 구조 확인.
-*   **`bat\generate_presentation.bat`**: RTL 스캔 기반 발표자료 HTML/JSON을 각 프로젝트 `Presentation/` 폴더에 생성.
+`run_icarus_simulation.bat`에서 `iverilog` 미탐지
+- Icarus Verilog 설치 및 PATH 등록 확인
 
 ---
 
-## 📂 디렉토리 구조 (Directory Structure)
+## 8. 권장 운영 방식
 
-`Setup.bat`으로 생성된 프로젝트의 구조는 다음과 같습니다.
-
-```
-[ProjectName]/
-├── constrs/         # XDC 제약 파일
-├── Diagram/         # 생성된 회로도 이미지
-├── ip/              # IP 파일(.xci) 저장소
-├── md/              # Markdown 결과/노트
-├── output/          # 빌드 산출물/리포트 데이터 저장소
-│   └── FINALReport/ # 최종 리포트 HTML/CSS/JS/JSON 및 다이어그램 에셋
-├── report_assets/   # 프로젝트 예약 에셋 폴더
-├── src/             # Verilog 소스 코드 (.v/.sv) - 사용자가 작성
-├── skills/          # 프로젝트별 스킬/메모 자산
-└── tb/              # 테스트벤치 코드 (.v/.sv) - 사용자가 작성
-```
-
-## ⚙️ 환경 설정
-
-`templates/tcl/project_build_config.tcl` 파일에서 FPGA 부품 번호나 프로젝트 설정을 변경할 수 있습니다.
-
-```tcl
-set part_number "xc7a35tcpg236-1"  ; # Target FPGA Part
-set top_module "Top"               ; # Top Module Name
-```
+- 일상 작업은 `MAIN.bat`에서 실행
+- 리포트는 One Source 흐름(`annotate -> report_md -> mdToReport`) 사용
+- Legacy 리포트(`generate_report.bat`, `generate_docs.bat`)는 유지보수/호환 용도로만 사용

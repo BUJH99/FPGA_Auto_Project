@@ -80,6 +80,22 @@ function Set-StyleSizeAndFont {
     }
 }
 
+function Set-StylePageBreakBefore {
+    param(
+        [xml]$XmlDoc,
+        [System.Xml.XmlNamespaceManager]$NsMgr,
+        [string]$StyleId
+    )
+
+    $style = $XmlDoc.SelectSingleNode("//w:style[@w:styleId='$StyleId']", $NsMgr)
+    if (-not $style) { return }
+
+    $pPr = Get-OrCreateChild -XmlDoc $XmlDoc -Parent $style -LocalName "pPr" -NsMgr $NsMgr
+    $pageBreakBefore = Get-OrCreateChild -XmlDoc $XmlDoc -Parent $pPr -LocalName "pageBreakBefore" -NsMgr $NsMgr
+    $wNs = $NsMgr.LookupNamespace("w")
+    Set-ValAttr -XmlDoc $XmlDoc -Element $pageBreakBefore -Value "1" -WordNs $wNs
+}
+
 if (-not (Test-Path -LiteralPath $DocxPath)) {
     Write-Error "[ERROR] DOCX file not found: $DocxPath"
 }
@@ -113,6 +129,7 @@ try {
     Set-StyleSizeAndFont -XmlDoc $xml -NsMgr $ns -StyleId "Subtitle" -HalfPointSize 22 -FontName "Malgun Gothic"
     Set-StyleSizeAndFont -XmlDoc $xml -NsMgr $ns -StyleId "TOCHeading" -HalfPointSize 22 -FontName "Malgun Gothic"
     Set-StyleSizeAndFont -XmlDoc $xml -NsMgr $ns -StyleId "TableNormal" -HalfPointSize 21 -FontName "Malgun Gothic"
+    Set-StylePageBreakBefore -XmlDoc $xml -NsMgr $ns -StyleId "TOCHeading"
 
     # DocDefaults (fallback font/size)
     $stylesRoot = $xml.SelectSingleNode("/w:styles", $ns)
@@ -138,7 +155,7 @@ try {
     Compress-Archive -Path (Join-Path $workDir '*') -DestinationPath $rebuiltZip -Force
     Copy-Item -LiteralPath $rebuiltZip -Destination $resolvedDocx -Force
 
-    Write-Host "[INFO] DOCX styles updated: body 10.5pt, headings 10~12pt, font=Malgun Gothic."
+    Write-Host "[INFO] DOCX styles updated: body 10.5pt, headings 10~12pt, font=Malgun Gothic, TOC starts on next page."
 }
 finally {
     if (Test-Path -LiteralPath $workDir) {
