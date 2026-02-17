@@ -213,19 +213,37 @@
         min-height: 0;
       }
 
+      .col-flex.toc-layout {
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
       .toc-card-large {
-        flex: 1;
+        flex: 1 1 auto;
+        min-height: 0;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
         padding: 24px;
       }
 
+      .toc-card-large h3 {
+        margin-bottom: 12px;
+      }
+
       .toc-card-large ol {
+        flex: 1 1 auto;
+        min-height: 0;
+        margin: 0;
         column-count: 2;
+        column-fill: auto;
         column-gap: 36px;
         font-size: 14px;
       }
 
       .toc-card-large li {
         break-inside: avoid;
+        margin-bottom: 4px;
       }
 
       .card {
@@ -727,6 +745,11 @@
         font-weight: 700;
       }
 
+      .card.accent .module-summary-title,
+      .card.accent .module-summary-text {
+        color: #111827;
+      }
+
       .module-detail-grid {
         height: 100%;
         min-height: 0;
@@ -880,16 +903,17 @@
       .child-module-name {
         margin: 0;
         width: 100%;
-        font-size: var(--child-name-size, 8px);
+        display: block;
+        font-size: var(--child-name-size, 32px);
         font-weight: 900;
-        line-height: var(--child-name-line-height, 1.1);
+        line-height: 1;
         font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
         color: #111827;
-        letter-spacing: 0.1px;
+        letter-spacing: 0;
         text-align: center;
         white-space: nowrap;
         overflow: hidden;
-        text-overflow: ellipsis;
+        text-overflow: clip;
       }
 
       .module-parent-viz {
@@ -983,26 +1007,101 @@
       }
 
       .report-slide .report-grid .report-panel .power-stack {
-        height: 118px;
+        height: 85px;
       }
 
       .report-slide .report-grid .report-panel .power-segment-label {
-        font-size: 10px;
+        font-size: 8px;
+        font-weight: 700;
       }
 
       .report-slide .report-grid .report-panel .power-legend {
-        padding: 4px 5px;
-        gap: 2px;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        border: none;
+        background: transparent;
+        overflow: hidden;
       }
 
       .report-slide .report-grid .report-panel .power-legend-row {
-        gap: 4px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
         font-size: 9px;
+        min-height: 13px;
+        line-height: 1.1;
+        border-bottom: 1px dotted #e5e7eb;
+        padding-right: 2px;
+      }
+
+      .report-slide .report-grid .report-panel .power-legend-name {
+        flex: 0 1 auto;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 30px;
+      }
+
+      .report-slide .report-grid .report-panel .power-legend-value {
+        white-space: nowrap;
+        font-weight: 700;
+        margin-left: auto;
+      }
+
+      .report-slide .report-grid .report-panel .power-legend-pct {
+        font-size: 8px;
+        color: #666;
+        margin-left: 2px;
+        min-width: 20px;
+        text-align: right;
+      }
+
+      .report-slide .report-grid .report-panel .power-meta-wrap {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 2px;
+        margin-top: 4px;
+        padding-top: 4px;
+        border-top: 1px solid #e5e7eb;
+      }
+
+      .report-slide .report-grid .report-panel .power-meta-chip {
+        min-height: 0;
+        padding: 2px;
+        border-radius: 2px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #fdfdfd;
+        border: 1px solid #ddd;
+        text-align: center;
+      }
+
+      .report-slide .report-grid .report-panel .power-meta-label {
+        font-size: 7px;
+        color: #555;
+        font-weight: 600;
+        line-height: 1;
+        margin-bottom: 1px;
+        white-space: nowrap;
+      }
+
+      .report-slide .report-grid .report-panel .power-meta-value {
+        font-size: 8px;
+        font-weight: 800;
+        color: #000;
+        line-height: 1;
+        white-space: nowrap;
       }
 
       .report-slide .report-grid .report-panel .power-dot {
-        width: 8px;
-        height: 8px;
+        width: 6px;
+        height: 6px;
+        flex-shrink: 0;
       }
 
       .report-slide .report-grid .report-panel .power-static-row {
@@ -1044,7 +1143,7 @@
       }
 
       .report-slide .report-util-card {
-        margin-top: 6px;
+        margin-top: 25px;
         padding: 16px;
       }
 
@@ -1054,10 +1153,10 @@
       }
 
       .report-slide .report-util-card .report-panel {
-        min-height: 200px;
-        height: 200px;
-        max-height: 200px;
-        overflow: auto;
+        min-height: 120px;
+        height: auto;
+        max-height: none;
+        overflow: hidden;
         box-sizing: border-box;
         padding-bottom: 2px;
       }
@@ -1196,6 +1295,10 @@
         background: #84b2dc;
       }
 
+      .power-main-total {
+        background: #9ca3af;
+      }
+
       .power-main-dynamic {
         background: #e6e686;
       }
@@ -1239,6 +1342,56 @@
         gap: 6px;
         align-items: center;
         font-size: 11px;
+      }
+
+      .power-legend-row.power-meta {
+        grid-template-columns: 1fr;
+        font-size: 10px;
+        color: #374151;
+      }
+
+      .power-meta-wrap {
+        margin-top: 2px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px;
+      }
+
+      .power-meta-chip {
+        border: 1px solid #cbd5e1;
+        background: #ffffff;
+        padding: 3px 6px;
+        min-height: 28px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 1px;
+      }
+
+      .power-meta-label {
+        font-size: 9px;
+        font-weight: 800;
+        color: #475569;
+        line-height: 1.1;
+      }
+
+      .power-meta-value {
+        font-size: 10px;
+        font-weight: 800;
+        color: #0f172a;
+        line-height: 1.15;
+      }
+
+      .power-meta-chip.conf-low {
+        background: #fff7ed;
+      }
+
+      .power-meta-chip.conf-medium {
+        background: #fefce8;
+      }
+
+      .power-meta-chip.conf-high {
+        background: #ecfdf5;
       }
 
       .power-dot {
@@ -1335,9 +1488,9 @@
         display: grid;
         grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.06fr);
         gap: 8px;
-        align-items: stretch;
+        align-items: start;
         min-height: 0;
-        height: 100%;
+        height: auto;
         --util-panel-pad: 8px;
         --util-label-col: 34px;
         --util-row-gap: 4px;
@@ -1372,7 +1525,7 @@
       }
 
       .util-chart-panel {
-        overflow: auto;
+        overflow: hidden;
       }
 
       .util-chart-row {
@@ -1394,7 +1547,7 @@
 
       .util-bar-line {
         display: grid;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: minmax(0, 1fr) max-content;
         align-items: center;
         gap: var(--util-row-gap);
       }
@@ -1415,8 +1568,10 @@
         font-size: var(--util-pct-size);
         font-weight: 800;
         color: #111827;
-        min-width: var(--util-pct-min-width);
+        min-width: 0;
+        padding-left: 2px;
         text-align: right;
+        white-space: nowrap;
       }
 
       .util-axis {
@@ -1681,6 +1836,68 @@
           grid-template-columns: 1fr;
         }
       }
+
+      @media print {
+        @page {
+          size: 1000px 700px;
+          margin: 0;
+        }
+
+        html,
+        body {
+          margin: 0 !important;
+          padding: 0 !important;
+          width: 1000px !important;
+          height: auto !important;
+          overflow: visible !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+
+        .reveal {
+          width: 1000px !important;
+          height: auto !important;
+          overflow: visible !important;
+          transform: none !important;
+        }
+
+        .reveal .controls,
+        .reveal .progress,
+        .reveal .slide-number {
+          display: none !important;
+        }
+
+        .reveal .slides {
+          position: static !important;
+          width: auto !important;
+          height: auto !important;
+          transform: none !important;
+          overflow: visible !important;
+        }
+
+        .reveal .slides section {
+          position: relative !important;
+          display: block !important;
+          width: 1000px !important;
+          height: 700px !important;
+          min-height: 700px !important;
+          margin: 0 !important;
+          transform: none !important;
+          page-break-after: always;
+          break-after: page;
+          overflow: hidden !important;
+        }
+
+        .reveal .slides section:last-child {
+          page-break-after: auto;
+          break-after: auto;
+        }
+
+        .slide-frame {
+          width: 1000px !important;
+          height: 700px !important;
+        }
+      }
     </style>
   </head>
   <body>
@@ -1690,8 +1907,7 @@
     <script id="presentation-config-json" type="application/json">
 {% if presentation_config is defined %}{{ presentation_config | tojson | safe }}{% endif %}
     </script>
-
-    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.js"></script>
     <script>
       (() => {
         const defaultUtilPreviewResources = [
@@ -2126,11 +2342,45 @@
           const metaConfig = isPlainObject(safeConfig.meta) ? safeConfig.meta : {};
           const assets = isPlainObject(safeConfig.assets) ? safeConfig.assets : {};
           const modules = Array.isArray(safeConfig.modules) ? safeConfig.modules : [];
-          const moduleCount = modules.filter((item) => {
+          const moduleSlidesForToc = modules.filter((item) => {
             const safeItem = isPlainObject(item) ? item : {};
             const kind = String(safeItem.slideKind || "module").trim().toLowerCase();
             return kind !== "testbench";
-          }).length;
+          });
+          const moduleCount = moduleSlidesForToc.length;
+          const parentModuleTocItems = moduleSlidesForToc
+            .map((item) => {
+              const safeItem = isPlainObject(item) ? item : {};
+              const name = ensureText(safeItem.name, "").trim();
+              const childModules = Array.isArray(safeItem.childModules)
+                ? safeItem.childModules.filter((child) => child !== null && child !== undefined)
+                : [];
+              const childCount = childModules.length;
+              const detailLayout = String(safeItem.detailLayout || "").trim().toLowerCase();
+              const isParent = detailLayout === "parent-module" || childCount > 0;
+              return {
+                name,
+                childCount,
+                isParent
+              };
+            })
+            .filter((item) => item.isParent && item.name.length > 0);
+          const tocParentModuleLimit = 12;
+          const tocParentPreview = parentModuleTocItems.slice(0, tocParentModuleLimit);
+          const tocParentOverflowCount = Math.max(parentModuleTocItems.length - tocParentPreview.length, 0);
+          const tocModuleSubItemsHtml =
+            tocParentPreview.length > 0
+              ? tocParentPreview
+                  .map(
+                    (item, idx) =>
+                      `<li>8.${idx + 1} ${escapeHtml(item.name)} (하위 모듈 ${item.childCount}개)</li>`
+                  )
+                  .join("")
+              : `<li>8.1 [입력 필요] 중간(부모) 모듈 목록</li>`;
+          const tocParentOverflowHtml =
+            tocParentOverflowCount > 0
+              ? `<li>8.${tocParentPreview.length + 1} +${tocParentOverflowCount}개 중간(부모) 모듈</li>`
+              : "";
           const coverMeta = resolveCoverMeta(metaConfig);
           const coverTitleHtml = coverMeta.titleLine2
             ? `${escapeHtml(coverMeta.titleLine1)}<br />${escapeHtml(coverMeta.titleLine2)}`
@@ -2330,7 +2580,7 @@
                   return `
                     <section>
                       <div class="slide-frame">
-                        ${renderHeader("Testbench", `7-${testbenchIndex}. ${linkedModule}`, "07")}
+                        ${renderHeader("테스트벤치", `7-${testbenchIndex}. ${linkedModule}`, "07")}
                         <div class="col-flex testbench-layout">
                           <div class="card testbench-wave-card">
                             <h3>Waveform</h3>
@@ -2364,11 +2614,11 @@
                 const summaryItems = Array.isArray(safeModule.summary)
                   ? safeModule.summary.filter((item) => String(item || "").trim().length > 0)
                   : [];
-                const summaryLeft = summaryItems.length > 0 ? summaryItems[0] : "[Input Needed] Summary #1";
+                const summaryLeft = summaryItems.length > 0 ? summaryItems[0] : "[입력 필요] 요약 1";
                 const summaryRight =
                   summaryItems.length > 1
                     ? summaryItems.slice(1).join(" / ")
-                    : "[Input Needed] Summary #2";
+                    : "[입력 필요] 요약 2";
                 const simpleDiagramSvg = ensureText(safeModule.simpleDiagramSvg, "");
                 const fsmImage = ensureText(safeModule.fsmImage, "");
                 const hasFsmImage = fsmImage.length > 0;
@@ -2398,20 +2648,50 @@
                 const childRowCount = Math.max(1, Math.ceil(childModuleCount / 2));
                 const childLayoutPreset =
                   childRowCount <= 2
-                    ? { nameSizePx: 11, gapPx: 4, itemPadding: "3px 6px", lineHeight: 1.2 }
+                    ? { gapPx: 4, itemPadding: "3px 6px" }
                     : childRowCount === 3
-                      ? { nameSizePx: 10, gapPx: 3, itemPadding: "2px 5px", lineHeight: 1.15 }
+                      ? { gapPx: 3, itemPadding: "2px 5px" }
                       : childRowCount === 4
-                        ? { nameSizePx: 9, gapPx: 2, itemPadding: "2px 4px", lineHeight: 1.1 }
+                        ? { gapPx: 2, itemPadding: "2px 4px" }
                         : childRowCount <= 6
-                          ? { nameSizePx: 8, gapPx: 2, itemPadding: "1px 3px", lineHeight: 1.05 }
-                          : { nameSizePx: 7, gapPx: 1, itemPadding: "1px 2px", lineHeight: 1 };
+                          ? { gapPx: 2, itemPadding: "1px 3px" }
+                          : { gapPx: 1, itemPadding: "1px 2px" };
+                const childNamesForSizing = childModules.map((child, childIdx) => {
+                  if (typeof child === "string") return String(child).trim();
+                  return String(child?.name || "").trim() || `sub_module_${childIdx + 1}`;
+                });
+                const maxChildNameLen = childNamesForSizing.reduce(
+                  (acc, name) => Math.max(acc, String(name || "").length),
+                  0
+                );
+                const rowBasedBaseSize =
+                  childRowCount <= 1
+                    ? 86
+                    : childRowCount === 2
+                      ? 66
+                      : childRowCount === 3
+                        ? 52
+                        : childRowCount === 4
+                          ? 42
+                          : childRowCount <= 6
+                            ? 34
+                            : 28;
+                const nameLenScale =
+                  maxChildNameLen <= 10
+                    ? 1.0
+                    : maxChildNameLen <= 14
+                      ? 0.9
+                      : maxChildNameLen <= 20
+                        ? 0.8
+                        : maxChildNameLen <= 28
+                          ? 0.7
+                          : 0.62;
+                const fallbackChildNameSize = Math.max(16, Math.round(rowBasedBaseSize * nameLenScale));
                 const childGridStyle = [
                   `--child-grid-rows:${childRowCount}`,
                   `--child-grid-gap:${childLayoutPreset.gapPx}px`,
                   `--child-item-padding:${childLayoutPreset.itemPadding}`,
-                  `--child-name-size:${childLayoutPreset.nameSizePx}px`,
-                  `--child-name-line-height:${childLayoutPreset.lineHeight}`
+                  `--child-name-size:${fallbackChildNameSize}px`
                 ].join(";");
                 const childModulesHtml =
                   childModuleCount > 0
@@ -2424,10 +2704,10 @@
                           return `<div class="child-module-item"><p class="child-module-name">${escapeHtml(childName)}</p></div>`;
                         })
                         .join("")}</div>`
-                    : `<p>[Input Needed] childModules 목록을 입력하세요.</p>`;
+                    : `<p>[입력 필요] childModules 목록을 입력하세요.</p>`;
                 const roleCardBody = `
                   <h3>Module Role</h3>
-                  <div class="module-role-input-box">${escapeHtml(roleText || "[Input Needed] Role description")}</div>
+                  <div class="module-role-input-box">${escapeHtml(roleText || "[입력 필요] 모듈 역할(Role) 설명을 입력하세요.")}</div>
                   <div class="module-summary-grid">
                     <div class="module-summary-box">
                       <p class="module-summary-title">Summary 1</p>
@@ -2605,23 +2885,25 @@
             <section>
               <div class="slide-frame">
                 ${renderHeader("목차", "2. 발표자료 구조", "02")}
-                <div class="col-flex">
+                <div class="col-flex toc-layout">
                   <div class="card toc-card-large">
                     <h3>목차</h3>
                     <ol>
-                      <li>표지</li>
-                      <li>목차</li>
-                      <li>개발환경 및 제약조건</li>
-                      <li>구현기능</li>
-                      <li>전체 TOP 블록 다이어그램</li>
+                      <li>1. 표지</li>
+                      <li>2. 목차</li>
+                      <li>3. 개발환경 및 제약조건</li>
+                      <li>4. 구현 요약</li>
+                      <li>5. Top 블록 다이어그램</li>
                       <li>5.1 DataPath</li>
-                      <li>5.2 CLK/RESET TREE</li>
-                      <li>세부모듈 설명 (${moduleCount} 페이지)</li>
-                      <li>테스트벤치</li>
-                      <li>타이밍 다이어그램</li>
-                      <li>Power / Timing / UTILIZATION Report</li>
-                      <li>Trouble Shooting</li>
-                      <li>결론</li>
+                      <li>5.2 CLK/RESET 트리</li>
+                      <li>6. 모듈 상세 (${moduleCount}페이지)</li>
+                      ${tocModuleSubItemsHtml}
+                      ${tocParentOverflowHtml}
+                      <li>7. 테스트벤치</li>
+                      <li>8. 타이밍 다이어그램</li>
+                      <li>9. 전력 / 타이밍 / 자원 활용 리포트</li>
+                      <li>10. 트러블 슈팅</li>
+                      <li>11. 결론</li>
                     </ol>
                   </div>
                 </div>
@@ -2747,7 +3029,7 @@
 
             <section>
               <div class="slide-frame">
-                ${renderHeader("Testbench", "7. Testbench", "07")}
+                ${renderHeader("테스트벤치", "7. 테스트벤치", "07")}
                 <div class="col-flex testbench-layout">
                   <div class="card testbench-wave-card">
                     <h3>Waveform</h3>
@@ -2772,7 +3054,7 @@
 
             <section>
               <div class="slide-frame">
-                ${renderHeader("Timing", "8. Timing Diagram", "08")}
+                ${renderHeader("타이밍", "8. 타이밍 다이어그램", "08")}
                 <div class="grid-2">
                   <div class="card">
                     <h3>Timing Diagram</h3>
@@ -2818,7 +3100,7 @@
 
             <section>
               <div class="slide-frame">
-                ${renderHeader("Trouble Shooting", "10. Trouble Shooting", "10")}
+                ${renderHeader("트러블 슈팅", "10. 트러블 슈팅", "10")}
                 <div class="trouble-list">
                   ${troubleCasesHtml}
                 </div>
@@ -2827,7 +3109,7 @@
 
             <section>
               <div class="slide-frame">
-                ${renderHeader("Conclusion", "11. 결론", "11")}
+                ${renderHeader("결론", "11. 결론", "11")}
                 <div class="grid-2">
                   <div class="card">
                     <h3>핵심 결론</h3>
@@ -2845,8 +3127,13 @@
 
         function toNumber(raw) {
           if (raw === null || raw === undefined) return null;
-          const normalized = String(raw).replace(/,/g, "").trim();
+          let normalized = String(raw).replace(/,/g, "").trim();
           if (!normalized) return null;
+          normalized = normalized.replace(/\*/g, "").replace(/%/g, "").trim();
+          if (normalized.startsWith("<")) {
+            normalized = normalized.slice(1).trim();
+          }
+          if (/^(?:---|na|n\/a|unspecified|-|_)$/i.test(normalized)) return null;
           const value = Number(normalized);
           return Number.isFinite(value) ? value : null;
         }
@@ -2946,7 +3233,8 @@
             const percentRaw = toNumber(rawCells[5]);
             const percent = Number.isFinite(percentRaw) ? percentRaw : percentOf(used, available);
 
-            if (used === null && available === null && percent === null) continue;
+            // Keep only rows with explicit utilization share (% > 0).
+            if (!Number.isFinite(percent) || percent <= 0) continue;
 
             parsedRows.push({
               label,
@@ -2976,19 +3264,57 @@
         }
 
         function parsePowerReport(text) {
+          const lines = text.split(/\r?\n/);
+          const parsePowerTableValue = (labelRegex) => {
+            for (const line of lines) {
+              if (!line.includes("|")) continue;
+              const cells = line.split("|").slice(1, -1).map((v) => String(v || "").trim());
+              if (cells.length < 2) continue;
+              const label = cells[0].replace(/\*/g, "").trim();
+              if (!labelRegex.test(label)) continue;
+              const value = toNumber(cells[1]);
+              if (value !== null) return value;
+            }
+            return null;
+          };
+
+          const parsePowerTableText = (labelRegex) => {
+            for (const line of lines) {
+              if (!line.includes("|")) continue;
+              const cells = line.split("|").slice(1, -1).map((v) => String(v || "").trim());
+              if (cells.length < 2) continue;
+              const label = cells[0].replace(/\*/g, "").trim();
+              if (!labelRegex.test(label)) continue;
+              const textValue = String(cells[1] || "").trim();
+              if (textValue) return textValue;
+            }
+            return "";
+          };
+
           return {
-            totalOnChipPowerW: findMetricValue(text, /Total\s+On[- ]Chip\s+Power/i),
-            dynamicPowerW: findMetricValue(text, /(?:Total\s+)?Dynamic(?:\s+On[- ]Chip)?(?:\s+Power)?\b/i),
-            staticPowerW: findMetricValue(text, /(?:Device\s+)?Static(?:\s+Power)?\b/i),
-            clocksW: findMetricValue(text, /Clocks?\b/i),
-            signalsW: findMetricValue(text, /Signals?\b/i),
-            logicW: findMetricValue(text, /Logic\b/i),
-            bramW: findMetricValue(text, /BRAM\b/i),
-            pllW: findMetricValue(text, /PLL\b/i),
-            ioW: findMetricValue(text, /(?:I\/O|IO)\b/i),
+            totalOnChipPowerW:
+              parsePowerTableValue(/Total\s+On-?Chip\s+Power(?:\s*\(W\))?/i) ??
+              parsePowerTableValue(/^Total$/i) ??
+              findMetricValue(text, /Total\s+On[- ]Chip\s+Power/i),
+            dynamicPowerW:
+              parsePowerTableValue(/^Dynamic(?:\s*\(W\))?$/i) ??
+              findMetricValue(text, /(?:Total\s+)?Dynamic(?:\s+On[- ]Chip)?(?:\s+Power)?\b/i),
+            staticPowerW:
+              parsePowerTableValue(/^(?:Device\s+)?Static(?:\s+Power)?(?:\s*\(W\))?$/i) ??
+              findMetricValue(text, /(?:Device\s+)?Static(?:\s+Power)?\b/i),
+            clocksW: parsePowerTableValue(/^Clocks?$/i) ?? findMetricValue(text, /Clocks?\b/i),
+            signalsW: parsePowerTableValue(/^Signals?$/i) ?? findMetricValue(text, /Signals?\b/i),
+            logicW: parsePowerTableValue(/^(?:Slice\s+)?Logic$/i) ?? findMetricValue(text, /Logic\b/i),
+            bramW: parsePowerTableValue(/^BRAM$/i) ?? findMetricValue(text, /BRAM\b/i),
+            pllW: parsePowerTableValue(/^PLL$/i) ?? findMetricValue(text, /PLL\b/i),
+            ioW: parsePowerTableValue(/^(?:I\/O|IO)$/i) ?? findMetricValue(text, /(?:I\/O|IO)\b/i),
             junctionTempC: findMetricValue(text, /Junction\s+Temperature/i),
+            effectiveTjaCPerW: findMetricValue(text, /Effective\s+TJA/i),
+            maxAmbientC: findMetricValue(text, /Max\s+Ambient/i),
             thermalMarginC: findMetricValue(text, /Thermal\s+Margin/i),
-            confidenceLevel: findMetricText(text, /Confidence\s+Level/i)
+            confidenceLevel:
+              parsePowerTableText(/Confidence\s+Level/i) ||
+              findMetricText(text, /Confidence\s+Level/i)
           };
         }
 
@@ -3124,36 +3450,37 @@
           );
           const hasExplicitParts = explicitPartSum > 0;
           const dynamicBase =
-            safeDynamic !== null && safeDynamic > 0
-              ? safeDynamic
-              : hasExplicitParts
-                ? explicitPartSum
+            hasExplicitParts
+              ? explicitPartSum
+              : safeDynamic !== null && safeDynamic > 0
+                ? safeDynamic
                 : null;
-
-          if (!hasExplicitParts && dynamicBase !== null && dynamicBase > 0) {
-            dynamicPartItems = dynamicPartItems.map((item) => ({
-              ...item,
-              value: dynamicBase * item.fallbackRatio
-            }));
-          }
 
           const dynamicPct = percentOf(safeDynamic, safeTotal);
           const staticPct = percentOf(safeStatic, safeTotal);
-          const mainDynamicPct = dynamicPct !== null ? dynamicPct : safeStatic !== null ? Math.max(0, 100 - (staticPct || 0)) : 42;
-          const mainStaticPct = staticPct !== null ? staticPct : Math.max(0, 100 - mainDynamicPct);
+          const mainDynamicPct = dynamicPct !== null && dynamicPct > 0 ? dynamicPct : 0;
+          const mainStaticPct = staticPct !== null && staticPct > 0 ? staticPct : 0;
+          const hasMainShare = mainDynamicPct > 0 || mainStaticPct > 0;
 
-          const dynamicSegmentsHtml = dynamicPartItems
+          const dynamicPartVisible = dynamicPartItems
             .map((item) => {
               const pct = percentOf(item.value, dynamicBase);
-              if (pct === null || pct <= 0) return "";
-              return `<div class="power-segment ${item.css}" style="height:${pct.toFixed(2)}%"></div>`;
+              return {
+                ...item,
+                pct
+              };
+            })
+            .filter((item) => item.pct !== null && item.pct > 0);
+
+          const dynamicSegmentsHtml = dynamicPartVisible
+            .map((item) => {
+              return `<div class="power-segment ${item.css}" style="height:${item.pct.toFixed(2)}%"></div>`;
             })
             .join("");
 
-          const legendRowsHtml = dynamicPartItems
+          const legendRowsHtml = dynamicPartVisible
             .map((item) => {
-              const pct = percentOf(item.value, dynamicBase);
-              const pctText = pct === null ? "-" : `${Math.round(pct)}%`;
+              const pctText = `${Math.round(item.pct)}% of Dynamic`;
               return `
                 <div class="power-legend-row">
                   <span class="power-dot ${item.css}"></span>
@@ -3165,37 +3492,106 @@
             })
             .join("");
 
+          const totalRowHtml =
+            safeTotal !== null && safeTotal > 0
+              ? `<div class="power-legend-row">
+                  <span class="power-dot power-main-total"></span>
+                  <span class="power-legend-name">Total On-Chip:</span>
+                  <span class="power-legend-value">${escapeHtml(formatMetric(safeTotal, "W"))}</span>
+                  <span class="power-legend-pct">(100%)</span>
+                </div>`
+              : "";
+
+          const powerMetaItems = [];
+          if (Number.isFinite(parsed.junctionTempC)) {
+            powerMetaItems.push({
+              label: "Junction Temp",
+              value: formatMetric(parsed.junctionTempC, "C", 1),
+              toneClass: ""
+            });
+          }
+          if (Number.isFinite(parsed.maxAmbientC)) {
+            powerMetaItems.push({
+              label: "Max Ambient",
+              value: formatMetric(parsed.maxAmbientC, "C", 1),
+              toneClass: ""
+            });
+          }
+          if (Number.isFinite(parsed.effectiveTjaCPerW)) {
+            powerMetaItems.push({
+              label: "Effective TJA",
+              value: formatMetric(parsed.effectiveTjaCPerW, "C/W", 1),
+              toneClass: ""
+            });
+          }
+          if (Number.isFinite(parsed.thermalMarginC)) {
+            powerMetaItems.push({
+              label: "Thermal Margin",
+              value: formatMetric(parsed.thermalMarginC, "C", 1),
+              toneClass: ""
+            });
+          }
+          if (parsed.confidenceLevel && String(parsed.confidenceLevel).trim()) {
+            const confText = String(parsed.confidenceLevel).trim();
+            let toneClass = "";
+            if (/high/i.test(confText)) toneClass = "conf-high";
+            else if (/medium|med/i.test(confText)) toneClass = "conf-medium";
+            else if (/low/i.test(confText)) toneClass = "conf-low";
+            powerMetaItems.push({
+              label: "Confidence",
+              value: confText,
+              toneClass
+            });
+          }
+          const powerMetaLegendHtml =
+            powerMetaItems.length > 0
+              ? `<div class="power-meta-wrap">${powerMetaItems
+                  .map((item) => {
+                    const chipClass = `power-meta-chip ${item.toneClass || ""}`.trim();
+                    return `<div class="${chipClass}">
+                      <span class="power-meta-label">${escapeHtml(item.label)}</span>
+                      <span class="power-meta-value">${escapeHtml(item.value)}</span>
+                    </div>`;
+                  })
+                  .join("")}</div>`
+              : "";
+
           target.innerHTML = `
             <div class="power-visual">
               <p class="power-visual-title">On-Chip Power</p>
               <div class="power-visual-layout">
                 <div class="power-stack">
-                  <div class="power-segment power-main-static" style="height:${mainStaticPct.toFixed(2)}%">
+                  ${mainStaticPct > 0 ? `<div class="power-segment power-main-static" style="height:${mainStaticPct.toFixed(2)}%">
                     <span class="power-segment-label">${Math.round(mainStaticPct)}%</span>
-                  </div>
-                  <div class="power-segment power-main-dynamic" style="height:${mainDynamicPct.toFixed(2)}%">
+                  </div>` : ""}
+                  ${mainDynamicPct > 0 ? `<div class="power-segment power-main-dynamic" style="height:${mainDynamicPct.toFixed(2)}%">
                     <span class="power-segment-label">${Math.round(mainDynamicPct)}%</span>
-                  </div>
+                  </div>` : ""}
                 </div>
                 <div class="power-stack">
                   ${dynamicSegmentsHtml}
                 </div>
                 <div class="power-legend">
-                  <div class="power-legend-row">
+                  ${totalRowHtml}
+                  ${dynamicPct !== null && dynamicPct > 0 ? `<div class="power-legend-row">
                     <span class="power-dot power-main-dynamic"></span>
                     <span class="power-legend-name">Dynamic:</span>
                     <span class="power-legend-value">${escapeHtml(formatMetric(safeDynamic, "W"))}</span>
-                    <span class="power-legend-pct">(${escapeHtml(dynamicPct === null ? "-" : `${Math.round(dynamicPct)}%`)})</span>
-                  </div>
+                    <span class="power-legend-pct">(${escapeHtml(`${Math.round(dynamicPct)}%`)})</span>
+                  </div>` : ""}
                   ${legendRowsHtml}
+                  ${!hasMainShare && dynamicPartVisible.length === 0 ? `<div class="power-legend-row">
+                    <span class="power-legend-name">No share data</span>
+                  </div>` : ""}
                 </div>
               </div>
-              <div class="power-static-row">
+              ${staticPct !== null && staticPct > 0 ? `<div class="power-static-row" style="margin-top:4px; font-size:9px;">
                 <span class="power-dot power-main-static"></span>
                 <span class="power-legend-name">Device Static:</span>
                 <span class="power-legend-value">${escapeHtml(formatMetric(safeStatic, "W"))}</span>
-                <span class="power-legend-pct">(${escapeHtml(staticPct === null ? "-" : `${Math.round(staticPct)}%`)})</span>
-              </div>
+                <span class="power-legend-pct">(${escapeHtml(`${Math.round(staticPct)}%`)})</span>
+              </div>` : ""}
+              ${powerMetaLegendHtml}
             </div>
           `;
         }
@@ -3266,6 +3662,125 @@
 
           const acronym = tokens.map((token) => token[0]).join("").toUpperCase();
           return acronym.slice(0, 7) || tokens[0].toUpperCase().slice(0, 7);
+        }
+
+        function utilGroupMeta(label) {
+          const normalized = normalizeUtilLabel(label);
+          const lower = normalized.toLowerCase();
+
+          if ((/\bslice\s+luts?\b/.test(lower) || /\blut\s+as\s+logic\b/.test(lower) || /\blut\s+as\s+memory\b/.test(lower) || /^luts?$/.test(lower)) && !/lutram/.test(lower)) {
+            return {
+              key: "lut",
+              label: "LUT",
+              chartLabel: "LUT",
+              priority: /\bslice\s+luts?\b/.test(lower) ? 100 : 80,
+              order: 10
+            };
+          }
+          if (/\bslice\s+registers?\b/.test(lower) || /register\s+as\s+flip\s*flop/.test(lower) || /register\s+as\s+latch/.test(lower) || /^ff$/.test(lower) || /flip\s*flop/.test(lower)) {
+            return {
+              key: "ff",
+              label: "FF",
+              chartLabel: "FF",
+              priority: /\bslice\s+registers?\b/.test(lower) ? 100 : 80,
+              order: 20
+            };
+          }
+          if (/^slice$/.test(lower)) {
+            return { key: "slice", label: "Slice", chartLabel: "SLICE", priority: 95, order: 30 };
+          }
+          if (/bonded\s+iob|(^|[\s/_-])i\/?o($|[\s/_-])/.test(lower)) {
+            return {
+              key: "io",
+              label: "IO",
+              chartLabel: "IO",
+              priority: /bonded\s+iob/.test(lower) ? 100 : 80,
+              order: 40
+            };
+          }
+          if (/bufg/.test(lower)) {
+            return {
+              key: "bufg",
+              label: "BUFG",
+              chartLabel: "BUFG",
+              priority: /bufgctrl/.test(lower) ? 100 : 90,
+              order: 50
+            };
+          }
+          if (/^f7\s+muxes?$/.test(lower)) {
+            return { key: "f7_mux", label: "F7 Muxes", chartLabel: "F7", priority: 90, order: 60 };
+          }
+          if (/^f8\s+muxes?$/.test(lower)) {
+            return { key: "f8_mux", label: "F8 Muxes", chartLabel: "F8", priority: 90, order: 61 };
+          }
+          if (/unique\s+control\s+sets/.test(lower)) {
+            return { key: "ucs", label: "Unique Control Sets", chartLabel: "UCS", priority: 90, order: 62 };
+          }
+          if (/block\s+ram|ramb/.test(lower)) {
+            return { key: "bram", label: "BRAM", chartLabel: "BRAM", priority: 90, order: 70 };
+          }
+          if (/^dsp/.test(lower)) {
+            return { key: "dsp", label: "DSP", chartLabel: "DSP", priority: 90, order: 71 };
+          }
+          if (/mmcm/.test(lower)) {
+            return { key: "mmcm", label: "MMCM", chartLabel: "MMCM", priority: 90, order: 72 };
+          }
+          if (/pll/.test(lower)) {
+            return { key: "pll", label: "PLL", chartLabel: "PLL", priority: 90, order: 73 };
+          }
+
+          const key = normalized.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+          return {
+            key: key || "other",
+            label: normalized || "-",
+            chartLabel: compactUtilLabel(normalized || "-"),
+            priority: 60,
+            order: 90
+          };
+        }
+
+        function scoreUtilCandidate(item, meta) {
+          const priorityScore = (Number.isFinite(meta?.priority) ? meta.priority : 0) * 1000000;
+          const percentScore = (Number.isFinite(item?.percent) ? item.percent : 0) * 1000;
+          const usedScore = Number.isFinite(item?.used) ? item.used : 0;
+          return priorityScore + percentScore + usedScore;
+        }
+
+        function mergeUtilResources(resources) {
+          const merged = new Map();
+          for (const item of resources || []) {
+            if (!item || !item.label) continue;
+            const meta = utilGroupMeta(item.label);
+            const key = meta.key || normalizeUtilLabel(item.label).toLowerCase();
+            const candidate = {
+              key,
+              order: Number.isFinite(meta.order) ? meta.order : 90,
+              label: meta.label || normalizeUtilLabel(item.label),
+              chartLabel: meta.chartLabel || compactUtilLabel(item.label),
+              used: Number.isFinite(item.used) ? item.used : null,
+              available: Number.isFinite(item.available) ? item.available : null,
+              percent: Number.isFinite(item.percent) ? item.percent : null,
+              percentText:
+                Number.isFinite(item.percent)
+                  ? `${item.percent.toFixed(item.percent < 10 ? 2 : 1).replace(/\.0$/, "")}%`
+                  : "-",
+              score: scoreUtilCandidate(item, meta)
+            };
+            const prev = merged.get(key);
+            if (!prev || candidate.score > prev.score) {
+              merged.set(key, candidate);
+            }
+          }
+
+          return Array.from(merged.values())
+            .sort((a, b) => {
+              if (a.order !== b.order) return a.order - b.order;
+              const aPct = Number.isFinite(a.percent) ? a.percent : -1;
+              const bPct = Number.isFinite(b.percent) ? b.percent : -1;
+              if (aPct !== bPct) return bPct - aPct;
+              return String(a.label).localeCompare(String(b.label));
+            })
+            .map(({ key, order, score, ...rest }) => rest);
         }
 
         function renderUtilReport(target, parsed, sourcePath) {
@@ -3353,31 +3868,80 @@
             });
           }
 
-          const maxVisibleResources = 14;
-          const visibleResources = normalized.slice(0, maxVisibleResources);
+          const percentOnlyResources = normalized.filter(
+            (item) => Number.isFinite(item.percent) && item.percent > 0
+          );
+          const mergedResources = mergeUtilResources(percentOnlyResources);
+          if (mergedResources.length === 0) {
+            target.style.minHeight = "";
+            target.style.height = "";
+            target.style.maxHeight = "";
+            target.style.overflow = "";
+            target.innerHTML = `
+              <p class="report-note">
+                No utilization-share resources found in the report (percent > 0).
+              </p>
+            `;
+            return;
+          }
+
+          const visibleResources = mergedResources;
           const visibleCount = Math.max(1, visibleResources.length);
-          const densityRatio = (visibleCount - 1) / (maxVisibleResources - 1);
-          const lerp = (max, min) => max - (max - min) * densityRatio;
+          const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+          const excess = Math.max(0, visibleCount - 5);
+          const showUtilAxis = visibleCount <= 8;
           const roundPx = (value) => `${Math.max(0, value).toFixed(2)}px`;
           const roundNum = (value) => Math.max(0, value).toFixed(2);
 
+          const utilPanelPad = clamp(6 - excess * 0.5, 1, 6);
+          const utilLabelCol = clamp(34 - excess * 1.3, 18, 34);
+          const utilRowGap = clamp(3.5 - excess * 0.35, 0.4, 3.5);
+          const utilChartLabelSize = clamp(10 - excess * 0.3, 6, 10);
+          const utilTrackHeight = clamp(14 - excess * 0.9, 5, 14);
+          const utilPctSize = clamp(10 - excess * 0.3, 6, 10);
+          const utilPctMinWidth = clamp(34 - excess * 1.0, 16, 34);
+          const utilAxisGap = clamp(3 - excess * 0.25, 0.4, 3);
+          const utilAxisSize = clamp(9 - excess * 0.25, 6, 9);
+          const utilAxisTitleGap = clamp(3 - excess * 0.25, 0.4, 3);
+          const utilAxisTitleSize = clamp(9 - excess * 0.25, 6, 9);
+          const utilTableFontSize = clamp(9 - excess * 0.26, 5.8, 9);
+          const utilTableLineHeight = clamp(1.2 - excess * 0.03, 0.9, 1.2);
+          const utilTablePadY = clamp(3 - excess * 0.2, 0.5, 3);
+          const utilTablePadX = clamp(4 - excess * 0.2, 1.2, 4);
+
+          const chartRowHeight = utilTrackHeight + utilRowGap + 2;
+          const axisHeight = showUtilAxis
+            ? utilAxisGap + utilAxisSize + utilAxisTitleGap + utilAxisTitleSize + 8
+            : 0;
+          const estimatedChartPanelHeight = utilPanelPad * 2 + visibleCount * chartRowHeight + axisHeight;
+          const tableRowHeight = utilTableFontSize * utilTableLineHeight + utilTablePadY * 2 + 2;
+          const estimatedTablePanelHeight = utilPanelPad * 2 + tableRowHeight * (visibleCount + 1) + 8;
+          const desiredPanelHeight = Math.ceil(
+            clamp(Math.max(estimatedChartPanelHeight, estimatedTablePanelHeight), 92, 205)
+          );
+
           const layoutStyle = [
-            `--util-panel-pad:${roundPx(lerp(9, 4.5))}`,
-            `--util-label-col:${roundPx(lerp(38, 24))}`,
-            `--util-row-gap:${roundPx(lerp(6, 1))}`,
-            `--util-chart-label-size:${roundPx(lerp(12, 8))}`,
-            `--util-track-height:${roundPx(lerp(22, 10))}`,
-            `--util-pct-size:${roundPx(lerp(12, 8))}`,
-            `--util-pct-min-width:${roundPx(lerp(44, 26))}`,
-            `--util-axis-gap:${roundPx(lerp(5, 1))}`,
-            `--util-axis-size:${roundPx(lerp(11, 7))}`,
-            `--util-axis-title-gap:${roundPx(lerp(5, 1))}`,
-            `--util-axis-title-size:${roundPx(lerp(12, 8))}`,
-            `--util-table-font-size:${roundPx(lerp(10, 6.5))}`,
-            `--util-table-line-height:${roundNum(lerp(1.28, 1.05))}`,
-            `--util-table-pad-y:${roundPx(lerp(4, 1))}`,
-            `--util-table-pad-x:${roundPx(lerp(5, 2))}`
+            `--util-panel-pad:${roundPx(utilPanelPad)}`,
+            `--util-label-col:${roundPx(utilLabelCol)}`,
+            `--util-row-gap:${roundPx(utilRowGap)}`,
+            `--util-chart-label-size:${roundPx(utilChartLabelSize)}`,
+            `--util-track-height:${roundPx(utilTrackHeight)}`,
+            `--util-pct-size:${roundPx(utilPctSize)}`,
+            `--util-pct-min-width:${roundPx(utilPctMinWidth)}`,
+            `--util-axis-gap:${roundPx(utilAxisGap)}`,
+            `--util-axis-size:${roundPx(utilAxisSize)}`,
+            `--util-axis-title-gap:${roundPx(utilAxisTitleGap)}`,
+            `--util-axis-title-size:${roundPx(utilAxisTitleSize)}`,
+            `--util-table-font-size:${roundPx(utilTableFontSize)}`,
+            `--util-table-line-height:${roundNum(utilTableLineHeight)}`,
+            `--util-table-pad-y:${roundPx(utilTablePadY)}`,
+            `--util-table-pad-x:${roundPx(utilTablePadX)}`
           ].join(";");
+
+          target.style.minHeight = `${desiredPanelHeight}px`;
+          target.style.height = `${desiredPanelHeight}px`;
+          target.style.maxHeight = `${desiredPanelHeight}px`;
+          target.style.overflow = "hidden";
 
           const barRowsHtml = visibleResources
             .map(
@@ -3412,10 +3976,12 @@
             <div class="util-report-layout" style="${layoutStyle}">
               <div class="util-chart-panel">
                 ${barRowsHtml}
+                ${showUtilAxis ? `
                 <div class="util-axis">
                   <span>0</span><span>25</span><span>50</span><span>75</span><span>100</span>
                 </div>
                 <div class="util-axis-title">Estimated Utilization (%)</div>
+                ` : ""}
               </div>
               <div class="util-count-panel">
                 <div class="util-table-wrap">
@@ -3558,9 +4124,171 @@
           });
         }
 
+        function toFiniteNumber(value, fallback = 0) {
+          const num = Number.parseFloat(String(value));
+          return Number.isFinite(num) ? num : fallback;
+        }
+
+        function measureSingleLineFontForItem(item, label) {
+          if (!item || !label) return null;
+          const text = String(label.textContent || "").trim();
+          if (!text) return null;
+
+          const style = window.getComputedStyle(item);
+          const padX = toFiniteNumber(style.paddingLeft, 0) + toFiniteNumber(style.paddingRight, 0);
+          const padY = toFiniteNumber(style.paddingTop, 0) + toFiniteNumber(style.paddingBottom, 0);
+          const rect = item.getBoundingClientRect();
+          const rawWidth = Math.max(item.clientWidth || 0, rect.width || 0);
+          const rawHeight = Math.max(item.clientHeight || 0, rect.height || 0);
+          const availableWidth = Math.max(0, rawWidth - padX - 2);
+          const availableHeight = Math.max(0, rawHeight - padY - 2);
+          if (!Number.isFinite(availableWidth) || !Number.isFinite(availableHeight)) return null;
+          if (availableWidth <= 8 || availableHeight <= 8) return null;
+
+          const defaultSize = toFiniteNumber(window.getComputedStyle(label).fontSize, 28);
+          const minFont = 6;
+          const maxFont = Math.max(
+            minFont,
+            Math.min(140, Math.floor(availableHeight * 0.92), Math.floor(availableWidth * 0.9))
+          );
+
+          const measure = document.createElement("span");
+          measure.className = "child-module-name";
+          measure.textContent = text;
+          measure.style.position = "absolute";
+          measure.style.left = "-10000px";
+          measure.style.top = "0";
+          measure.style.visibility = "hidden";
+          measure.style.pointerEvents = "none";
+          measure.style.display = "inline-block";
+          measure.style.width = "auto";
+          measure.style.maxWidth = "none";
+          measure.style.margin = "0";
+          measure.style.padding = "0";
+          measure.style.whiteSpace = "nowrap";
+          measure.style.lineHeight = "1";
+          measure.style.overflow = "visible";
+          item.appendChild(measure);
+
+          const doesFit = (fontPx) => {
+            measure.style.fontSize = `${fontPx}px`;
+            const mrect = measure.getBoundingClientRect();
+            return (
+              Number.isFinite(mrect.width) &&
+              Number.isFinite(mrect.height) &&
+              mrect.width <= availableWidth + 0.5 &&
+              mrect.height <= availableHeight + 0.5
+            );
+          };
+
+          let best = minFont;
+          try {
+            let low = minFont;
+            let high = maxFont;
+            while (low <= high) {
+              const mid = Math.floor((low + high) / 2);
+              if (doesFit(mid)) {
+                best = mid;
+                low = mid + 1;
+              } else {
+                high = mid - 1;
+              }
+            }
+
+            if (best < minFont + 1) {
+              let trial = Math.min(maxFont, Math.floor(defaultSize));
+              while (trial > best && !doesFit(trial)) {
+                trial -= 1;
+              }
+              if (doesFit(trial)) best = trial;
+            }
+          } finally {
+            measure.remove();
+          }
+
+          return best;
+        }
+
+        function fitChildModuleGridUniform(grid) {
+          if (!grid) return 0;
+          const items = Array.from(grid.querySelectorAll(".child-module-item"));
+          if (!items.length) return 0;
+
+          const candidates = [];
+          items.forEach((item) => {
+            const label = item.querySelector(".child-module-name");
+            if (!label) return;
+            const fitSize = measureSingleLineFontForItem(item, label);
+            if (Number.isFinite(fitSize) && fitSize > 0) {
+              candidates.push(fitSize);
+            }
+          });
+
+          if (!candidates.length) return 0;
+          const uniformSize = Math.max(6, Math.floor(Math.min(...candidates)));
+
+          items.forEach((item) => {
+            const label = item.querySelector(".child-module-name");
+            if (!label) return;
+            label.style.whiteSpace = "nowrap";
+            label.style.lineHeight = "1";
+            label.style.overflow = "hidden";
+            label.style.textOverflow = "clip";
+            label.style.fontSize = `${uniformSize}px`;
+          });
+          return items.length;
+        }
+
+        function fitVisibleChildModuleNames() {
+          const activeSlide = document.querySelector(".reveal .slides section.present");
+          const scope = activeSlide || document;
+          let fitted = 0;
+          scope.querySelectorAll(".child-module-grid").forEach((grid) => {
+            fitted += fitChildModuleGridUniform(grid);
+          });
+
+          if (fitted === 0 && scope !== document) {
+            document.querySelectorAll(".child-module-grid").forEach((grid) => {
+              fitChildModuleGridUniform(grid);
+            });
+          }
+        }
+
+        let childModuleFitScheduled = false;
+        function scheduleFitAllChildModuleNames() {
+          if (childModuleFitScheduled) return;
+          childModuleFitScheduled = true;
+          window.requestAnimationFrame(() => {
+            childModuleFitScheduled = false;
+            fitVisibleChildModuleNames();
+            window.setTimeout(fitVisibleChildModuleNames, 90);
+            window.setTimeout(fitVisibleChildModuleNames, 260);
+            window.setTimeout(fitVisibleChildModuleNames, 520);
+            window.setTimeout(fitVisibleChildModuleNames, 1100);
+          });
+        }
+
+        function bindChildModuleFitObservers() {
+          if (typeof ResizeObserver !== "undefined") {
+            const ro = new ResizeObserver(() => {
+              scheduleFitAllChildModuleNames();
+            });
+            document.querySelectorAll(".child-module-grid, .child-module-item").forEach((el) => {
+              ro.observe(el);
+            });
+          }
+          if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(() => {
+              scheduleFitAllChildModuleNames();
+            });
+          }
+        }
+
         const slidesRoot = document.getElementById("slides-root");
         slidesRoot.innerHTML = buildSlides(presentationConfig);
         bindImageFallback();
+        bindChildModuleFitObservers();
+        scheduleFitAllChildModuleNames();
         loadVivadoReports(presentationConfig);
 
         const deck = new Reveal({
@@ -3575,6 +4303,11 @@
           transition: "slide",
           backgroundTransition: "fade"
         });
+
+        window.addEventListener("resize", scheduleFitAllChildModuleNames);
+        deck.on("ready", scheduleFitAllChildModuleNames);
+        deck.on("slidechanged", scheduleFitAllChildModuleNames);
+        deck.on("resize", scheduleFitAllChildModuleNames);
 
         deck.initialize();
       })();

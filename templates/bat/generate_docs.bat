@@ -10,6 +10,12 @@ if "%~1"=="" (
 
 set "TARGET_PROJECT=%~f1"
 
+echo [LEGACY] generate_docs.bat uses the old documentation generator.
+echo [LEGACY] For current report automation, use:
+echo [LEGACY]  1^) generate_report_md.bat
+echo [LEGACY]  2^) mdToReport.bat
+echo.
+
 echo ============================================================================
 echo      Verilog Documentation Generator (Centralized)
 echo ============================================================================

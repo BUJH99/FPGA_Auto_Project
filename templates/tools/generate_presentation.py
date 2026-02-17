@@ -284,27 +284,301 @@ def parse_internal_signals(module_text: str, signal_kinds: Dict[str, str]) -> No
                 signal_kinds[name] = kind
 
 
+def extract_declared_reg_logic_names(module_text: str) -> Set[str]:
+    names: Set[str] = set()
+    for m in re.finditer(r"\b(?:reg|logic)\b\s*([^;]+);", module_text, flags=re.IGNORECASE | re.DOTALL):
+        decl = m.group(1)
+        for item in split_top_level(decl, ","):
+            token = item.strip()
+            if not token:
+                continue
+            token = re.sub(r"=\s*.+$", " ", token)
+            token = re.sub(r"\[[^\]]*\]", " ", token)
+            token = re.sub(r"\b(signed|unsigned)\b", " ", token, flags=re.IGNORECASE)
+            mm = re.search(r"([A-Za-z_][A-Za-z0-9_$]*)\s*$", token)
+            if mm:
+                names.add(mm.group(1))
+    return names
+
+
+def extract_always_blocks_for_fsm(module_text: str) -> List[Dict[str, str]]:
+    blocks: List[Dict[str, str]] = []
+    pattern = re.compile(
+        r"(always\s*@\s*(?:\([^)]*\)|\*)|always_comb|always_ff|always_latch)\s*begin",
+        flags=re.IGNORECASE,
+    )
+    token_re = re.compile(r"\bbegin\b|\bend\b", flags=re.IGNORECASE)
+
+    for m in pattern.finditer(module_text):
+        matched_text = m.group(0)
+        begin_rel = matched_text.lower().rfind("begin")
+        if begin_rel < 0:
+            continue
+        begin_pos = m.start() + begin_rel
+        depth = 1
+        end_pos = -1
+        for tok in token_re.finditer(module_text, begin_pos + len("begin")):
+            word = tok.group(0).lower()
+            if word == "begin":
+                depth += 1
+            else:
+                depth -= 1
+                if depth == 0:
+                    end_pos = tok.end()
+                    break
+        if end_pos < 0:
+            continue
+
+        blocks.append(
+            {
+                "header": module_text[m.start() : begin_pos].strip(),
+                "text": module_text[begin_pos:end_pos],
+            }
+        )
+
+    return blocks
+
+
+def detect_state_vars_like_fsm_tool(module_text: str, always_blocks: Sequence[Dict[str, str]]) -> Optional[Tuple[str, str]]:
+    reg_names = extract_declared_reg_logic_names(module_text)
+    for cur in sorted(reg_names, key=lambda n: n.lower()):
+        cur_l = cur.lower()
+        if not re.search(r"(cur|state)", cur_l):
+            continue
+        preferred = [
+            f"{cur}_d",
+            f"{cur}d",
+            f"{cur}_next",
+            f"{cur}_nxt",
+            f"next_{cur}",
+            f"nxt_{cur}",
+        ]
+        for cand in preferred:
+            if cand in reg_names:
+                return cur, cand
+
+    for block in always_blocks:
+        header = block.get("header", "")
+        text = block.get("text", "")
+        if not re.search(r"(posedge|negedge)", header, flags=re.IGNORECASE):
+            continue
+        for lhs, rhs in re.findall(r"\b([A-Za-z_]\w*)\b\s*<=\s*([A-Za-z_]\w*)\b\s*;", text):
+            lhs_l = lhs.lower()
+            rhs_l = rhs.lower()
+            if lhs_l == rhs_l:
+                continue
+            if not re.search(r"(cur|state)", lhs_l):
+                continue
+            rhs_looks_next = bool(
+                re.search(r"(next|nxt)", rhs_l)
+                or rhs_l.endswith("_d")
+                or rhs_l == f"{lhs_l}_d"
+                or rhs_l == f"{lhs_l}d"
+            )
+            if rhs_looks_next:
+                return lhs, rhs
+
+    for block in always_blocks:
+        text = block.get("text", "")
+        case_m = re.search(r"\bcase\s*\(\s*([A-Za-z_]\w*)\s*\)", text, flags=re.IGNORECASE)
+        if not case_m:
+            continue
+        cur_var = case_m.group(1)
+        assign_re = re.compile(
+            rf"\b([A-Za-z_]\w*)\b\s*(?:<=|=)\s*\b{re.escape(cur_var)}\b\s*;",
+            flags=re.IGNORECASE,
+        )
+        assign_m = assign_re.search(text)
+        if assign_m:
+            return cur_var, assign_m.group(1)
+    return None
+
+
+def find_next_state_block_like_fsm_tool(
+    always_blocks: Sequence[Dict[str, str]], cur_var: str, next_var: str
+) -> Optional[Dict[str, str]]:
+    best_block: Optional[Dict[str, str]] = None
+    best_score = -1
+    next_re = re.compile(rf"\b{re.escape(next_var)}\b")
+    case_re = re.compile(rf"\bcase\s*\(\s*{re.escape(cur_var)}\s*\)", flags=re.IGNORECASE)
+    hold_re = re.compile(
+        rf"\b{re.escape(next_var)}\s*(?:<=|=)\s*{re.escape(cur_var)}\b",
+        flags=re.IGNORECASE,
+    )
+    assign_re = re.compile(rf"\b{re.escape(next_var)}\s*(?:<=|=)", flags=re.IGNORECASE)
+
+    for block in always_blocks:
+        text = block.get("text", "")
+        if not next_re.search(text):
+            continue
+        score = 0
+        if case_re.search(text):
+            score += 20
+        if hold_re.search(text):
+            score += 10
+        score += len(assign_re.findall(text))
+        if score > best_score:
+            best_score = score
+            best_block = block
+    return best_block
+
+
+def extract_case_body_for_var(text: str, var_name: str) -> str:
+    case_re = re.compile(rf"\bcase(?:x|z)?\s*\(\s*{re.escape(var_name)}\s*\)", flags=re.IGNORECASE)
+    match = case_re.search(text)
+    if not match:
+        return ""
+    start = match.end()
+    token_re = re.compile(r"\bcase(?:x|z)?\b|\bendcase\b", flags=re.IGNORECASE)
+    depth = 1
+    for token in token_re.finditer(text, start):
+        word = token.group(0).lower()
+        if word.startswith("case"):
+            depth += 1
+        else:
+            depth -= 1
+            if depth == 0:
+                return text[start : token.start()]
+    return ""
+
+
+def extract_case_labels(case_body: str) -> Set[str]:
+    labels: Set[str] = set()
+    if not case_body:
+        return labels
+    for m in re.finditer(r"^\s*([^:\n]+)\s*:", case_body, flags=re.MULTILINE):
+        raw_label = m.group(1)
+        for item in split_top_level(raw_label, ","):
+            token = item.strip()
+            if not token:
+                continue
+            if token.lower() == "default":
+                continue
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_$]*", token):
+                labels.add(token)
+    return labels
+
+
+def collect_named_state_symbols(module_text: str) -> Set[str]:
+    symbols: Set[str] = set()
+    for m in re.finditer(r"\b(?:localparam|parameter)\b([\s\S]*?);", module_text, flags=re.IGNORECASE):
+        decl = m.group(1)
+        for item in split_top_level(decl, ","):
+            assign_m = re.search(r"\b([A-Za-z_][A-Za-z0-9_$]*)\b\s*=", item)
+            if not assign_m:
+                continue
+            name = assign_m.group(1)
+            if name.isupper() or re.search(r"(state|idle|init|run|wait|done|start|stop|edit|tx|rx)", name, flags=re.IGNORECASE):
+                symbols.add(name)
+    for m in re.finditer(r"\btypedef\s+enum\b[\s\S]*?\{([\s\S]*?)\}\s*[A-Za-z_]\w*\s*;", module_text, flags=re.IGNORECASE):
+        body = m.group(1)
+        for item in split_top_level(body, ","):
+            name_m = re.match(r"\s*([A-Za-z_][A-Za-z0-9_$]*)", item)
+            if name_m:
+                symbols.add(name_m.group(1))
+    return symbols
+
+
 def detect_fsm(module_text: str, state_description: Sequence[str]) -> bool:
     if state_description:
         return True
-    has_state_case = re.search(
-        r"\bcase\s*\(\s*[A-Za-z_]\w*(?:state|cur)[A-Za-z_0-9]*\s*\)",
-        module_text,
-        flags=re.IGNORECASE,
+    always_blocks = extract_always_blocks_for_fsm(module_text)
+    if not always_blocks:
+        return False
+
+    vars_pair = detect_state_vars_like_fsm_tool(module_text, always_blocks)
+    if not vars_pair:
+        return False
+    cur_var, next_var = vars_pair
+
+    next_block = find_next_state_block_like_fsm_tool(always_blocks, cur_var, next_var)
+    if not next_block:
+        return False
+
+    block_text = next_block.get("text", "")
+    transition_targets = set(
+        re.findall(
+            rf"\b{re.escape(next_var)}\b\s*(?:<=|=)\s*([A-Za-z_][A-Za-z0-9_$]*)\b",
+            block_text,
+            flags=re.IGNORECASE,
+        )
     )
-    has_state_decl = re.search(
-        r"\b(localparam|parameter)\b[\s\S]{0,240}\b[A-Za-z_]\w*(?:state|idle|init|run|wait|done)\w*\s*=",
-        module_text,
-        flags=re.IGNORECASE,
-    )
-    has_next_assign = re.search(
-        r"\b[A-Za-z_]\w*(?:next|nxt|_d)\w*\s*(?:<=|=)\s*[A-Za-z_]\w+",
-        module_text,
-        flags=re.IGNORECASE,
-    )
-    has_always = re.search(r"\balways\s*@|\balways_comb\b", module_text, flags=re.IGNORECASE)
-    has_state_reg = re.search(r"\b(reg|logic)\b[^\n;]*\bstate\b", module_text, flags=re.IGNORECASE)
-    return bool((has_always and has_state_case) or (has_state_decl and has_next_assign) or (has_state_case and has_state_reg))
+    transition_targets.discard(cur_var)
+    if not transition_targets:
+        return False
+
+    case_body = extract_case_body_for_var(block_text, cur_var)
+    case_labels = extract_case_labels(case_body)
+    declared_states = collect_named_state_symbols(module_text)
+    known_states = case_labels | declared_states | transition_targets
+    if len(known_states) < 2:
+        return False
+
+    if case_body:
+        return bool(case_labels or transition_targets)
+    return len(transition_targets) >= 2
+
+
+def normalize_module_info_key(raw_key: str) -> str:
+    key = re.sub(r"[\s_-]+", "", raw_key.strip().lower())
+    if key in {"name", "modulename"}:
+        return "name"
+    if key in {
+        "role",
+        "modulerole",
+        "function",
+        "description",
+        "역할",
+        "모듈역할",
+        "모듈기능",
+        "기능",
+        "모듈설명",
+        "설명",
+    }:
+        return "role"
+    if key in {
+        "summary",
+        "summary1",
+        "summary2",
+        "highlights",
+        "요약",
+        "요약1",
+        "요약2",
+        "핵심요약",
+        "핵심",
+    }:
+        return "summary"
+    if key in {
+        "statedescription",
+        "state",
+        "states",
+        "fsmstate",
+        "fsmstatedescription",
+        "상태설명",
+        "상태",
+        "상태기술",
+        "상태기술설명",
+        "fsm상태",
+        "fsm상태설명",
+    }:
+        return "state"
+    return ""
+
+
+def normalize_module_info_value(value: str) -> str:
+    text = value.strip()
+    text = text.strip("`'\"")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def split_summary_value(value: str) -> List[str]:
+    if not value:
+        return []
+    if "|" in value:
+        parts = [item.strip() for item in value.split("|")]
+        return [item for item in parts if item]
+    return [value]
 
 
 def parse_module_info_block(block: str) -> Tuple[str, List[str], List[str]]:
@@ -317,36 +591,38 @@ def parse_module_info_block(block: str) -> Tuple[str, List[str], List[str]]:
         line = raw_line.strip()
         line = re.sub(r"^(?:/\*+|\*/|//+|\*+)\s*", "", line)
         line = re.sub(r"\s*\*/\s*$", "", line).strip()
+        line = re.sub(r"^\[\s*MODULE_INFO_(?:START|END)\s*\]\s*$", "", line, flags=re.IGNORECASE).strip()
         if not line:
             continue
 
-        key_match = re.match(r"^(name|role|summary|statedescription)\s*[:=]\s*(.*)$", line, flags=re.IGNORECASE)
+        key_match = re.match(r"^([A-Za-z가-힣_][A-Za-z0-9가-힣_\s-]*)\s*[:=\-]\s*(.*)$", line)
         if key_match:
-            key = key_match.group(1).lower()
-            value = key_match.group(2).strip()
-            if key == "name":
-                section = ""
-                continue
-            if key == "role":
-                role = value
-                section = ""
-                continue
-            if key == "summary":
-                section = "summary"
-                if value:
-                    summary.append(value)
-                continue
-            if key == "statedescription":
-                section = "state"
-                if value:
-                    state_description.append(value)
-                continue
+            key = normalize_module_info_key(key_match.group(1))
+            value = normalize_module_info_value(key_match.group(2))
+            if key:
+                if key == "name":
+                    section = ""
+                    continue
+                if key == "role":
+                    role = value or role
+                    section = ""
+                    continue
+                if key == "summary":
+                    section = "summary"
+                    if value:
+                        summary.extend(split_summary_value(value))
+                    continue
+                if key == "state":
+                    section = "state"
+                    if value:
+                        state_description.append(value)
+                    continue
 
-        if re.match(r"^[A-Za-z_]\w*\s*[:=]", line):
+        if re.match(r"^[A-Za-z가-힣_][A-Za-z0-9가-힣_\s-]*\s*[:=\-]", line):
             section = ""
             continue
-        if line.startswith("-"):
-            item = line[1:].strip()
+        if re.match(r"^(?:[-*•]|[0-9]+\.)\s+", line):
+            item = normalize_module_info_value(re.sub(r"^(?:[-*•]|[0-9]+\.)\s+", "", line))
             if not item:
                 continue
             if section == "summary":
@@ -355,34 +631,54 @@ def parse_module_info_block(block: str) -> Tuple[str, List[str], List[str]]:
                 state_description.append(item)
             continue
         if section == "summary":
-            summary.append(line)
+            normalized = normalize_module_info_value(line)
+            if normalized:
+                summary.append(normalized)
         elif section == "state":
-            state_description.append(line)
+            normalized = normalize_module_info_value(line)
+            if normalized:
+                state_description.append(normalized)
 
     return role, summary, state_description
+
+
+def parse_module_info_from_leading_comment(file_text: str, module_start: int) -> Tuple[str, List[str], List[str]]:
+    prefix = file_text[:module_start]
+    block_match = re.search(r"/\*([\s\S]*?)\*/\s*$", prefix, flags=re.IGNORECASE)
+    if block_match:
+        parsed = parse_module_info_block(block_match.group(1))
+        if parsed[0] or parsed[1] or parsed[2]:
+            return parsed
+    line_match = re.search(r"((?:\s*//[^\n]*\n)+)\s*$", prefix, flags=re.IGNORECASE)
+    if line_match:
+        parsed = parse_module_info_block(line_match.group(1))
+        if parsed[0] or parsed[1] or parsed[2]:
+            return parsed
+    return "", [], []
 
 
 def parse_module_info_for_span(file_text: str, module_start: int, module_end: int) -> Tuple[str, List[str], List[str]]:
     matches = list(
         re.finditer(
-            r"\[\s*MODULE_INFO_START\s*\](.*?)\[\s*MODULE_INFO_END\s*\]",
+            r"(?:\[\s*)?MODULE_INFO_START(?:\s*\])?([\s\S]*?)(?:\[\s*)?MODULE_INFO_END(?:\s*\])?",
             file_text,
             flags=re.IGNORECASE | re.DOTALL,
         )
     )
-    if not matches:
-        return "", [], []
-    inside = [m for m in matches if module_start <= m.start() and m.end() <= module_end]
-    if inside:
-        chosen = inside[0]
-        return parse_module_info_block(chosen.group(1))
-    before = [m for m in matches if m.end() <= module_start]
-    if before:
-        chosen = before[-1]
-        return parse_module_info_block(chosen.group(1))
-    after = [m for m in matches if m.start() >= module_start]
-    chosen = after[0] if after else matches[0]
-    return parse_module_info_block(chosen.group(1))
+    if matches:
+        inside = [m for m in matches if module_start <= m.start() and m.end() <= module_end]
+        if inside:
+            chosen = inside[0]
+            return parse_module_info_block(chosen.group(1))
+        before = [m for m in matches if m.end() <= module_start]
+        if before:
+            chosen = before[-1]
+            return parse_module_info_block(chosen.group(1))
+        after = [m for m in matches if m.start() >= module_start]
+        if after:
+            return parse_module_info_block(after[0].group(1))
+        return parse_module_info_block(matches[0].group(1))
+    return parse_module_info_from_leading_comment(file_text, module_start)
 
 
 def parse_instances(module_text: str, module_names: Sequence[str], current_module: str) -> List[InstanceInfo]:
@@ -742,6 +1038,13 @@ def find_first_existing_rel(presentation_dir: Path, candidates: Iterable[Path]) 
     return ""
 
 
+def find_first_existing_path(candidates: Iterable[Path]) -> Optional[Path]:
+    for item in candidates:
+        if item.exists():
+            return item
+    return None
+
+
 def dedup_paths(paths: Iterable[Path]) -> List[Path]:
     out: List[Path] = []
     seen: Set[str] = set()
@@ -1070,6 +1373,7 @@ def build_module_slides(
         mod = modules_by_name[name]
         children = build_sorted_children(mod, modules_by_name, rank)
         layout = module_layout(mod, modules_by_name)
+        is_top_module = name == top_name
 
         simple_svg = resolve_module_simple_image(
             module_name=name,
@@ -1083,15 +1387,15 @@ def build_module_slides(
             presentation_dir=presentation_dir,
             image_index=image_index,
         )
-        role_text = mod.role.strip() if mod.role.strip() else "[Input Needed] Role comment not found."
+        role_text = mod.role.strip() if mod.role.strip() else "[입력 필요] MODULE_INFO 주석의 역할(Role)을 입력하세요."
         summary_items = [item for item in mod.summary if item.strip()]
         if not summary_items:
             summary_items = [
-                "[Input Needed] Summary #1",
-                "[Input Needed] Summary #2",
+                "[입력 필요] 요약 1",
+                "[입력 필요] 요약 2",
             ]
         elif len(summary_items) == 1:
-            summary_items.append("[Input Needed] Summary #2")
+            summary_items.append("[입력 필요] 요약 2")
 
         child_modules = [
             {
@@ -1101,24 +1405,26 @@ def build_module_slides(
             for child in children
         ]
 
-        slides.append(
-            {
-                "slideKind": "module",
-                "name": name,
-                "role": role_text,
-                "summary": summary_items,
-                "stateDescription": mod.state_description,
-                "simpleDiagramSvg": simple_svg,
-                "fsmImage": fsm_svg,
-                "detailLayout": layout,
-                "childModules": child_modules,
-            }
-        )
+        # TOP module is explained by Top Block Diagram slide, so skip detail slide generation.
+        if not is_top_module:
+            slides.append(
+                {
+                    "slideKind": "module",
+                    "name": name,
+                    "role": role_text,
+                    "summary": summary_items,
+                    "stateDescription": mod.state_description,
+                    "simpleDiagramSvg": simple_svg,
+                    "fsmImage": fsm_svg,
+                    "detailLayout": layout,
+                    "childModules": child_modules,
+                }
+            )
 
         for child in children:
             emit_module(child)
 
-        if layout == "parent-module":
+        if (not is_top_module) and layout == "parent-module":
             for tb_file in tb_map.get(name, []):
                 waveform = choose_waveform_asset(project_root, name, tb_file, presentation_dir)
                 slides.append(
@@ -1168,6 +1474,352 @@ def collect_tb_mapping(project_root: Path, module_names: Sequence[str]) -> Dict[
     return mapped
 
 
+def to_optional_float(raw: str) -> Optional[float]:
+    text = str(raw or "").replace(",", "").strip()
+    if not text:
+        return None
+    text = text.replace("*", "").strip()
+    if text.startswith("<"):
+        text = text[1:].strip()
+    if text.endswith("%"):
+        text = text[:-1].strip()
+    if text.lower() in {"---", "na", "n/a", "unspecified", "-", "_"}:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def find_metric_value(text: str, patterns: Sequence[str]) -> Optional[float]:
+    lines = text.splitlines()
+    for line in lines:
+        for pattern in patterns:
+            if not re.search(pattern, line, flags=re.IGNORECASE):
+                continue
+            tail = re.sub(pattern, " ", line, flags=re.IGNORECASE)
+            m = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", tail)
+            if m:
+                value = to_optional_float(m.group(0))
+                if value is not None:
+                    return value
+    return None
+
+
+def find_metric_text(text: str, patterns: Sequence[str]) -> str:
+    lines = text.splitlines()
+    for line in lines:
+        for pattern in patterns:
+            m = re.search(pattern, line, flags=re.IGNORECASE)
+            if not m:
+                continue
+            tail = line[m.end() :].replace("|", " ").replace(":", " ").replace("=", " ").strip()
+            if tail:
+                parts = [p.strip() for p in re.split(r"\s{2,}", tail) if p.strip()]
+                return parts[0] if parts else tail
+    return ""
+
+
+def find_metric_numbers(text: str, pattern: str) -> List[float]:
+    lines = text.splitlines()
+    for line in lines:
+        if not re.search(pattern, line, flags=re.IGNORECASE):
+            continue
+        tail = re.sub(pattern, " ", line, flags=re.IGNORECASE)
+        matches = re.findall(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", tail)
+        out = [v for v in (to_optional_float(x) for x in matches) if v is not None]
+        if out:
+            return out
+    return []
+
+
+def percent_of(part: Optional[float], total: Optional[float]) -> Optional[float]:
+    if part is None or total is None or total <= 0:
+        return None
+    raw = (part / total) * 100.0
+    return max(0.0, min(100.0, raw))
+
+
+def parse_power_table_value(text: str, label_pattern: str) -> Optional[float]:
+    matcher = re.compile(label_pattern, flags=re.IGNORECASE)
+    for line in text.splitlines():
+        if "|" not in line:
+            continue
+        cells = [c.strip() for c in line.split("|")[1:-1]]
+        if len(cells) < 2:
+            continue
+        label = re.sub(r"\s+", " ", cells[0].replace("*", " ")).strip()
+        if not matcher.fullmatch(label):
+            continue
+        value = to_optional_float(cells[1])
+        if value is not None:
+            return value
+    return None
+
+
+def first_not_none(*values: Optional[float]) -> Optional[float]:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def parse_power_report_text(text: str) -> Dict[str, object]:
+    total_from_table = parse_power_table_value(text, r"(?:Total|Total\s+On-Chip\s+Power\s*\(W\))")
+    dynamic_from_table = parse_power_table_value(text, r"Dynamic(?:\s*\(W\))?")
+    static_from_table = parse_power_table_value(text, r"(?:Device\s+)?Static(?:\s+Power)?(?:\s*\(W\))?")
+    clocks_from_table = parse_power_table_value(text, r"Clocks?")
+    signals_from_table = parse_power_table_value(text, r"Signals?")
+    logic_from_table = parse_power_table_value(text, r"(?:Slice\s+Logic|Logic)")
+    io_from_table = parse_power_table_value(text, r"(?:I/O|IO)")
+
+    return {
+        "totalOnChipPowerW": first_not_none(
+            total_from_table,
+            find_metric_value(text, [r"Total\s+On[- ]Chip\s+Power"]),
+        ),
+        "dynamicPowerW": first_not_none(
+            dynamic_from_table,
+            find_metric_value(text, [r"(?:Total\s+)?Dynamic(?:\s+On[- ]Chip)?(?:\s+Power)?\b"]),
+        ),
+        "staticPowerW": first_not_none(
+            static_from_table,
+            find_metric_value(text, [r"(?:Device\s+)?Static(?:\s+Power)?\b"]),
+        ),
+        "clocksW": first_not_none(clocks_from_table, find_metric_value(text, [r"\bClocks?\b"])),
+        "signalsW": first_not_none(signals_from_table, find_metric_value(text, [r"\bSignals?\b"])),
+        "logicW": first_not_none(logic_from_table, find_metric_value(text, [r"\bLogic\b"])),
+        "bramW": find_metric_value(text, [r"\bBRAM\b"]),
+        "pllW": find_metric_value(text, [r"\bPLL\b"]),
+        "ioW": first_not_none(io_from_table, find_metric_value(text, [r"\b(?:I/O|IO)\b"])),
+        "junctionTempC": find_metric_value(text, [r"Junction\s+Temperature"]),
+        "effectiveTjaCPerW": find_metric_value(text, [r"Effective\s+TJA"]),
+        "maxAmbientC": find_metric_value(text, [r"Max\s+Ambient"]),
+        "thermalMarginC": find_metric_value(text, [r"Thermal\s+Margin"]),
+        "confidenceLevel": find_metric_text(text, [r"Confidence\s+Level"]),
+    }
+
+
+def parse_design_timing_summary_row(text: str) -> Dict[str, Optional[float]]:
+    lines = text.splitlines()
+    max_scan = 96
+    for idx, line in enumerate(lines):
+        if not re.search(r"\bDesign\s+Timing\s+Summary\b", line, flags=re.IGNORECASE):
+            continue
+        section = lines[idx : min(len(lines), idx + max_scan)]
+
+        header_idx = -1
+        for rel_idx, candidate in enumerate(section):
+            if re.search(r"\bWNS\s*\(ns\)", candidate, flags=re.IGNORECASE) and re.search(
+                r"\bTPWS(?:\s*\(ns\))?", candidate, flags=re.IGNORECASE
+            ):
+                header_idx = rel_idx
+                break
+        if header_idx < 0:
+            continue
+
+        for data_line in section[header_idx + 1 : header_idx + 14]:
+            values = [to_optional_float(v) for v in re.findall(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", data_line)]
+            nums = [v for v in values if v is not None]
+            if len(nums) < 12:
+                continue
+            return {
+                "wnsNs": nums[0],
+                "tnsNs": nums[1],
+                "failingEndpoints": nums[2],
+                "totalEndpoints": nums[3],
+                "whsNs": nums[4],
+                "thsNs": nums[5],
+                "wpwsNs": nums[8],
+                "tpwsNs": nums[9],
+            }
+    return {}
+
+
+def parse_timing_detail_line(text: str, label: str) -> Dict[str, Optional[float]]:
+    pattern = re.compile(
+        rf"^\s*{re.escape(label)}\s*:\s*(\d+)\s+Failing\s+Endpoints,\s*Worst\s+Slack\s*"
+        r"([-+]?\d*\.?\d+)\s*ns,\s*Total\s+Violation\s*([-+]?\d*\.?\d+)\s*ns",
+        flags=re.IGNORECASE,
+    )
+    for line in text.splitlines():
+        m = pattern.search(line)
+        if not m:
+            continue
+        return {
+            "failing": to_optional_float(m.group(1)),
+            "worst": to_optional_float(m.group(2)),
+            "total": to_optional_float(m.group(3)),
+        }
+    return {}
+
+
+def parse_timing_report_text(text: str) -> Dict[str, object]:
+    summary_row = parse_design_timing_summary_row(text)
+    setup_detail = parse_timing_detail_line(text, "Setup")
+    hold_detail = parse_timing_detail_line(text, "Hold")
+    pw_detail = parse_timing_detail_line(text, "PW")
+
+    wns = summary_row.get("wnsNs")
+    tns = summary_row.get("tnsNs")
+    whs = summary_row.get("whsNs")
+    ths = summary_row.get("thsNs")
+    wpws = summary_row.get("wpwsNs")
+    tpws = summary_row.get("tpwsNs")
+    failing = summary_row.get("failingEndpoints")
+    total = summary_row.get("totalEndpoints")
+
+    if wns is None:
+        wns = setup_detail.get("worst")
+    if tns is None:
+        tns = setup_detail.get("total")
+    if whs is None:
+        whs = hold_detail.get("worst")
+    if ths is None:
+        ths = hold_detail.get("total")
+    if wpws is None:
+        wpws = pw_detail.get("worst")
+    if tpws is None:
+        tpws = pw_detail.get("total")
+    if failing is None:
+        failing = setup_detail.get("failing")
+
+    return {
+        "wnsNs": wns if wns is not None else find_metric_value(text, [r"\bWNS(?:\s*\(ns\))?\b"]),
+        "tnsNs": tns if tns is not None else find_metric_value(text, [r"\bTNS(?:\s*\(ns\))?\b"]),
+        "whsNs": whs if whs is not None else find_metric_value(text, [r"\bWHS(?:\s*\(ns\))?\b"]),
+        "thsNs": ths if ths is not None else find_metric_value(text, [r"\bTHS(?:\s*\(ns\))?\b"]),
+        "wpwsNs": wpws if wpws is not None else find_metric_value(text, [r"\bWPWS(?:\s*\(ns\))?\b"]),
+        "tpwsNs": tpws if tpws is not None else find_metric_value(text, [r"\bTPWS(?:\s*\(ns\))?\b"]),
+        "failingEndpoints": failing if failing is not None else find_metric_value(text, [r"Failing\s+Endpoints"]),
+        "totalEndpoints": total if total is not None else find_metric_value(text, [r"Total\s+Endpoints"]),
+    }
+
+
+def normalize_util_label(raw: str) -> str:
+    return re.sub(r"\s+", " ", str(raw or "").replace("*", " ")).strip()
+
+
+def parse_util_table_rows(text: str) -> List[Dict[str, object]]:
+    rows: List[Dict[str, object]] = []
+    inside = False
+    for line in text.splitlines():
+        if (
+            re.search(r"\|\s*Site\s+Type\s*\|", line, flags=re.IGNORECASE)
+            and re.search(r"\|\s*Used\s*\|", line, flags=re.IGNORECASE)
+            and re.search(r"\|\s*Available\s*\|", line, flags=re.IGNORECASE)
+            and re.search(r"\|\s*Util%?\s*\|", line, flags=re.IGNORECASE)
+        ):
+            inside = True
+            continue
+        if not inside:
+            continue
+        trimmed = line.strip()
+        if not trimmed:
+            inside = False
+            continue
+        if "|" not in line or re.match(r"^\+-+", trimmed):
+            continue
+        cells = [c.strip() for c in line.split("|")[1:-1]]
+        if len(cells) < 6:
+            continue
+        label = normalize_util_label(cells[0])
+        if not label or re.fullmatch(r"site\s*type", label, flags=re.IGNORECASE):
+            continue
+        used = to_optional_float(cells[1])
+        available = to_optional_float(cells[4])
+        percent_raw = to_optional_float(cells[5])
+        percent = percent_raw if percent_raw is not None else percent_of(used, available)
+        # Keep only rows with utilization share (% > 0).
+        if percent is None or percent <= 0:
+            continue
+        rows.append({"label": label, "used": used, "available": available, "percent": percent})
+
+    deduped: List[Dict[str, object]] = []
+    seen: Set[str] = set()
+    for row in rows:
+        key = str(row["label"]).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(row)
+    return deduped
+
+
+def parse_util_row_numbers(text: str, pattern: str) -> Dict[str, Optional[float]]:
+    nums = find_metric_numbers(text, pattern)
+    used = nums[0] if len(nums) > 0 else None
+    available = nums[1] if len(nums) > 1 else None
+    percent = nums[2] if len(nums) > 2 else percent_of(used, available)
+    return {"used": used, "available": available, "percent": percent}
+
+
+def parse_util_report_text(text: str) -> Dict[str, object]:
+    util_resources = parse_util_table_rows(text)
+
+    def pick_row(label_pattern: str) -> Optional[Dict[str, object]]:
+        for row in util_resources:
+            if re.search(label_pattern, str(row.get("label", "")), flags=re.IGNORECASE):
+                return row
+        return None
+
+    lut_row = pick_row(r"\b(?:slice\s+luts?|luts?)\b")
+    ff_row = pick_row(r"\b(?:slice\s+registers?|registers?|ff)\b")
+    io_row = pick_row(r"\b(?:bonded\s+iobs?|i/o|io)\b")
+    bufg_row = pick_row(r"\b(?:bufgctrl|bufg)\b")
+
+    lut = lut_row or parse_util_row_numbers(text, r"(?:^|[|\s])(?:Slice\s+LUTs?|LUT)\b(?!RAM)")
+    ff = ff_row or parse_util_row_numbers(text, r"(?:^|[|\s])(?:Slice\s+Registers?|FF)\b")
+    io = io_row or parse_util_row_numbers(text, r"(?:^|[|\s])(?:Bonded\s+IOBs?|I/O|IO)\b")
+    bufg = bufg_row or parse_util_row_numbers(text, r"(?:^|[|\s])BUFG(?:CTRL)?s?\b")
+
+    lut_used = lut.get("used") if isinstance(lut, dict) else None
+    lut_avail = lut.get("available") if isinstance(lut, dict) else None
+    lut_pct = lut.get("percent") if isinstance(lut, dict) else None
+    ff_used = ff.get("used") if isinstance(ff, dict) else None
+    ff_avail = ff.get("available") if isinstance(ff, dict) else None
+    ff_pct = ff.get("percent") if isinstance(ff, dict) else None
+    io_used = io.get("used") if isinstance(io, dict) else None
+    io_avail = io.get("available") if isinstance(io, dict) else None
+    io_pct = io.get("percent") if isinstance(io, dict) else None
+    bufg_used = bufg.get("used") if isinstance(bufg, dict) else None
+    bufg_avail = bufg.get("available") if isinstance(bufg, dict) else None
+    bufg_pct = bufg.get("percent") if isinstance(bufg, dict) else None
+
+    return {
+        "lutUsed": lut_used,
+        "lutAvailable": lut_avail,
+        "lutPct": lut_pct,
+        "ffUsed": ff_used,
+        "ffAvailable": ff_avail,
+        "ffPct": ff_pct,
+        "ioUsed": io_used,
+        "ioAvailable": io_avail,
+        "ioPct": io_pct,
+        "bufgUsed": bufg_used,
+        "bufgAvailable": bufg_avail,
+        "bufgPct": bufg_pct,
+        "utilResources": util_resources,
+        "sliceLuts": lut_used,
+        "sliceRegisters": ff_used,
+        "bondedIob": io_used,
+        "bufg": bufg_used,
+    }
+
+
+def parse_report_file(path: Optional[Path], parser) -> Dict[str, object]:
+    if path is None or not path.exists():
+        return {}
+    try:
+        text = read_text_autodetect(path)
+    except Exception:
+        return {}
+    try:
+        return parser(text)
+    except Exception:
+        return {}
+
+
 def build_presentation_config(
     project_root: Path,
     top_name: str,
@@ -1199,19 +1851,43 @@ def build_presentation_config(
         ],
     )
 
-    power_report = find_first_existing_rel(
-        presentation_dir, [project_root / "output" / "reports" / "power_report.rpt"]
+    power_candidates = [
+        project_root / "output" / "reports" / "power_report.rpt",
+        project_root / "output" / "reports" / "post_route_power.rpt",
+    ]
+    timing_candidates = [
+        project_root / "output" / "reports" / "timing_summary.rpt",
+        project_root / "output" / "reports" / "post_route_timing_summary.rpt",
+        project_root / "output" / "reports" / "timing_report.rpt",
+    ]
+    util_candidates = [
+        project_root / "output" / "reports" / "post_route_util.rpt",
+        project_root / "output" / "reports" / "post_route_utilization.rpt",
+        project_root / "output" / "reports" / "post_place_util.rpt",
+        project_root / "output" / "reports" / "post_synth_util.rpt",
+        project_root / "output" / "reports" / "utilization_report.rpt",
+    ]
+    power_report_path = find_first_existing_path(power_candidates)
+    timing_report_path = find_first_existing_path(timing_candidates)
+    util_report_path = find_first_existing_path(util_candidates)
+    power_report = (
+        os.path.relpath(power_report_path, presentation_dir).replace("\\", "/")
+        if power_report_path
+        else ""
     )
-    timing_report = find_first_existing_rel(
-        presentation_dir, [project_root / "output" / "reports" / "timing_summary.rpt"]
+    timing_report = (
+        os.path.relpath(timing_report_path, presentation_dir).replace("\\", "/")
+        if timing_report_path
+        else ""
     )
-    util_report = find_first_existing_rel(
-        presentation_dir,
-        [
-            project_root / "output" / "reports" / "post_place_util.rpt",
-            project_root / "output" / "reports" / "post_synth_util.rpt",
-        ],
+    util_report = (
+        os.path.relpath(util_report_path, presentation_dir).replace("\\", "/")
+        if util_report_path
+        else ""
     )
+    parsed_power_report = parse_report_file(power_report_path, parse_power_report_text)
+    parsed_timing_report = parse_report_file(timing_report_path, parse_timing_report_text)
+    parsed_util_report = parse_report_file(util_report_path, parse_util_report_text)
 
     module_slides = build_module_slides(
         top_name=top_name,
@@ -1304,6 +1980,17 @@ def build_presentation_config(
             "powerReportRpt": power_report,
             "timingReportRpt": timing_report,
             "utilReportRpt": util_report,
+        },
+        "reportData": {
+            "power": parsed_power_report,
+            "timing": parsed_timing_report,
+            "util": parsed_util_report,
+        },
+        "reportPreview": {
+            "enableOnLoadFail": True,
+            "power": parsed_power_report,
+            "timing": parsed_timing_report,
+            "util": parsed_util_report,
         },
         "modules": module_slides,
     }

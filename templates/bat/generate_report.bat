@@ -18,6 +18,12 @@ set "REPORT_LOG=%LOG_DIR%\report_gen_standalone.log"
 set "REPORT_JOU=%LOG_DIR%\report_gen_standalone.jou"
 call :route_vivado_artifacts
 
+echo [LEGACY] This script is for Vivado build-report HTML parsing flow.
+echo [LEGACY] One Source report flow:
+echo [LEGACY]  1^) generate_report_md.bat
+echo [LEGACY]  2^) mdToReport.bat
+echo.
+
 echo ===============================================================================
 echo  [REPORT] Generating HTML Report from existing logs...
 echo ===============================================================================

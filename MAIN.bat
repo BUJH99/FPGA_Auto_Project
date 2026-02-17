@@ -107,15 +107,24 @@ call :ADD_MENU_ITEM 2 "create_tb_template.bat"
 call :ADD_MENU_ITEM 3 "draw_schematic.bat"
 call :ADD_MENU_ITEM 4 "browse_verilog_hierarchy.bat"
 call :ADD_MENU_ITEM 5 "print_verilog_hierarchy.bat"
-call :ADD_MENU_ITEM 6 "generate_docs.bat"
-call :ADD_MENU_ITEM 18 "generate_presentation.bat"
 call :ADD_MENU_ITEM 15 "draw_fsm.bat"
+call :ADD_MENU_ITEM 18 "generate_presentation.bat"
 echo.
 
-echo %Yellow%[ Simulation ^& Reporting ]%Reset%
+echo %Yellow%[ Simulation ]%Reset%
 call :ADD_MENU_ITEM 7 "run_icarus_simulation.bat"
 call :ADD_MENU_ITEM 8 "auto_sim_and_report.bat"
+echo.
+
+echo %Yellow%[ Report Automation ^(One Source^) ]%Reset%
+call :ADD_MENU_ITEM 20 "annotate_hdl_info.bat"
+call :ADD_MENU_ITEM 17 "generate_report_md.bat"
+call :ADD_MENU_ITEM 19 "mdToReport.bat"
+echo.
+
+echo %Yellow%[ Legacy Report ^(Vivado HTML / Old Docs^) ]%Reset%
 call :ADD_MENU_ITEM 9 "generate_report.bat"
+call :ADD_MENU_ITEM 6 "generate_docs.bat"
 echo.
 
 echo %Yellow%[ Vivado Flow ^& FPGA ]%Reset%
