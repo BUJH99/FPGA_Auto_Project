@@ -164,97 +164,64 @@ echo   - output\Diagram\Detailed\  (Detailed internal diagrams)
 echo   - output\Diagram\JSON\      (Intermediate JSON files)
 echo.
 
-REM Loop through each requested module
+set "RUN_SCHEMATIC_PS=%~dp0..\tools\run_schematic_jobs.ps1"
+if not exist "%RUN_SCHEMATIC_PS%" (
+    echo [ERROR] Missing worker script: "%RUN_SCHEMATIC_PS%"
+    exit /b 1
+)
+
+for %%I in ("%NETLISTSVG_CMD%") do set "NETLISTSVG_CMD=%%~fI"
+
+set "MODULES_CSV="
+set /a SELECTED_COUNT=0
 for %%M in (%USER_INPUT%) do (
-    echo --------------------------------------------------------
-    echo  Processing Module: %%M
-    echo --------------------------------------------------------
-    
-    REM Find the source file for this module
-    set "SOURCE_FILE="
-    for %%F in (src\*.v) do (
-        findstr /i /c:"module %%M" "%%F" >nul 2>&1
-        if !errorlevel! equ 0 (
-            set "SOURCE_FILE=%%F"
-        )
-    )
-    
-    if "!SOURCE_FILE!"=="" (
-        echo [ERROR] Could not find source file for module %%M
-        goto :next_module
-    )
-    
-    echo [INFO] Found %%M in !SOURCE_FILE!
-    
-    REM Check if this module has sub-modules (instantiates other modules)
-    REM Use PowerShell to avoid findstr stdin hang issue
-    set "HAS_SUBMODULES=0"
-    for /f %%R in ('powershell -NoProfile -Command "$lines = Get-Content '!SOURCE_FILE!'; $found = 0; foreach ($l in $lines) { if ($l -match '^\s*[a-zA-Z_]\w+\s+[a-zA-Z_]\w+\s*\(' -and $l -notmatch '^\s*(module|function|task|input|output|inout|wire|reg|logic|assign|always|initial|localparam|parameter|generate|if|else|for|case|begin|end)\b') { $found = 1; break } }; $found"') do (
-        set "HAS_SUBMODULES=%%R"
-    )
-    
-    if !HAS_SUBMODULES! equ 1 (
-        echo [INFO] Module %%M has sub-modules - generating detailed and simple versions
+    set /a SELECTED_COUNT+=1
+    if defined MODULES_CSV (
+        set "MODULES_CSV=!MODULES_CSV!,%%M"
     ) else (
-        echo [INFO] Module %%M is a leaf module - generating detailed and simple versions
+        set "MODULES_CSV=%%M"
     )
-    
-    REM === Generate DETAILED version (always) ===
-    set "JSON_FILE=output\Diagram\JSON\output_%%M.json"
-    set "SVG_DETAILED=output\Diagram\Detailed\%%M_detailed.svg"
-    set "DRAWIO_DETAILED=output\Diagram\Detailed\%%M_detailed.drawio"
-    
-    echo [INFO] Generating detailed diagram...
-    if exist "!JSON_FILE!" del /q "!JSON_FILE!" >nul 2>&1
-    %YOSYS_CMD% -p "read_verilog -sv %VERILOG_FILES%; hierarchy -top %%M; proc; opt; write_json !JSON_FILE!" >nul 2>&1
-    if !errorlevel! neq 0 (
-        echo [ERROR] Yosys synthesis failed for %%M
+)
+
+if !SELECTED_COUNT! lss 1 (
+    echo [ERROR] No modules selected.
+    exit /b 1
+)
+
+set /a AUTO_MAX_PARALLEL=%NUMBER_OF_PROCESSORS%
+if !AUTO_MAX_PARALLEL! gtr !SELECTED_COUNT! set /a AUTO_MAX_PARALLEL=!SELECTED_COUNT!
+if !AUTO_MAX_PARALLEL! lss 1 set /a AUTO_MAX_PARALLEL=1
+
+set "MAX_PARALLEL=!AUTO_MAX_PARALLEL!"
+if defined SCHEMATIC_MAX_JOBS (
+    set "MAX_PARALLEL_INPUT=%SCHEMATIC_MAX_JOBS%"
+    set "MAX_PARALLEL_INPUT=!MAX_PARALLEL_INPUT: =!"
+    set "MAX_PARALLEL_SANITIZE="
+    for /f "delims=0123456789" %%A in ("!MAX_PARALLEL_INPUT!") do set "MAX_PARALLEL_SANITIZE=%%A"
+    if defined MAX_PARALLEL_SANITIZE (
+        echo [WARN] Invalid SCHEMATIC_MAX_JOBS value: %SCHEMATIC_MAX_JOBS%
+        echo [WARN] Using auto worker count: !MAX_PARALLEL!
     ) else (
-        echo [INFO] Cleaning JSON...
-        powershell -ExecutionPolicy Bypass -File "%~dp0..\tools\process_schematic.ps1" -JsonPath "!JSON_FILE!"
-        
-        echo [INFO] Generating detailed SVG...
-        if exist "!SVG_DETAILED!" del /q "!SVG_DETAILED!" >nul 2>&1
-        call node "%NETLISTSVG_CMD%" "!JSON_FILE!" --skin "%~dp0..\tools\skin.svg" -o "!SVG_DETAILED!"
-        if !errorlevel! neq 0 (
-            echo [ERROR] netlistsvg generation failed for %%M
-        ) else (
-            if exist "!SVG_DETAILED!" (
-                echo [SUCCESS] Generated !SVG_DETAILED!
-                echo [INFO] Converting detailed to Draw.io...
-                node "%~dp0..\tools\svg2drawio.js" "!SVG_DETAILED!" "!DRAWIO_DETAILED!"
-                if exist "!DRAWIO_DETAILED!" (
-                    echo [SUCCESS] Generated !DRAWIO_DETAILED!
-                ) else (
-                    echo [WARN] Detailed Draw.io conversion failed for %%M
-                )
-            ) else (
-                echo [ERROR] Failed to generate detailed SVG for %%M
-            )
-        )
+        set "MAX_PARALLEL=!MAX_PARALLEL_INPUT!"
+        echo [INFO] SCHEMATIC_MAX_JOBS override detected: !MAX_PARALLEL!
     )
-    
-    REM === Generate SIMPLE version ===
-    set "SVG_SIMPLE=output\Diagram\Simple\%%M.svg"
-    set "DRAWIO_SIMPLE=output\Diagram\Simple\%%M.drawio"
-    
-    echo [INFO] Generating simple diagram...
-    powershell -ExecutionPolicy Bypass -File "%~dp0..\tools\generate_simple_svg.ps1" -VerilogFile "!SOURCE_FILE!" -OutputSvg "!SVG_SIMPLE!"
-    
-    if exist "!SVG_SIMPLE!" (
-        echo [SUCCESS] Generated !SVG_SIMPLE!
-        
-        echo [INFO] Converting simple to Draw.io...
-        node "%~dp0..\tools\svg2drawio.js" "!SVG_SIMPLE!" "!DRAWIO_SIMPLE!"
-        if exist "!DRAWIO_SIMPLE!" (
-            echo [SUCCESS] Generated !DRAWIO_SIMPLE!
-        )
-    ) else (
-        echo [ERROR] Failed to generate simple SVG for %%M
-    )
-    
-    :next_module
-    echo.
+)
+
+echo [INFO] Selected modules: !SELECTED_COUNT!
+echo [INFO] Parallel workers target: !MAX_PARALLEL!
+echo [INFO] Per-module logs: output\Diagram\logs
+echo.
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%RUN_SCHEMATIC_PS%" ^
+    -ProjectPath "%TARGET_PROJECT%" ^
+    -ModulesCsv "!MODULES_CSV!" ^
+    -YosysCmd "%YOSYS_CMD%" ^
+    -NetlistSvgCmd "%NETLISTSVG_CMD%" ^
+    -MaxParallel "!MAX_PARALLEL!"
+
+if errorlevel 1 (
+    echo [ERROR] Schematic generation completed with errors.
+    exit /b 1
 )
 
 echo [INFO] All tasks completed.

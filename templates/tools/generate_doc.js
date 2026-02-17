@@ -68,6 +68,12 @@ function appendSectionToc(mdContent, tocItems) {
     return mdContent;
 }
 
+function getSubmoduleSourceLink(moduleName) {
+    const sourcePath = path.join(SRC_DIR, `${moduleName}.v`);
+    if (!fs.existsSync(sourcePath)) return null;
+    return path.relative(DOC_DIR, sourcePath).replace(/\\/g, '/');
+}
+
 // Main Function
 function generateMarkdown(filePath) {
     const content = fs.readFileSync(filePath, 'utf-8');
@@ -461,7 +467,15 @@ function generateMarkdown(filePath) {
         // instMatch[1] is the potential Module Name
         // instMatch[2] is the potential Instance Name
         if (!invalidKeywords.has(instMatch[1])) {
-            submodules.push(`- **${instMatch[1]}** (${instMatch[2]})`);
+            const submoduleName = instMatch[1];
+            const instanceName = instMatch[2];
+            const sourceLink = getSubmoduleSourceLink(submoduleName);
+
+            if (sourceLink) {
+                submodules.push(`- [**${submoduleName}**](${sourceLink}) (${instanceName})`);
+            } else {
+                submodules.push(`- **${submoduleName}** (${instanceName})`);
+            }
         }
     }
     

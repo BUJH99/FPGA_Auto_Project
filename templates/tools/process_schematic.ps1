@@ -1,5 +1,6 @@
 Param(
-  [string]$JsonPath = "output.json"
+  [string]$JsonPath = "output.json",
+  [string]$SkinPath = "skin.svg"
 )
 
 # 1. READ AND CLEAN JSON FIRST to determine sizing
@@ -304,6 +305,5 @@ text {
 </svg>
 "@
 
-$skinPath = "skin.svg"
-Set-Content $skinPath $skinContent -Encoding UTF8
-Write-Host "[INFO] Generated skin.svg with dynamic width: $sWidth (Max port len: $maxPortLen)"
+Set-Content -Path $SkinPath -Value $skinContent -Encoding UTF8
+Write-Host "[INFO] Generated skin file '$SkinPath' with dynamic width: $sWidth (Max port len: $maxPortLen)"
