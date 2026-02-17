@@ -760,6 +760,10 @@
         min-height: 0;
       }
 
+      .module-right-col {
+        height: 100%;
+      }
+
       .module-simple-card {
         flex: 1;
         min-height: 0;
@@ -769,12 +773,11 @@
       }
 
       .module-fsm-card {
-        flex: 1;
+        flex: 1 1 auto;
         min-height: 0;
-      }
-
-      .module-fsm-card {
-        flex: 0 0 auto;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
       }
 
       .media-box.module-simple-box {
@@ -797,7 +800,13 @@
       }
 
       .media-box.module-fsm-box {
-        height: 160px;
+        height: auto;
+        min-height: 110px;
+      }
+
+      .module-fsm-card .media-box.module-fsm-box {
+        flex: 1 1 auto;
+        min-height: 0;
       }
 
       .module-role-card,
@@ -806,10 +815,10 @@
       }
 
       .module-state-card {
-        flex: 1;
+        flex: 0 0 auto;
         display: flex;
         flex-direction: column;
-        min-height: 250px;
+        min-height: 0;
       }
 
       .module-viz-placeholder-card {
@@ -867,53 +876,105 @@
         min-height: 0;
         display: flex;
         flex-direction: column;
-        padding: 10px;
-        background: #f8f8f8;
+        padding: 14px;
+        background: #ffffff;
         overflow: hidden;
+        border: 2px solid black;
+        box-shadow: var(--shadow-hard);
       }
 
+      /* Stylized Header for the Container */
       .module-child-module-card h3 {
-        margin-bottom: 4px;
-        font-size: 13px;
+        margin-bottom: 10px;
+        font-size: 14px;
+        align-self: flex-start;
+        background: #000;
+        color: #fff;
+        padding: 4px 10px;
+        font-family: monospace;
+        letter-spacing: 1px;
+        box-shadow: 4px 4px 0 rgba(0,0,0,0.2);
+        transform: rotate(-1deg); /* Slight playful tilt */
       }
 
       .child-module-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
         grid-template-rows: repeat(var(--child-grid-rows, 4), minmax(0, 1fr));
-        gap: var(--child-grid-gap, 2px);
-        margin-top: 2px;
+        gap: 12px !important;
+        margin-top: 4px;
         min-height: 0;
         flex: 1 1 auto;
-        overflow: hidden;
+        padding: 4px;
+        counter-reset: mod-counter;
       }
 
       .child-module-item {
-        border: 2px solid black;
-        background: linear-gradient(90deg, var(--primary-brand) 0 4px, #ffffff 4px 100%);
-        padding: var(--child-item-padding, 1px 4px);
+        position: relative;
+        border: 3px solid #000;
+        background: #ffffff;
+        padding: 26px 8px 6px 8px; /* Space for top header */
         min-height: 0;
         overflow: hidden;
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.95);
+        box-shadow: 5px 5px 0 #000;
+        transition: all 0.15s ease-out;
+        counter-increment: mod-counter;
+      }
+
+      .child-module-item:hover {
+        transform: translate(-3px, -3px);
+        box-shadow: 8px 8px 0 var(--primary-brand); /* Brand color shadow on hover */
+        z-index: 5;
+      }
+
+      /* Tech Header Bar */
+      .child-module-item::before {
+        content: "MOD_" counter(mod-counter, decimal-leading-zero);
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 20px;
+        background: #000;
+        color: #fff;
+        font-family: "Consolas", "Monaco", monospace;
+        font-size: 10px;
+        font-weight: 700;
+        line-height: 20px;
+        padding-left: 8px;
+        border-bottom: 2px solid #000;
+      }
+
+      /* Status Indicator */
+      .child-module-item::after {
+        content: "";
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 8px;
+        height: 8px;
+        background: var(--primary-brand);
+        border: 1px solid #fff;
+        box-shadow: 0 0 2px var(--primary-brand);
       }
 
       .child-module-name {
         margin: 0;
         width: 100%;
         display: block;
-        font-size: var(--child-name-size, 32px);
+        font-size: calc(var(--child-name-size, 20px) * 0.9);
         font-weight: 900;
-        line-height: 1;
+        line-height: 1.35; /* Increased to prevent descender clipping */
+        padding-bottom: 4px; /* Extra safe space for 'g', 'y', 'j' */
         font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
-        color: #111827;
-        letter-spacing: 0;
+        color: #000000;
         text-align: center;
         white-space: nowrap;
         overflow: hidden;
-        text-overflow: clip;
+        text-overflow: ellipsis;
       }
 
       .module-parent-viz {
@@ -929,9 +990,9 @@
       }
 
       .state-content {
-        flex: 1;
+        flex: 0 0 auto;
         min-height: 0;
-        overflow: auto;
+        overflow: visible;
       }
 
       .state-content ul {
@@ -940,7 +1001,7 @@
       }
 
       .state-content li {
-        margin-bottom: 5px;
+        margin-bottom: 4px;
       }
 
       .state-size-lg {

@@ -2092,7 +2092,7 @@ def main() -> int:
         print(f"[INFO] Selected top module: {top_name}")
 
         default_project_title = args.project_title.strip() or project_root.name
-        default_author_name = args.author.strip() or os.environ.get("USERNAME", "User")
+        default_author_name = args.author.strip() or "KOREA"
         project_display_name, author_name = prompt_cover_meta(default_project_title, default_author_name)
 
         datapath_signals = prompt_select_datapath_signals(modules_by_name[top_name])
