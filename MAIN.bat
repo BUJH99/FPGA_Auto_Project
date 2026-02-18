@@ -2,7 +2,7 @@
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 title FPGA Automation - MAIN
-set "SETUP_BAT=%CD%\templates\bat\Setup.bat"
+set "SETUP_BAT=%CD%\templates\bat\setup_project.bat"
 
 :: Define ESC character for ANSI colors
 for /F %%a in ('echo prompt $E ^| cmd') do set "ESC=%%a"
@@ -125,37 +125,37 @@ echo %Cyan%=====================================================================
 echo.
 
 echo %Yellow%[ Code ^& Schematic Generation ]%Reset%
-call :ADD_MENU_ITEM 1 "draw_schematic.bat"
-call :ADD_MENU_ITEM 2 "browse_verilog_hierarchy.bat"
-call :ADD_MENU_ITEM 3 "print_verilog_hierarchy.bat"
-call :ADD_MENU_ITEM 4 "draw_fsm.bat"
-call :ADD_MENU_ITEM 5 "generate_presentation.bat"
+call :ADD_MENU_ITEM 1 "code_schematic_draw.bat" "Draw Schematic"
+call :ADD_MENU_ITEM 2 "code_verilog_hierarchy_browse.bat" "Browse Verilog Hierarchy"
+call :ADD_MENU_ITEM 3 "code_verilog_hierarchy_print.bat" "Print Verilog Hierarchy"
+call :ADD_MENU_ITEM 4 "code_fsm_draw.bat" "Draw FSM"
+call :ADD_MENU_ITEM 5 "code_presentation_generate.bat" "Generate Presentation"
 echo.
 
 echo %Yellow%[ Simulation ]%Reset%
-call :ADD_MENU_ITEM 6 "run_vivado_simulation.bat"
-call :ADD_MENU_ITEM 7 "auto_sim_and_report.bat"
+call :ADD_MENU_ITEM 6 "sim_vivado_run.bat" "Run Vivado Simulation"
+call :ADD_MENU_ITEM 7 "sim_report_auto_run.bat" "Auto Sim + Report"
 echo.
 
 echo %Yellow%[ Report Automation ^(One Source^) ]%Reset%
-call :ADD_MENU_ITEM 8 "annotate_hdl_info.bat"
-call :ADD_MENU_ITEM 9 "prepare_waveform_folders.bat"
-call :ADD_MENU_ITEM 10 "generate_report_md.bat"
-call :ADD_MENU_ITEM 11 "mdToReport.bat"
+call :ADD_MENU_ITEM 8 "report_hdl_info_annotate.bat" "Annotate HDL Info"
+call :ADD_MENU_ITEM 9 "report_waveform_folders_prepare.bat" "Prepare Waveform Folders"
+call :ADD_MENU_ITEM 10 "report_markdown_generate.bat" "Generate Report Markdown"
+call :ADD_MENU_ITEM 11 "report_markdown_to_docx.bat" "Build Report from Markdown"
 echo.
 
 echo %Yellow%[ Legacy Report ^(Vivado HTML / Old Docs^) ]%Reset%
-call :ADD_MENU_ITEM 12 "generate_report.bat"
-call :ADD_MENU_ITEM 13 "generate_docs.bat"
+call :ADD_MENU_ITEM 12 "legacy_report_generate.bat" "Legacy Report Generator"
+call :ADD_MENU_ITEM 13 "legacy_docs_generate.bat" "Legacy Docs Generator"
 echo.
 
 echo %Yellow%[ Vivado Flow ^& FPGA ]%Reset%
-call :ADD_MENU_ITEM 14 "launch_ipi_gui.bat"
-call :ADD_MENU_ITEM 15 "run_vivado_build_flow.bat"
-call :ADD_MENU_ITEM 16 "finalize_block_design.bat"
-call :ADD_MENU_ITEM 17 "retarget_ip_to_part.bat"
-call :ADD_MENU_ITEM 18 "program_fpga_device.bat"
-call :ADD_MENU_ITEM 19 "auto_build_and_program.bat"
+call :ADD_MENU_ITEM 14 "vivado_ipi_gui_launch.bat" "Launch Vivado IPI GUI"
+call :ADD_MENU_ITEM 15 "vivado_build_flow_run.bat" "Run Vivado Build Flow"
+call :ADD_MENU_ITEM 16 "vivado_block_design_finalize.bat" "Finalize Block Design"
+call :ADD_MENU_ITEM 17 "vivado_ip_retarget_part.bat" "Retarget IP to Part"
+call :ADD_MENU_ITEM 18 "vivado_fpga_program.bat" "Program FPGA Device"
+call :ADD_MENU_ITEM 19 "vivado_build_and_program_auto.bat" "Auto Build + Program"
 echo.
 
 echo   %Blue%[B] Back to Project Selection%Reset%
@@ -210,13 +210,15 @@ goto :PROJECT_MENU
 :ADD_MENU_ITEM
 set "IDX=%~1"
 set "FILE=%~2"
+set "LABEL=%~3"
 set "CMD_!IDX!=!FILE!"
+if not defined LABEL set "LABEL=!FILE!"
 if !IDX! lss 10 ( set "PAD= " ) else ( set "PAD=" )
 
 if exist "templates\bat\!FILE!" (
-    echo   %Gray%!PAD!%Reset%%White%!IDX!. !FILE!%Reset%
+    echo   %Gray%!PAD!%Reset%%White%!IDX!. !LABEL!%Reset% %Gray%[!FILE!]%Reset%
 ) else (
-    echo   %Red%!PAD!!IDX!. !FILE! ^(Missing in templates^)%Reset%
+    echo   %Red%!PAD!!IDX!. !LABEL! ^(Missing: !FILE!^)%Reset%
 )
 exit /b
 

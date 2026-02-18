@@ -10,7 +10,7 @@ if "%~1"=="" (
 
 set "TARGET_PROJECT=%~f1"
 set "TOOL_SCRIPT=%~dp0..\tools\generate_one_source_report.js"
-set "PREPARE_WAVE_BAT=%~dp0prepare_waveform_folders.bat"
+set "PREPARE_WAVE_BAT=%~dp0report_waveform_folders_prepare.bat"
 set "NO_PAUSE=0"
 set "MODULES_ARG="
 

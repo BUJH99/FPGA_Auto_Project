@@ -20,8 +20,8 @@ call :route_vivado_artifacts
 
 echo [LEGACY] This script is for Vivado build-report HTML parsing flow.
 echo [LEGACY] One Source report flow:
-echo [LEGACY]  1^) generate_report_md.bat
-echo [LEGACY]  2^) mdToReport.bat
+echo [LEGACY]  1^) report_markdown_generate.bat
+echo [LEGACY]  2^) report_markdown_to_docx.bat
 echo.
 
 echo ===============================================================================
@@ -33,7 +33,7 @@ if not exist "output\reports" (
     echo.
     echo [ERROR] 'output\reports' directory not found.
     echo         This script parses existing Vivado reports.
-    echo         Please run 'run_vivado_build_flow.bat' first to generate raw reports.
+    echo         Please run 'vivado_build_flow_run.bat' first to generate raw reports.
     echo.
     pause
     exit /b 1

@@ -15,7 +15,7 @@ set bitstream_file "./output/${top_module}.bit"
 puts "\n\[STEP 1\] Checking Bitstream File..."
 if { ![file exists $bitstream_file] } {
     puts "ERROR: Bitstream file not found at $bitstream_file"
-    puts "Please run run_vivado_build_flow.bat (or run_vivado_build_flow.tcl) first."
+    puts "Please run vivado_build_flow_run.bat (or run_vivado_build_flow.tcl) first."
     exit 1
 }
 puts "Found bitstream: $bitstream_file"

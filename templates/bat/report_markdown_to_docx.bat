@@ -64,7 +64,7 @@ if not exist "%REPORT_MD%" (
         echo [INFO] - %DOCS_DIR%\report.md
         echo [INFO] - %TARGET_PROJECT%\report.md
         echo [INFO] Run this first:
-        echo [INFO] templates\bat\generate_report_md.bat %TARGET_PROJECT%
+        echo [INFO] templates\bat\report_markdown_generate.bat %TARGET_PROJECT%
         if "%NO_PAUSE%"=="0" pause
         exit /b 1
     )

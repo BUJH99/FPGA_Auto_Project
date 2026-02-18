@@ -8,7 +8,7 @@ if "%~1"=="" (
 )
 
 set "TARGET_PROJECT=%~f1"
-set "FLOW_BAT=%~dp0run_vivado_build_flow.bat"
+set "FLOW_BAT=%~dp0vivado_build_flow_run.bat"
 
 if not exist "%FLOW_BAT%" (
     echo [ERROR] Missing script: %FLOW_BAT%

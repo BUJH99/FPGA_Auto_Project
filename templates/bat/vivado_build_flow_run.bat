@@ -125,26 +125,26 @@ echo  [PROMPT] Run FPGA Device Programming?
 echo ===============================================================================
 echo.
 
-if exist "%~dp0program_fpga_device.bat" (
+if exist "%~dp0vivado_fpga_program.bat" (
     if "%AUTO_PROGRAM%"=="1" (
-        echo [INFO] Auto program mode enabled. Running program_fpga_device.bat...
-        call "%~dp0program_fpga_device.bat" "%TARGET_PROJECT%" --no-pause
+        echo [INFO] Auto program mode enabled. Running vivado_fpga_program.bat...
+        call "%~dp0vivado_fpga_program.bat" "%TARGET_PROJECT%" --no-pause
         if !errorlevel! neq 0 (
-            echo [WARNING] program_fpga_device.bat failed.
+            echo [WARNING] vivado_fpga_program.bat failed.
             set "PROGRAM_STATUS=FAILED"
         ) else (
             echo [INFO] Device programming completed.
             set "PROGRAM_STATUS=SUCCESS"
         )
     ) else (
-        choice /C YN /N /M "Run program_fpga_device.bat now? [Y/N]: "
+        choice /C YN /N /M "Run vivado_fpga_program.bat now? [Y/N]: "
         if errorlevel 2 (
             echo [INFO] Device programming skipped by user.
             set "PROGRAM_STATUS=SKIPPED_BY_USER"
         ) else (
-            call "%~dp0program_fpga_device.bat" "%TARGET_PROJECT%" --no-pause
+            call "%~dp0vivado_fpga_program.bat" "%TARGET_PROJECT%" --no-pause
             if !errorlevel! neq 0 (
-                echo [WARNING] program_fpga_device.bat failed.
+                echo [WARNING] vivado_fpga_program.bat failed.
                 set "PROGRAM_STATUS=FAILED"
             ) else (
                 echo [INFO] Device programming completed.
@@ -153,7 +153,7 @@ if exist "%~dp0program_fpga_device.bat" (
         )
     )
 ) else (
-    echo [WARNING] program_fpga_device.bat not found in templates.
+    echo [WARNING] vivado_fpga_program.bat not found in templates.
 )
 
 echo.

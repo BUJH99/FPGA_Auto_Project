@@ -10,10 +10,10 @@ if "%~1"=="" (
 
 set "TARGET_PROJECT=%~f1"
 
-echo [LEGACY] generate_docs.bat uses the old documentation generator.
+echo [LEGACY] legacy_docs_generate.bat uses the old documentation generator.
 echo [LEGACY] For current report automation, use:
-echo [LEGACY]  1^) generate_report_md.bat
-echo [LEGACY]  2^) mdToReport.bat
+echo [LEGACY]  1^) report_markdown_generate.bat
+echo [LEGACY]  2^) report_markdown_to_docx.bat
 echo.
 
 echo ============================================================================

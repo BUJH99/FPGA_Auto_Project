@@ -58,25 +58,25 @@ npm install
 
 #### A. One Source Reporting (Recommended)
 Generate report assets from HDL/TB and build deliverables from one Markdown source (`report.md`):
-1. `annotate_hdl_info.bat`
-2. `generate_report_md.bat`
-3. `mdToReport.bat`
+1. `report_hdl_info_annotate.bat`
+2. `report_markdown_generate.bat`
+3. `report_markdown_to_docx.bat`
 
-`generate_report_md.bat` behavior:
+`report_markdown_generate.bat` behavior:
 - Supports module selection (`--modules=` or interactive selection).
 - **Selection applies only to `1.3 Sub block` section**.
 - Overall architecture sections (`1.1`, `1.2`) are always generated from all modules.
 - `Top` is always included first in sub-block section.
 
 #### B. Interactive Simulation (Vivado GUI)
-- `run_vivado_simulation.bat` scans testbenches, lets you choose sim top, and opens Vivado simulation GUI.
+- `sim_vivado_run.bat` scans testbenches, lets you choose sim top, and opens Vivado simulation GUI.
 - Vivado simulation artifacts are contained inside project:
   - `<ProjectDir>/vivado_project/`
   - `<ProjectDir>/vivado_project/vivado_sim_log/`
 
 #### C. Build & Program
-- Step-by-step: `run_vivado_build_flow.bat` -> `program_fpga_device.bat`
-- One-click: `auto_build_and_program.bat`
+- Step-by-step: `vivado_build_flow_run.bat` -> `vivado_fpga_program.bat`
+- One-click: `vivado_build_and_program_auto.bat`
 
 ### Project Layout
 Example project structure after setup:
@@ -148,25 +148,25 @@ npm install
 
 #### A. One Source 보고서 (권장)
 HDL/TB/다이어그램 정보를 하나의 Markdown(`report.md`)로 모은 뒤 최종 문서를 생성합니다.
-1. `annotate_hdl_info.bat`
-2. `generate_report_md.bat`
-3. `mdToReport.bat`
+1. `report_hdl_info_annotate.bat`
+2. `report_markdown_generate.bat`
+3. `report_markdown_to_docx.bat`
 
-`generate_report_md.bat` 동작 규칙:
+`report_markdown_generate.bat` 동작 규칙:
 - 모듈 선택 가능(`--modules=` 또는 인터랙티브 선택)
 - 선택 적용 범위는 **`1.3 서브 블록 설명`만**
 - `1.1`, `1.2` 전체 구조/계층은 항상 전체 모듈 기준
 - `Top` 모듈은 서브 블록에서 항상 첫 번째로 고정
 
 #### B. Vivado GUI 시뮬레이션
-- `run_vivado_simulation.bat` 실행 시 테스트벤치 목록에서 Top을 선택 후 Vivado GUI를 엽니다.
+- `sim_vivado_run.bat` 실행 시 테스트벤치 목록에서 Top을 선택 후 Vivado GUI를 엽니다.
 - 시뮬레이션 산출물은 프로젝트 내부로 고정됩니다:
   - `<ProjectDir>/vivado_project/`
   - `<ProjectDir>/vivado_project/vivado_sim_log/`
 
 #### C. 빌드/프로그래밍
-- 단계 실행: `run_vivado_build_flow.bat` -> `program_fpga_device.bat`
-- 원클릭: `auto_build_and_program.bat`
+- 단계 실행: `vivado_build_flow_run.bat` -> `vivado_fpga_program.bat`
+- 원클릭: `vivado_build_and_program_auto.bat`
 
 ### 프로젝트 구조
 프로젝트 생성 후 예시 구조:

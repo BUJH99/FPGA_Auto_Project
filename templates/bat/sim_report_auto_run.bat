@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 
 :: ============================================================================
 :: Verilog FPGA Automation Pipeline
-:: Usage: bat\auto_sim_and_report.bat
+:: Usage: bat\sim_report_auto_run.bat
 :: Description: Scans testbenches and runs simulation.
 :: ============================================================================
 

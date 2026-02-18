@@ -168,7 +168,7 @@ function generateMarkdown(filePath) {
         }
         if (!hasFsmAsset) {
             mdContent += `- *FSM was detected, but no generated FSM assets were found.*\n`;
-            mdContent += `- *Run draw_fsm.bat to generate output/fsm/svg and output/fsm/drawio files.*\n`;
+            mdContent += `- *Run code_fsm_draw.bat to generate output/fsm/svg and output/fsm/drawio files.*\n`;
         }
         mdContent += `\n`;
     }
