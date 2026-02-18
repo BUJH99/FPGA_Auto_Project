@@ -11,6 +11,7 @@
 4. `templates\bat\draw_schematic.bat <ProjectDir>`
 5. `templates\bat\draw_fsm.bat <ProjectDir>`
 6. `templates\bat\generate_report_md.bat <ProjectDir>`
+   - Optional: pass `--modules=moduleA,moduleB` for sub-block filtering
 7. Edit `<ProjectDir>\output\docs\report.md` (manual review/update)
 8. `templates\bat\mdToReport.bat <ProjectDir>`
 
@@ -36,6 +37,9 @@
 - `generate_report_md.bat`
   - Generates `<ProjectDir>/output/docs/report.md` and `<ProjectDir>/output/docs/github.css`
   - Collects module structure and diagram/FSM/waveform references
+  - Module selection (`--modules=` or interactive picker) applies to **section 1.3 sub-blocks only**
+  - Sections `1.1` and `1.2` still use all modules
+  - `Top` module is always included first in sub-block section
   - Parses code-header metadata blocks:
   - `[MODULE_INFO_START] ... [MODULE_INFO_END]`
   - `[TB_INFO_START] ... [TB_INFO_END]`
@@ -67,3 +71,11 @@
 - `generate_report_md.bat`
 - `mdToReport.bat`
 - Legacy section keeps `generate_report.bat`
+
+## CLI Examples
+- Generate full report:
+  - `templates\bat\generate_report_md.bat <ProjectDir>`
+- Generate sub-block section with selected modules:
+  - `templates\bat\generate_report_md.bat <ProjectDir> --modules=uart_rx,uart_tx`
+- Non-interactive mode (for scripts/CI):
+  - `templates\bat\generate_report_md.bat <ProjectDir> --modules=Top,dht11_controller --no-pause`

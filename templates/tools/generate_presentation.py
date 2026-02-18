@@ -1921,7 +1921,7 @@ def build_presentation_config(
         },
         "developmentEnvironment": {
             "os": os_label,
-            "tools": ["Vivado", "Icarus Verilog", "Python", "Jinja2"],
+            "tools": ["Vivado", "Python", "Jinja2"],
             "language": ["Verilog", "SystemVerilog"],
         },
         "featurePlaceholders": [
