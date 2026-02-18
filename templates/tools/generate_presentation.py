@@ -1226,6 +1226,17 @@ def resolve_top_block_image(
     )
     candidates.extend(
         build_image_candidate_paths(
+            project_root / "output" / "Diagram" / "JSON",
+            [
+                f"skin_{top_name}",
+                f"output_{top_name}",
+                f"skin_{top_name.lower()}",
+                f"output_{top_name.lower()}",
+            ],
+        )
+    )
+    candidates.extend(
+        build_image_candidate_paths(
             project_root / "output" / "Diagram" / "Simple",
             [top_name, f"{top_name}_simple", f"{top_name}_detailed"],
         )

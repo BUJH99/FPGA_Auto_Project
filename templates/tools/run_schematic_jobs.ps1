@@ -112,10 +112,8 @@ $moduleWorker = {
   $ErrorActionPreference = "Stop"
   Set-Location $ProjectPath
 
-  $logFile = Join-Path $LogDir ($Module + ".log")
-  if (Test-Path $logFile) {
-    Remove-Item -Path $logFile -Force -ErrorAction SilentlyContinue
-  }
+  $logFileFinal = Join-Path $LogDir ($Module + ".log")
+  $logFile = Join-Path $LogDir ("{0}_{1}.log" -f $Module, (Get-Date -Format "yyyyMMdd_HHmmss_fff"))
 
   function Write-Log {
     param([string]$Message)
@@ -142,10 +140,20 @@ $moduleWorker = {
 
     try {
       $global:LASTEXITCODE = 0
-      $output = & $Command @Arguments 2>&1
-      Append-Output $output
-      if ($LASTEXITCODE -ne 0) {
-        Write-Log ("[ERROR] {0} failed (exit code: {1})" -f $Label, $LASTEXITCODE)
+      $tmpCombined = [System.IO.Path]::GetTempFileName()
+      try {
+        # Redirect all native command output to a temp file, then append once.
+        & $Command @Arguments *> $tmpCombined
+        $exitCode = $LASTEXITCODE
+        if (Test-Path $tmpCombined) {
+          Append-Output (Get-Content -Path $tmpCombined)
+        }
+      }
+      finally {
+        if (Test-Path $tmpCombined) { Remove-Item -Path $tmpCombined -Force -ErrorAction SilentlyContinue }
+      }
+      if ($exitCode -ne 0) {
+        Write-Log ("[ERROR] {0} failed (exit code: {1})" -f $Label, $exitCode)
         return $false
       }
       return $true
@@ -302,10 +310,20 @@ $moduleWorker = {
     Write-Log "[INFO] Module $Module completed with errors."
   }
 
+  $reportedLogFile = $logFile
+  try {
+    Copy-Item -Path $logFile -Destination $logFileFinal -Force -ErrorAction Stop
+    $reportedLogFile = $logFileFinal
+  }
+  catch {
+    # Keep unique per-run log when TOP.log is locked by another process.
+    $reportedLogFile = $logFile
+  }
+
   [pscustomobject]@{
     Module = $Module
     Success = $moduleSuccess
-    LogFile = $logFile
+    LogFile = $reportedLogFile
   }
 }
 
@@ -362,6 +380,18 @@ while ($queue.Count -gt 0 -or $runningJobs.Count -gt 0) {
 
     if (-not $moduleResult) {
       $moduleName = $job.Name -replace "^schematic_", ""
+      $jobReason = $null
+      if ($job.ChildJobs -and $job.ChildJobs.Count -gt 0) {
+        $jobReason = $job.ChildJobs[0].JobStateInfo.Reason
+      }
+      if ($jobReason) {
+        Write-Host ("[ERROR] Job exception for {0}: {1}" -f $moduleName, $jobReason.Message)
+      }
+      if ($job.ChildJobs -and $job.ChildJobs.Count -gt 0 -and $job.ChildJobs[0].Error.Count -gt 0) {
+        foreach ($err in $job.ChildJobs[0].Error) {
+          Write-Host ("[ERROR] Job stream error for {0}: {1}" -f $moduleName, $err.ToString())
+        }
+      }
       $moduleResult = [pscustomobject]@{
         Module = $moduleName
         Success = $false

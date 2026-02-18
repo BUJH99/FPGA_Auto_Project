@@ -35,7 +35,11 @@ if (Test-Path $JsonPath) {
                 # Fix bits: "z" -> "x" (schema only allows 0, 1, x, or int)
                 if ($port.bits) {
                     for ($i = 0; $i -lt $port.bits.Count; $i++) {
-                        if ($port.bits[$i] -eq "z") { $port.bits[$i] = "x" }
+                        if ($port.bits[$i] -is [string]) {
+                          if ([string]::IsNullOrWhiteSpace($port.bits[$i]) -or $port.bits[$i] -eq "z") {
+                            $port.bits[$i] = "x"
+                          }
+                        }
                     }
                 }
             }
@@ -47,7 +51,11 @@ if (Test-Path $JsonPath) {
                 $net = $netProp.Value
                 if ($net.bits) {
                     for ($i = 0; $i -lt $net.bits.Count; $i++) {
-                        if ($net.bits[$i] -eq "z") { $net.bits[$i] = "x" }
+                        if ($net.bits[$i] -is [string]) {
+                          if ([string]::IsNullOrWhiteSpace($net.bits[$i]) -or $net.bits[$i] -eq "z") {
+                            $net.bits[$i] = "x"
+                          }
+                        }
                     }
                 }
             }
@@ -57,6 +65,16 @@ if (Test-Path $JsonPath) {
         if ($module.cells) {
           foreach ($cellProp in $module.cells.PSObject.Properties) {
             $cell = $cellProp.Value
+
+            # Fix cell port directions: inout -> output (netlistsvg schema restriction)
+            if ($cell.port_directions) {
+              foreach ($dirProp in $cell.port_directions.PSObject.Properties) {
+                if ($dirProp.Value -eq "inout") {
+                  $cell.port_directions.($dirProp.Name) = "output"
+                }
+              }
+            }
+
             # Check if this cell is likely generic (has connections)
             if ($cell.connections) {
               foreach ($connProp in $cell.connections.PSObject.Properties) {
@@ -70,7 +88,11 @@ if (Test-Path $JsonPath) {
                 $connBits = $connProp.Value
                 if ($connBits) {
                     for ($i = 0; $i -lt $connBits.Count; $i++) {
-                        if ($connBits[$i] -eq "z") { $connBits[$i] = "x" }
+                        if ($connBits[$i] -is [string]) {
+                          if ([string]::IsNullOrWhiteSpace($connBits[$i]) -or $connBits[$i] -eq "z") {
+                            $connBits[$i] = "x"
+                          }
+                        }
                     }
                 }
               }
