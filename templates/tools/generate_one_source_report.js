@@ -1,7 +1,46 @@
 ﻿const fs = require('fs');
 const path = require('path');
 
-const projectRoot = process.argv[2] ? path.resolve(process.argv[2]) : process.cwd();
+function parseModuleList(value) {
+    if (!value) return null;
+    const list = value
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean);
+    if (list.length === 0) return null;
+    return Array.from(new Set(list));
+}
+
+function parseCliArgs(argv) {
+    let projectArg = null;
+    let listModules = false;
+    let moduleListRaw = null;
+
+    argv.forEach(arg => {
+        if (arg === '--list-modules') {
+            listModules = true;
+            return;
+        }
+        if (arg.startsWith('--modules=')) {
+            moduleListRaw = arg.slice('--modules='.length);
+            return;
+        }
+        if (!arg.startsWith('--') && !projectArg) {
+            projectArg = arg;
+            return;
+        }
+        throw new Error(`Unknown argument: ${arg}`);
+    });
+
+    return {
+        projectRoot: projectArg ? path.resolve(projectArg) : process.cwd(),
+        listModules,
+        selectedModuleNames: parseModuleList(moduleListRaw)
+    };
+}
+
+const cli = parseCliArgs(process.argv.slice(2));
+const projectRoot = cli.projectRoot;
 const srcDir = path.join(projectRoot, 'src');
 const tbDir = path.join(projectRoot, 'tb');
 const outputDir = path.join(projectRoot, 'output');
@@ -265,6 +304,49 @@ function readVerilogModules() {
     });
 
     return modules;
+}
+
+function buildSubBlockModules(allModules, selectedModuleNames, topModuleName) {
+    const moduleByLower = new Map(
+        allModules.map(mod => [mod.moduleName.toLowerCase(), mod])
+    );
+    const unknown = [];
+    let modules = [];
+
+    if (!Array.isArray(selectedModuleNames) || selectedModuleNames.length === 0) {
+        modules = allModules.slice();
+    } else {
+        selectedModuleNames.forEach(name => {
+            const key = String(name).trim().toLowerCase();
+            if (!key) return;
+            const found = moduleByLower.get(key);
+            if (found) {
+                modules.push(found);
+            } else {
+                unknown.push(name);
+            }
+        });
+    }
+
+    if (topModuleName) {
+        const topKey = String(topModuleName).trim().toLowerCase();
+        const topModule = moduleByLower.get(topKey);
+        if (topModule) {
+            modules = modules.filter(mod => mod.moduleName.toLowerCase() !== topKey);
+            modules.unshift(topModule);
+        }
+    }
+
+    const dedup = [];
+    const seen = new Set();
+    modules.forEach(mod => {
+        const key = mod.moduleName.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        dedup.push(mod);
+    });
+
+    return { modules: dedup, unknown };
 }
 
 function parsePorts(moduleInfo) {
@@ -669,7 +751,7 @@ function buildModuleDescriptionKR(mod, wave, hasFsm, isTopModule, tbInfo) {
     return description.join('\n\n');
 }
 
-function buildMarkdown(modules, hierarchy) {
+function buildMarkdown(allModules, subBlockModules, hierarchy) {
     const now = new Date();
     const generatedAt = now.toISOString().replace(/\.\d{3}Z$/, 'Z');
     const generatedAtKo = now.toLocaleString('ko-KR', { hour12: false });
@@ -709,7 +791,8 @@ function buildMarkdown(modules, hierarchy) {
     lines.push('### 1.1.2 설계 특징');
     lines.push('');
     lines.push(`- 최상위(Top) 후보 모듈: \`${hierarchy.topModule || '-'}\``);
-    lines.push(`- 전체 모듈 수: ${modules.length}`);
+    lines.push(`- 전체 모듈 수: ${allModules.length}`);
+    lines.push(`- 서브 블록 설명 대상 수: ${subBlockModules.length} (Top 우선 포함)`);
     lines.push('- 소스 단일화: `report.md`를 사람이 수정 후 `report.html`, `report.docx`를 생성');
     lines.push('- 인터페이스 표(입출력 포트 표)는 제외하고, Simple Diagram 중심으로 모듈 구조를 설명');
     lines.push('');
@@ -757,7 +840,7 @@ function buildMarkdown(modules, hierarchy) {
     lines.push('');
     lines.push('| 모듈 | 소스 경로 | 직접 하위 모듈 |');
     lines.push('|------|-----------|------------------|');
-    modules.forEach(mod => {
+    subBlockModules.forEach(mod => {
         const children = mod.children.length > 0
             ? mod.children.map(ch => `${ch.moduleName}(${ch.instanceName})`).join(', ')
             : '-';
@@ -765,7 +848,7 @@ function buildMarkdown(modules, hierarchy) {
     });
     lines.push('');
 
-    modules.forEach((mod, index) => {
+    subBlockModules.forEach((mod, index) => {
         const assets = collectAssets(mod.moduleName);
         const wave = collectWaveformPaths(mod.moduleName);
         const tbInfo = getTbInfoFromRelPath(wave.tbSource);
@@ -875,18 +958,40 @@ function buildMarkdown(modules, hierarchy) {
 }
 
 function main() {
+    const allModules = readVerilogModules();
+
+    if (cli.listModules) {
+        const printed = new Set();
+        allModules.forEach(mod => {
+            if (printed.has(mod.moduleName)) return;
+            printed.add(mod.moduleName);
+            console.log(mod.moduleName);
+        });
+        return;
+    }
+
+    allModules.forEach(detectFsm);
+    const hierarchy = detectHierarchy(allModules);
+
+    const selected = buildSubBlockModules(allModules, cli.selectedModuleNames, hierarchy.topModule);
+    const subBlockModules = selected.modules;
+    if (subBlockModules.length === 0) {
+        throw new Error('No modules selected for report generation.');
+    }
+
+    if (selected.unknown.length > 0) {
+        console.warn(`[WARN] ignored unknown modules: ${selected.unknown.join(', ')}`);
+    }
+
     ensureDir(docsDir);
     ensureGithubCss();
 
-    const modules = readVerilogModules();
-    modules.forEach(detectFsm);
-
-    const hierarchy = detectHierarchy(modules);
-    const markdown = buildMarkdown(modules, hierarchy);
+    const markdown = buildMarkdown(allModules, subBlockModules, hierarchy);
     fs.writeFileSync(reportMdPath, markdown, 'utf8');
 
     console.log(`[SUCCESS] report.md generated: ${reportMdPath}`);
-    console.log(`[INFO] modules: ${modules.length}`);
+    console.log(`[INFO] modules(all): ${allModules.length}`);
+    console.log(`[INFO] modules(sub-block): ${subBlockModules.length}`);
     console.log(`[INFO] css: ${githubCssPath}`);
 }
 
