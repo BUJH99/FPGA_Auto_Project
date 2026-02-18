@@ -139,22 +139,23 @@ echo.
 
 echo %Yellow%[ Report Automation ^(One Source^) ]%Reset%
 call :ADD_MENU_ITEM 8 "annotate_hdl_info.bat"
-call :ADD_MENU_ITEM 9 "generate_report_md.bat"
-call :ADD_MENU_ITEM 10 "mdToReport.bat"
+call :ADD_MENU_ITEM 9 "prepare_waveform_folders.bat"
+call :ADD_MENU_ITEM 10 "generate_report_md.bat"
+call :ADD_MENU_ITEM 11 "mdToReport.bat"
 echo.
 
 echo %Yellow%[ Legacy Report ^(Vivado HTML / Old Docs^) ]%Reset%
-call :ADD_MENU_ITEM 11 "generate_report.bat"
-call :ADD_MENU_ITEM 12 "generate_docs.bat"
+call :ADD_MENU_ITEM 12 "generate_report.bat"
+call :ADD_MENU_ITEM 13 "generate_docs.bat"
 echo.
 
 echo %Yellow%[ Vivado Flow ^& FPGA ]%Reset%
-call :ADD_MENU_ITEM 13 "launch_ipi_gui.bat"
-call :ADD_MENU_ITEM 14 "run_vivado_build_flow.bat"
-call :ADD_MENU_ITEM 15 "finalize_block_design.bat"
-call :ADD_MENU_ITEM 16 "retarget_ip_to_part.bat"
-call :ADD_MENU_ITEM 17 "program_fpga_device.bat"
-call :ADD_MENU_ITEM 18 "auto_build_and_program.bat"
+call :ADD_MENU_ITEM 14 "launch_ipi_gui.bat"
+call :ADD_MENU_ITEM 15 "run_vivado_build_flow.bat"
+call :ADD_MENU_ITEM 16 "finalize_block_design.bat"
+call :ADD_MENU_ITEM 17 "retarget_ip_to_part.bat"
+call :ADD_MENU_ITEM 18 "program_fpga_device.bat"
+call :ADD_MENU_ITEM 19 "auto_build_and_program.bat"
 echo.
 
 echo   %Blue%[B] Back to Project Selection%Reset%

@@ -10,7 +10,6 @@ if "%~1"=="" (
 
 set "TARGET_PROJECT=%~f1"
 set "TOOL_SCRIPT=%~dp0..\tools\generate_one_source_report.js"
-set "PREPARE_WAVE_BAT=%~dp0prepare_waveform_folders.bat"
 set "NO_PAUSE=0"
 set "MODULES_ARG="
 
@@ -58,49 +57,76 @@ if not defined MODULES_ARG if "%NO_PAUSE%"=="0" (
     )
 )
 
+set "WAVE_ROOT=%TARGET_PROJECT%\waveform"
+if not exist "%WAVE_ROOT%" mkdir "%WAVE_ROOT%"
+
+if defined MODULES_ARG (
+    set "MODULE_LIST=!MODULES_ARG:~10!"
+) else (
+    set "MODULE_LIST="
+    for /f "usebackq delims=" %%M in (`node "%TOOL_SCRIPT%" "%TARGET_PROJECT%" --list-modules 2^>nul`) do (
+        if not "%%M"=="" (
+            if defined MODULE_LIST (
+                set "MODULE_LIST=!MODULE_LIST!,%%M"
+            ) else (
+                set "MODULE_LIST=%%M"
+            )
+        )
+    )
+)
+
+if not defined MODULE_LIST (
+    echo [ERROR] No modules found under: %TARGET_PROJECT%\src
+    if "%NO_PAUSE%"=="0" pause
+    exit /b 1
+)
+
 echo ===============================================================================
-echo [Report Automation] Generate report.md from src/tb + assets
+echo [Waveform Folder Prep]
 echo Target: %TARGET_PROJECT%
 if defined MODULES_ARG (
     echo Modules: !MODULES_ARG:~10!
 ) else (
     echo Modules: ALL
 )
+echo Root: %WAVE_ROOT%
 echo ===============================================================================
 
-if exist "%PREPARE_WAVE_BAT%" (
-    echo.
-    echo [INFO] Preparing waveform module folders...
-    if defined MODULES_ARG (
-        call "%PREPARE_WAVE_BAT%" "%TARGET_PROJECT%" "!MODULES_ARG!" --no-pause
-    ) else (
-        call "%PREPARE_WAVE_BAT%" "%TARGET_PROJECT%" --no-pause
+set "CREATED_COUNT=0"
+set "EXISTS_COUNT=0"
+set "ERROR_COUNT=0"
+set "MOD_ITEMS=!MODULE_LIST:,= !"
+for %%M in (!MOD_ITEMS!) do (
+    set "MOD_NAME=%%~M"
+    if defined MOD_NAME (
+        set "MOD_DIR=%WAVE_ROOT%\!MOD_NAME!"
+        if exist "!MOD_DIR!\" (
+            echo [EXISTS] !MOD_DIR!
+            set /a EXISTS_COUNT+=1
+        ) else (
+            mkdir "!MOD_DIR!" >nul 2>nul
+            if errorlevel 1 (
+                echo [WARN] Failed to create: !MOD_DIR!
+                set /a ERROR_COUNT+=1
+            ) else (
+                echo [CREATED] !MOD_DIR!
+                set /a CREATED_COUNT+=1
+            )
+        )
     )
-    if errorlevel 1 (
-        echo [WARN] Waveform folder preparation failed. Continue report generation.
-    )
-) else (
-    echo [WARN] Waveform prepare script not found: %PREPARE_WAVE_BAT%
-)
-
-if defined MODULES_ARG (
-    node "%TOOL_SCRIPT%" "%TARGET_PROJECT%" "!MODULES_ARG!"
-) else (
-    node "%TOOL_SCRIPT%" "%TARGET_PROJECT%"
-)
-if errorlevel 1 (
-    echo.
-    echo [FAILURE] report.md generation failed.
-    if "%NO_PAUSE%"=="0" pause
-    exit /b 1
 )
 
 echo.
-echo [SUCCESS] Generated:
-echo - %TARGET_PROJECT%\output\docs\report.md
-echo - %TARGET_PROJECT%\output\docs\github.css
+echo [SUMMARY] created=!CREATED_COUNT!, existing=!EXISTS_COUNT!, errors=!ERROR_COUNT!
+if "!ERROR_COUNT!"=="0" (
+    echo [SUCCESS] Waveform folder preparation complete.
+    if "%NO_PAUSE%"=="0" pause
+    exit /b 0
+)
+
+echo [FAILURE] Waveform folder preparation finished with errors.
 if "%NO_PAUSE%"=="0" pause
-exit /b 0
+exit /b 1
 
 :PROMPT_MODULE_SELECTION
 set "MOD_COUNT=0"
