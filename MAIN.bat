@@ -46,14 +46,37 @@ for /d %%D in (*) do (
     )
 )
 
-if !PROJ_COUNT! equ 0 (
-    echo.
-    echo %Red%[No Projects Found]%Reset%
-    echo Create a new project using 'templates\bat\Setup.bat' first.
-    echo.
-    pause
-    exit /b 0
+if !PROJ_COUNT! equ 0 goto :NO_PROJECT_MENU
+goto :PROJECT_SELECT_MENU
+
+:NO_PROJECT_MENU
+echo.
+echo %Red%[No Projects Found]%Reset%
+echo No valid project folder detected.
+echo.
+echo   %White%[S] Setup New Project%Reset%
+echo   %Red%[Q] Quit%Reset%
+echo.
+
+set "NO_PROJ_INPUT="
+set /p "NO_PROJ_INPUT=%Cyan%No project found. Run setup now? (S/Q, default S): %Reset%"
+if "!NO_PROJ_INPUT!"=="" set "NO_PROJ_INPUT=S"
+
+if /i "!NO_PROJ_INPUT!"=="Q" goto :EXIT
+if /i "!NO_PROJ_INPUT!"=="S" (
+    if not exist "!SETUP_BAT!" (
+        echo.
+        echo %Red%[ERROR] Setup script not found: !SETUP_BAT!%Reset%
+        echo.
+        pause
+        goto :EXIT
+    )
+    call "!SETUP_BAT!"
+    goto :MASTER_MENU
 )
+goto :NO_PROJECT_MENU
+
+:PROJECT_SELECT_MENU
 
 echo.
 echo   %White%[S] Setup New Project%Reset%
