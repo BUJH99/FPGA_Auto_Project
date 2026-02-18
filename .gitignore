@@ -6,7 +6,6 @@
 !/ReadMe.md
 !/templates/
 !/MAIN.bat
-!/Setup.bat
 # Ignore local sync helper script
 /SyncProjectsToSourceProject.bat
 
