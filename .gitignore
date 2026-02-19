@@ -6,6 +6,8 @@
 !/ReadMe.md
 !/templates/
 !/MAIN.bat
+!/vcd2sgv/
+!/vcd2sgv/**
 # Ignore local sync helper script
 /SyncProjectsToSourceProject.bat
 
@@ -26,3 +28,5 @@ desktop.ini
 *.pb
 *.wdb
 *.vcd
+__pycache__/
+*.pyc

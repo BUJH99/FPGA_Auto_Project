@@ -135,27 +135,29 @@ echo.
 echo %Yellow%[ Simulation ]%Reset%
 call :ADD_MENU_ITEM 6 "sim_vivado_run.bat" "Run Vivado Simulation"
 call :ADD_MENU_ITEM 7 "sim_report_auto_run.bat" "Auto Sim + Report"
+call :ADD_MENU_ITEM 8 "sim_iverilog_vcd_run.bat" "Run Iverilog VCD (Select TB)"
+call :ADD_MENU_ITEM 9 "sim_vcd_svg_run.bat" "Generate SVG from VCD (Select)"
 echo.
 
 echo %Yellow%[ Report Automation ^(One Source^) ]%Reset%
-call :ADD_MENU_ITEM 8 "report_hdl_info_annotate.bat" "Annotate HDL Info"
-call :ADD_MENU_ITEM 9 "report_waveform_folders_prepare.bat" "Prepare Waveform Folders"
-call :ADD_MENU_ITEM 10 "report_markdown_generate.bat" "Generate Report Markdown"
-call :ADD_MENU_ITEM 11 "report_markdown_to_docx.bat" "Build Report from Markdown"
+call :ADD_MENU_ITEM 10 "report_hdl_info_annotate.bat" "Annotate HDL Info"
+call :ADD_MENU_ITEM 11 "report_waveform_folders_prepare.bat" "Prepare Waveform Folders"
+call :ADD_MENU_ITEM 12 "report_markdown_generate.bat" "Generate Report Markdown"
+call :ADD_MENU_ITEM 13 "report_markdown_to_docx.bat" "Build Report from Markdown"
 echo.
 
 echo %Yellow%[ Legacy Report ^(Vivado HTML / Old Docs^) ]%Reset%
-call :ADD_MENU_ITEM 12 "legacy_report_generate.bat" "Legacy Report Generator"
-call :ADD_MENU_ITEM 13 "legacy_docs_generate.bat" "Legacy Docs Generator"
+call :ADD_MENU_ITEM 14 "legacy_report_generate.bat" "Legacy Report Generator"
+call :ADD_MENU_ITEM 15 "legacy_docs_generate.bat" "Legacy Docs Generator"
 echo.
 
 echo %Yellow%[ Vivado Flow ^& FPGA ]%Reset%
-call :ADD_MENU_ITEM 14 "vivado_ipi_gui_launch.bat" "Launch Vivado IPI GUI"
-call :ADD_MENU_ITEM 15 "vivado_build_flow_run.bat" "Run Vivado Build Flow"
-call :ADD_MENU_ITEM 16 "vivado_block_design_finalize.bat" "Finalize Block Design"
-call :ADD_MENU_ITEM 17 "vivado_ip_retarget_part.bat" "Retarget IP to Part"
-call :ADD_MENU_ITEM 18 "vivado_fpga_program.bat" "Program FPGA Device"
-call :ADD_MENU_ITEM 19 "vivado_build_and_program_auto.bat" "Auto Build + Program"
+call :ADD_MENU_ITEM 16 "vivado_ipi_gui_launch.bat" "Launch Vivado IPI GUI"
+call :ADD_MENU_ITEM 17 "vivado_build_flow_run.bat" "Run Vivado Build Flow"
+call :ADD_MENU_ITEM 18 "vivado_block_design_finalize.bat" "Finalize Block Design"
+call :ADD_MENU_ITEM 19 "vivado_ip_retarget_part.bat" "Retarget IP to Part"
+call :ADD_MENU_ITEM 20 "vivado_fpga_program.bat" "Program FPGA Device"
+call :ADD_MENU_ITEM 21 "vivado_build_and_program_auto.bat" "Auto Build + Program"
 echo.
 
 echo   %Blue%[B] Back to Project Selection%Reset%
