@@ -44,8 +44,21 @@ shift
 goto :PARSE_ARGS
 
 :ARGS_DONE
+if not exist "%TARGET_PROJECT%" (
+    echo [ERROR] Target project not found: %TARGET_PROJECT%
+    if "%NO_PAUSE%"=="0" pause
+    exit /b 1
+)
+
 if not exist "%TOOL_SCRIPT%" (
     echo [ERROR] Missing tool script: %TOOL_SCRIPT%
+    if "%NO_PAUSE%"=="0" pause
+    exit /b 1
+)
+
+where node >nul 2>nul
+if errorlevel 1 (
+    echo [ERROR] node is not available in PATH.
     if "%NO_PAUSE%"=="0" pause
     exit /b 1
 )
@@ -99,11 +112,18 @@ echo.
 echo [SUCCESS] Generated:
 echo - %TARGET_PROJECT%\output\docs\report.md
 echo - %TARGET_PROJECT%\output\docs\github.css
+echo [INFO] report.md generated successfully.
+echo [INFO] Features included:
+echo - Professional Table-based Cover Page
+echo - Detailed Project Directory Structure
+echo - Enhanced Clock/Reset & Design Methodology Sections
+echo - Refactored for better readability and style.
 if "%NO_PAUSE%"=="0" pause
 exit /b 0
 
 :PROMPT_MODULE_SELECTION
 set "MOD_COUNT=0"
+
 for /f "usebackq delims=" %%M in (`node "%TOOL_SCRIPT%" "%TARGET_PROJECT%" --list-modules 2^>nul`) do (
     if not "%%M"=="" (
         set /a MOD_COUNT+=1

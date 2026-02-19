@@ -46,12 +46,21 @@ set "REPORT_MD_LEGACY=%TARGET_PROJECT%\report.md"
 set "CSS_FILE=%DOCS_DIR%\github.css"
 set "CSS_FILE_LEGACY=%TARGET_PROJECT%\github.css"
 set "REPORT_HTML=%DOCS_DIR%\report.html"
-set "REPORT_DOCX=%DOCS_DIR%\report.docx"
+set "REPORT_DOCX_TARGET=%DOCS_DIR%\report.docx"
+set "REPORT_DOCX=%REPORT_DOCX_TARGET%"
 set "PANDOC_RESOURCE_PATH=%TARGET_PROJECT%;%DOCS_DIR%"
 set "DOCX_STYLE_POST=%TEMPLATE_ROOT%tools\postprocess_docx_style.ps1"
 set "MD_PREP_SCRIPT=%TEMPLATE_ROOT%tools\prepare_report_markdown.ps1"
+set "SVG_CONVERT_SCRIPT=%TEMPLATE_ROOT%tools\convert_svg_to_png.ps1"
+set "REFERENCE_DOC=%TEMPLATE_ROOT%docx\reference.docx"
 set "REPORT_MD_WORK=%REPORT_MD%"
+set "REPORT_MD_WORK_DOCX=%REPORT_MD%"
 set "TEMP_REPORT_MD="
+set "TEMP_REPORT_MD_DOCX="
+set "PANDOC_COMMON_OPTS=-s --from=gfm --toc --toc-depth=3 --syntax-highlighting=pygments"
+set "PANDOC_DOCX_OPTS=-s --from=markdown+pipe_tables+fenced_code_blocks+fenced_divs+footnotes+link_attributes --toc --toc-depth=3 --syntax-highlighting=pygments"
+set "DOCX_REFERENCE_OPT="
+set "DOCX_CODEBLOCK_TABLE_ARGS="
 for %%I in ("%TARGET_PROJECT%") do set "PROJECT_NAME=%%~nI"
 
 if not exist "%REPORT_MD%" (
@@ -82,6 +91,7 @@ if not exist "%CSS_FILE%" (
 echo ===============================================================================
 echo [Report Automation] Build HTML/DOCX from report.md
 echo Source: %REPORT_MD%
+echo [INFO] Applying professional styling and syntax highlighting...
 echo ===============================================================================
 
 set "PANDOC_CMD="
@@ -102,12 +112,60 @@ if not defined PANDOC_CMD (
 set "HTML_EMBED_OPT=--embed-resources"
 call :RESOLVE_PANDOC_EMBED_OPT
 call :PREPARE_REPORT_MD
+call :PREPARE_REPORT_MD_DOCX_SAFE
+call :RESOLVE_DOCX_OUTPUT_PATH
+if exist "%REFERENCE_DOC%" (
+    set "DOCX_REFERENCE_OPT=--reference-doc=""%REFERENCE_DOC%"""
+    echo [INFO] Using reference DOCX: %REFERENCE_DOC%
+) else (
+    echo [INFO] reference.docx not found. Using pandoc default DOCX template.
+)
+if /i "%REPORT_DOCX_CODE_TABLE%"=="1" (
+    set "DOCX_CODEBLOCK_TABLE_ARGS=-EnableCodeBlockTable"
+    echo [INFO] Code block 1x1 table conversion: enabled by REPORT_DOCX_CODE_TABLE=1
+) else (
+    echo [INFO] Code block 1x1 table conversion: disabled ^(set REPORT_DOCX_CODE_TABLE=1 to enable^)
+)
+
+rem ── SVG → PNG conversion for DOCX (inline) ────────────────────────────────
+set "SVG_NODE_SCRIPT=%TEMPLATE_ROOT%tools\svg_to_png_node.js"
+set "TEMP_SVG_PNG_MD=%TEMP%\report_docx_pngsvg_%RANDOM%_%RANDOM%.md"
+set "SVG_PNG_OK=0"
+where node >nul 2>&1
+if not errorlevel 1 (
+    if exist "%SVG_NODE_SCRIPT%" (
+        echo [INFO] SVG^→PNG: Using Node.js + @resvg/resvg-js converter...
+        node "%SVG_NODE_SCRIPT%" --batch-md "%REPORT_MD_WORK_DOCX%" --output-md "%TEMP_SVG_PNG_MD%" --project-root "%TARGET_PROJECT%"
+        if not errorlevel 1 set "SVG_PNG_OK=1"
+    )
+)
+if "%SVG_PNG_OK%"=="0" (
+    if exist "%SVG_CONVERT_SCRIPT%" (
+        echo [INFO] SVG^→PNG: Using PowerShell fallback converter...
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%SVG_CONVERT_SCRIPT%" -InputPath "%REPORT_MD_WORK_DOCX%" -OutputPath "%TEMP_SVG_PNG_MD%" -ProjectRoot "%TARGET_PROJECT%"
+        if not errorlevel 1 set "SVG_PNG_OK=1"
+    )
+)
+if "%SVG_PNG_OK%"=="1" (
+    if exist "%TEMP_SVG_PNG_MD%" (
+        echo [INFO] SVG^→PNG: Using PNG-embedded markdown for DOCX.
+        set "REPORT_MD_WORK_DOCX=%TEMP_SVG_PNG_MD%"
+        if defined TEMP_REPORT_MD_DOCX (
+            del /f /q "%TEMP_REPORT_MD_DOCX%" >nul 2>&1
+        )
+        set "TEMP_REPORT_MD_DOCX=%TEMP_SVG_PNG_MD%"
+    )
+) else (
+    echo [INFO] SVG^→PNG: Skipped ^(no converter or failed^). SVGs will appear as links in DOCX.
+    if exist "%TEMP_SVG_PNG_MD%" del /f /q "%TEMP_SVG_PNG_MD%" >nul 2>&1
+)
+set "PANDOC_RESOURCE_PATH=%TARGET_PROJECT%;%DOCS_DIR%;%TARGET_PROJECT%\output"
 
 if defined CSS_FILE (
-    "%PANDOC_CMD%" "%REPORT_MD_WORK%" -s --toc --toc-depth=3 %HTML_EMBED_OPT% --resource-path="%PANDOC_RESOURCE_PATH%" -c "%CSS_FILE%" -o "%REPORT_HTML%"
+    "%PANDOC_CMD%" "%REPORT_MD_WORK%" %PANDOC_COMMON_OPTS% %HTML_EMBED_OPT% --resource-path="%PANDOC_RESOURCE_PATH%" -c "%CSS_FILE%" -o "%REPORT_HTML%"
 ) else (
     echo [WARNING] github.css not found. Building HTML without CSS.
-    "%PANDOC_CMD%" "%REPORT_MD_WORK%" -s --toc --toc-depth=3 %HTML_EMBED_OPT% --resource-path="%PANDOC_RESOURCE_PATH%" -o "%REPORT_HTML%"
+    "%PANDOC_CMD%" "%REPORT_MD_WORK%" %PANDOC_COMMON_OPTS% %HTML_EMBED_OPT% --resource-path="%PANDOC_RESOURCE_PATH%" -o "%REPORT_HTML%"
 )
 
 if errorlevel 1 (
@@ -116,31 +174,30 @@ if errorlevel 1 (
     echo [SUCCESS] report HTML: %REPORT_HTML%
 )
 
-"%PANDOC_CMD%" "%REPORT_MD_WORK%" -s --toc --toc-depth=3 --resource-path="%PANDOC_RESOURCE_PATH%" -o "%REPORT_DOCX%"
+"%PANDOC_CMD%" "%REPORT_MD_WORK_DOCX%" %PANDOC_DOCX_OPTS% --resource-path="%PANDOC_RESOURCE_PATH%" %DOCX_REFERENCE_OPT% -o "%REPORT_DOCX%"
 if errorlevel 1 (
-    echo [WARNING] pandoc Word conversion failed.
+    echo [ERROR] pandoc Word conversion failed.
+    call :CLEANUP_TEMP_REPORT
+    if "%NO_PAUSE%"=="0" pause
+    exit /b 1
 ) else (
     if exist "%DOCX_STYLE_POST%" (
-        powershell -NoProfile -ExecutionPolicy Bypass -File "%DOCX_STYLE_POST%" -DocxPath "%REPORT_DOCX%"
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%DOCX_STYLE_POST%" -DocxPath "%REPORT_DOCX%" %DOCX_CODEBLOCK_TABLE_ARGS%
         if errorlevel 1 (
             echo [WARNING] DOCX style post-process failed. Keeping generated DOCX as-is.
         ) else (
-            echo [INFO] DOCX style normalized ^(10~12pt range + Malgun Gothic^).
+            echo [INFO] DOCX style normalized ^(Navy Blue Headings + Malgun Gothic^).
         )
     ) else (
         echo [WARNING] DOCX style post-process script not found: %DOCX_STYLE_POST%
     )
     echo [SUCCESS] report DOCX: %REPORT_DOCX%
 )
-
-echo.
-echo [DONE] Report build finished.
 call :CLEANUP_TEMP_REPORT
 if "%NO_PAUSE%"=="0" pause
 exit /b 0
 
 :RESOLVE_PANDOC
-set "PANDOC_CMD="
 for /f "delims=" %%F in ('where pandoc.exe 2^>nul') do (
     set "PANDOC_CMD=%%F"
     exit /b 0
@@ -232,9 +289,41 @@ set "REPORT_MD_WORK=%TEMP_REPORT_MD%"
 echo [INFO] Using prepared report source: %REPORT_MD_WORK%
 exit /b 0
 
+:PREPARE_REPORT_MD_DOCX_SAFE
+rem NOTE: SVG image stripping is now handled by the SVG→PNG conversion step.
+rem       This step just creates a working copy for pandoc processing.
+set "REPORT_MD_WORK_DOCX=%REPORT_MD_WORK%"
+set "TEMP_REPORT_MD_DOCX=%TEMP%\report_for_pandoc_docx_%RANDOM%_%RANDOM%.md"
+copy /Y "%REPORT_MD_WORK%" "%TEMP_REPORT_MD_DOCX%" >nul 2>&1
+if errorlevel 1 (
+    echo [WARNING] DOCX working copy failed. Using base prepared source.
+    if exist "%TEMP_REPORT_MD_DOCX%" del /f /q "%TEMP_REPORT_MD_DOCX%" >nul 2>&1
+    set "TEMP_REPORT_MD_DOCX="
+    set "REPORT_MD_WORK_DOCX=%REPORT_MD_WORK%"
+    exit /b 0
+)
+set "REPORT_MD_WORK_DOCX=%TEMP_REPORT_MD_DOCX%"
+exit /b 0
+
+:RESOLVE_DOCX_OUTPUT_PATH
+set "REPORT_DOCX=%REPORT_DOCX_TARGET%"
+if not exist "%REPORT_DOCX_TARGET%" exit /b 0
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='%REPORT_DOCX_TARGET%'; try { $fs=[System.IO.File]::Open($p,[System.IO.FileMode]::Open,[System.IO.FileAccess]::ReadWrite,[System.IO.FileShare]::None); $fs.Close(); exit 0 } catch { exit 1 }"
+if not errorlevel 1 exit /b 0
+
+for /f %%I in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "(Get-Date).ToString(\"yyyyMMdd_HHmmss\")"') do set "DOCX_TS=%%I"
+set "REPORT_DOCX=%DOCS_DIR%\report_%DOCX_TS%.docx"
+echo [WARNING] report.docx is locked. Writing DOCX to: %REPORT_DOCX%
+exit /b 0
+
 :CLEANUP_TEMP_REPORT
 if defined TEMP_REPORT_MD (
     if exist "%TEMP_REPORT_MD%" del /f /q "%TEMP_REPORT_MD%" >nul 2>&1
 )
 set "TEMP_REPORT_MD="
+if defined TEMP_REPORT_MD_DOCX (
+    if exist "%TEMP_REPORT_MD_DOCX%" del /f /q "%TEMP_REPORT_MD_DOCX%" >nul 2>&1
+)
+set "TEMP_REPORT_MD_DOCX="
 exit /b 0

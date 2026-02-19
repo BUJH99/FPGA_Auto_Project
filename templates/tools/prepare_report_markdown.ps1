@@ -83,6 +83,7 @@ if (-not [string]::IsNullOrWhiteSpace($body)) {
 }
 
 $result = ($resultLines -join "`n").TrimEnd() + "`n"
+
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($OutputPath, $result, $utf8NoBom)
 
