@@ -137,6 +137,7 @@ call :ADD_MENU_ITEM 6 "sim_vivado_run.bat" "Run Vivado Simulation"
 call :ADD_MENU_ITEM 7 "sim_report_auto_run.bat" "Auto Sim + Report"
 call :ADD_MENU_ITEM 8 "sim_iverilog_vcd_run.bat" "Run Iverilog VCD (Select TB)"
 call :ADD_MENU_ITEM 9 "sim_vcd_svg_run.bat" "Generate SVG from VCD (Select)"
+call :ADD_MENU_ITEM 22 "sim_vcd_wavedrom_run.bat" "Generate WaveDrom from VCD (Select)"
 echo.
 
 echo %Yellow%[ Report Automation ^(One Source^) ]%Reset%

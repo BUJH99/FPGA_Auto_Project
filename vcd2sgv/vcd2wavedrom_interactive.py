@@ -1,30 +1,54 @@
 #!/usr/bin/env python3
 """
-Interactive VCD -> SVG helper.
+Interactive VCD -> WaveDrom helper.
 
 Features:
 - Pick one or more VCD files from <project>/vcd
-- Configure each selected TB (VCD) in sequence
-- Split signal selection into TB-top and DUT-internal groups
-- Save and reuse per-TB TXT profiles (editable by user)
+- Configure each selected VCD in sequence
+- Split signal selection into TB-top and DUT/internal groups
+- Reuse/edit/create per-VCD TXT profile under <project>/vcd/svg_profiles
+- Set time range, step, and JSON/HTML output paths
 """
 
 from __future__ import annotations
 
+import argparse
+import json
 import os
 import re
-import sys
 from typing import Dict, List, Optional, Tuple
 
-from vcd_parser import build_segments, find_last_timestamp, parse_events, parse_header, resolve_signals
-from vcd2svg import make_svg
+from vcd2wavedrom import _make_html, _sample_wave
+from vcd_parser import find_last_timestamp, parse_events, parse_header, resolve_signals
 
 PROFILE_DIRNAME = "svg_profiles"
-VALID_RADIX = ("hex", "dec", "bin")
 
 
 def _tokenize(spec: str) -> List[str]:
     return [t for t in re.split(r"[,\s]+", spec.strip()) if t]
+
+
+def _split_csv(raw: str) -> List[str]:
+    return [x.strip() for x in raw.split(",") if x.strip()]
+
+
+def _parse_bool(raw: str) -> Optional[bool]:
+    text = raw.strip().lower()
+    if text in ("1", "true", "yes", "y", "on"):
+        return True
+    if text in ("0", "false", "no", "n", "off"):
+        return False
+    return None
+
+
+def _parse_positive_int(raw: str) -> int:
+    text = raw.strip()
+    if not text:
+        return 0
+    if not text.isdigit():
+        return 0
+    value = int(text)
+    return value if value > 0 else 0
 
 
 def _parse_index_selector(spec: str, max_idx: int) -> Tuple[List[int], List[str]]:
@@ -140,31 +164,35 @@ def _choose_vcds(vcd_dir: str) -> Optional[List[str]]:
         return [files[i - 1] for i in indices]
 
 
+def _parse_time_range(raw: str) -> Optional[Tuple[int, int]]:
+    if not raw:
+        return None
+    m = re.match(r"^\s*(\d+)\s*:\s*(\d+)\s*$", raw)
+    if not m:
+        return None
+    s = int(m.group(1))
+    e = int(m.group(2))
+    if e <= s:
+        return None
+    return s, e
+
+
 def _ask_range(default_start: int, default_end: int, default_spec: str = "") -> Tuple[int, int]:
     default_text = f"{default_start}:{default_end}"
-    if default_spec:
-        m = re.match(r"^\s*(\d+)\s*:\s*(\d+)\s*$", default_spec)
-        if m:
-            s = int(m.group(1))
-            e = int(m.group(2))
-            if e > s:
-                default_start, default_end = s, e
-                default_text = f"{s}:{e}"
+    parsed = _parse_time_range(default_spec)
+    if parsed:
+        default_start, default_end = parsed
+        default_text = f"{default_start}:{default_end}"
 
     while True:
         raw = input(f"Time range start:end [{default_text}]: ").strip()
         if not raw:
             return int(default_start), int(default_end)
-        m = re.match(r"^\s*(\d+)\s*:\s*(\d+)\s*$", raw)
-        if not m:
+        parsed = _parse_time_range(raw)
+        if not parsed:
             print("Invalid range format. Example: 0:5000000")
             continue
-        s = int(m.group(1))
-        e = int(m.group(2))
-        if e <= s:
-            print("End must be greater than start.")
-            continue
-        return s, e
+        return parsed
 
 
 def _infer_tb_scope(signals) -> str:
@@ -193,7 +221,6 @@ def _split_tb_and_dut(signals) -> Tuple[str, List, List]:
             continue
         if parts[0] != tb_scope:
             continue
-        # tb_scope.<signal> -> TB top signal, deeper hierarchy -> DUT/internal
         if len(parts) <= 2:
             tb_top.append(sig)
         else:
@@ -233,24 +260,43 @@ def _read_profile(path: str) -> Dict[str, str]:
 
 def _write_profile(path: str, data: Dict[str, str]) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    ordered_keys = [
+        "include_tb",
+        "include_dut",
+        "exclude",
+        "time_range",
+        "zoom",
+        "output",
+        "radix_default",
+        "radix_overrides",
+        "wavedrom_step",
+        "wavedrom_output",
+        "wavedrom_html_output",
+        "wavedrom_html",
+    ]
+    extras = [k for k in sorted(data.keys()) if k not in ordered_keys]
     lines = [
         "# VCD2SVG profile",
         "# Editable text file. Comma-separated signal names are supported.",
         "# Keys: include_tb, include_dut, exclude, time_range, zoom, output, radix_default, radix_overrides, wavedrom_step, wavedrom_output, wavedrom_html_output, wavedrom_html",
-        f"include_tb={data.get('include_tb', '')}",
-        f"include_dut={data.get('include_dut', '')}",
-        f"exclude={data.get('exclude', '')}",
-        f"time_range={data.get('time_range', '')}",
-        f"zoom={data.get('zoom', '')}",
-        f"output={data.get('output', '')}",
-        f"radix_default={data.get('radix_default', 'hex')}",
-        f"radix_overrides={data.get('radix_overrides', '')}",
-        f"wavedrom_step={data.get('wavedrom_step', '')}",
-        f"wavedrom_output={data.get('wavedrom_output', '')}",
-        f"wavedrom_html_output={data.get('wavedrom_html_output', '')}",
-        f"wavedrom_html={data.get('wavedrom_html', '')}",
-        "",
     ]
+    defaults = {
+        "radix_default": "hex",
+        "radix_overrides": "",
+        "wavedrom_step": "",
+        "wavedrom_output": "",
+        "wavedrom_html_output": "",
+        "wavedrom_html": "",
+    }
+    for k in ordered_keys:
+        v = data.get(k, defaults.get(k, ""))
+        if k == "radix_default" and not str(v).strip():
+            v = "hex"
+        lines.append(f"{k}={v}")
+    for k in extras:
+        lines.append(f"{k}={data.get(k, '')}")
+    lines.append("")
+
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
@@ -287,15 +333,22 @@ def _signals_to_csv(signals) -> str:
     return ",".join(sig.full_name for sig in signals)
 
 
-def _choose_signals_with_default(prompt: str, signals, default_spec: str, blank_behavior: str):
+def _choose_signals_with_default(
+    prompt: str,
+    signals,
+    default_spec: str,
+    blank_behavior: str,
+    default_count: int,
+):
+    show_default = default_spec if default_spec else blank_behavior
+
     while True:
-        show_default = default_spec if default_spec else blank_behavior
         raw = input(f"{prompt} [default: {show_default}]: ").strip()
         spec = raw if raw else default_spec
 
         if not spec:
-            if blank_behavior == "first 10":
-                return list(signals[:10])
+            if blank_behavior == "first":
+                return list(signals[: max(1, default_count)])
             return []
 
         if spec.lower() in ("all", "*"):
@@ -309,103 +362,36 @@ def _choose_signals_with_default(prompt: str, signals, default_spec: str, blank_
         print("[ERROR] No valid signals selected. Try again.")
 
 
-def _normalize_radix(raw: str, fallback: str = "hex") -> str:
-    value = raw.strip().lower()
-    if value in VALID_RADIX:
-        return value
-    return fallback
-
-
-def _parse_radix_overrides(spec: str) -> Tuple[Dict[str, str], List[str]]:
-    out: Dict[str, str] = {}
-    errors: List[str] = []
-    if not spec:
-        return out, errors
-
-    for tk in [x.strip() for x in spec.split(",") if x.strip()]:
-        if ":" not in tk:
-            errors.append(f"Invalid radix override token: {tk}")
-            continue
-        name, fmt = tk.rsplit(":", 1)
-        name = name.strip()
-        fmt = fmt.strip().lower()
-        if not name:
-            errors.append(f"Invalid radix override token: {tk}")
-            continue
-        if fmt not in VALID_RADIX:
-            errors.append(f"Invalid radix '{fmt}' for signal '{name}'")
-            continue
-        out[name] = fmt
-    return out, errors
-
-
-def _format_radix_overrides(bus_signals, overrides: Dict[str, str], default_fmt: str) -> str:
-    items: List[str] = []
-    for sig in bus_signals:
-        fmt = overrides.get(sig.full_name, default_fmt)
-        if fmt != default_fmt:
-            items.append(f"{sig.full_name}:{fmt}")
-    return ",".join(items)
-
-
-def _ask_bus_radix(selected_signals, default_fmt: str, default_overrides: Dict[str, str]):
-    bus_signals = [s for s in selected_signals if s.width > 1]
-    if not bus_signals:
-        return "hex", {}
-
-    print()
-    print(f"[INFO] Bus signals selected: {len(bus_signals)}")
+def _ask_positive_int(prompt: str, default_value: int) -> int:
     while True:
-        raw = input(f"Default bus radix [hex/dec/bin] [{default_fmt}]: ").strip().lower()
+        raw = input(f"{prompt} [{default_value}]: ").strip()
         if not raw:
-            base_fmt = default_fmt
-            break
-        if raw in VALID_RADIX:
-            base_fmt = raw
-            break
-        print("Invalid radix. Choose one of: hex, dec, bin.")
-
-    overrides: Dict[str, str] = {}
-    valid_names = {s.full_name for s in bus_signals}
-    for name, fmt in default_overrides.items():
-        if name in valid_names and fmt in VALID_RADIX and fmt != base_fmt:
-            overrides[name] = fmt
-
-    edit_raw = input("Change radix for specific bus signals now? (y/N): ").strip().lower()
-    if edit_raw in ("y", "yes"):
-        print("Bus signal list:")
-        for i, sig in enumerate(bus_signals, start=1):
-            cur = overrides.get(sig.full_name, base_fmt)
-            print(f"  [{i}] {sig.full_name} [{sig.width}] ({cur})")
-
-        while True:
-            spec = input("Signal to override (index/name/range, blank=done): ").strip()
-            if not spec:
-                break
-            target_signals, errors = _parse_signal_selector(spec, bus_signals)
-            for e in errors:
-                print(f"[WARN] {e}")
-            if not target_signals:
-                print("[WARN] No valid bus signals selected.")
-                continue
-
-            while True:
-                fmt_raw = input("Radix for selected signal(s) [hex/dec/bin]: ").strip().lower()
-                if fmt_raw in VALID_RADIX:
-                    break
-                print("Invalid radix. Choose one of: hex, dec, bin.")
-
-            for sig in target_signals:
-                if fmt_raw == base_fmt:
-                    overrides.pop(sig.full_name, None)
-                else:
-                    overrides[sig.full_name] = fmt_raw
-            print(f"[INFO] Updated radix for {len(target_signals)} signal(s).")
-
-    return base_fmt, overrides
+            return default_value
+        if raw.isdigit() and int(raw) > 0:
+            return int(raw)
+        print("Invalid value. Enter a positive integer.")
 
 
-def _configure_one_vcd(project_dir: str, vcd_path: str) -> bool:
+def _ask_yes_no(prompt: str, default_yes: bool = True) -> bool:
+    hint = "Y/n" if default_yes else "y/N"
+    while True:
+        raw = input(f"{prompt} [{hint}]: ").strip().lower()
+        if not raw:
+            return default_yes
+        if raw in ("y", "yes"):
+            return True
+        if raw in ("n", "no"):
+            return False
+        print("Invalid input. Enter y or n.")
+
+
+def _configure_one_vcd(
+    project_dir: str,
+    vcd_path: str,
+    max_signals: int,
+    forced_step: int,
+    force_html: Optional[bool],
+) -> Optional[bool]:
     base_name = os.path.splitext(os.path.basename(vcd_path))[0]
     profile_path = _profile_path(project_dir, base_name)
     profile: Dict[str, str] = {}
@@ -428,7 +414,7 @@ def _configure_one_vcd(project_dir: str, vcd_path: str) -> bool:
                 break
             if mode in ("q", "quit", "c", "cancel"):
                 print("[INFO] Cancelled by user.")
-                return False
+                return None
             print("Invalid input. Enter Y/E/N/Q.")
     else:
         print(f"[INFO] No profile yet. New profile will be created: {profile_path}")
@@ -453,31 +439,20 @@ def _configure_one_vcd(project_dir: str, vcd_path: str) -> bool:
     default_dut = profile.get("include_dut", "")
     default_exclude = profile.get("exclude", "")
     default_range = profile.get("time_range", "")
-    default_zoom = profile.get("zoom", "")
-    default_radix = _normalize_radix(profile.get("radix_default", "hex"), "hex")
-    default_overrides, default_ov_errors = _parse_radix_overrides(profile.get("radix_overrides", ""))
-    default_wavedrom_step = profile.get("wavedrom_step", "")
-    default_wavedrom_output = profile.get("wavedrom_output", "")
-    default_wavedrom_html_output = profile.get("wavedrom_html_output", "")
-    default_wavedrom_html = profile.get("wavedrom_html", "")
-    for e in default_ov_errors:
-        print(f"[WARN] {e}")
-
-    vcd_dir = os.path.dirname(vcd_path)
-    out_default = os.path.join(vcd_dir, "svg", f"{base_name}_custom.svg")
-    out_default = _path_from_profile(project_dir, profile.get("output", ""), out_default)
 
     selected_tb = _choose_signals_with_default(
-        "TB-top include (indexes/names/ranges or all/*)",
+        "TB-top include",
         tb_top_signals,
         default_tb,
-        "first 10",
+        blank_behavior="first",
+        default_count=max_signals,
     )
     selected_dut = _choose_signals_with_default(
-        "DUT/internal include (indexes/names/ranges or all/*)",
+        "DUT/internal include",
         dut_internal_signals,
         default_dut,
-        "none",
+        blank_behavior="none",
+        default_count=max_signals,
     )
 
     selected_map = {}
@@ -503,25 +478,41 @@ def _configure_one_vcd(project_dir: str, vcd_path: str) -> bool:
             print("[ERROR] All selected signals were excluded.")
             return False
 
-    bus_default_fmt, bus_fmt_overrides = _ask_bus_radix(selected, default_radix, default_overrides)
-
     last_t = find_last_timestamp(vcd_path)
     start_t, end_t = _ask_range(0, max(1, last_t), default_spec=default_range)
 
-    zoom_raw = input(f"Zoom (px/tick, blank=auto) [default: {default_zoom or 'auto'}]: ").strip()
-    zoom_text = zoom_raw if zoom_raw else default_zoom
-    scale = 0.0
-    if zoom_text:
-        try:
-            scale = float(zoom_text)
-        except ValueError:
-            print("[WARN] Invalid zoom. Auto mode will be used.")
-            scale = 0.0
+    span = max(1, end_t - start_t)
+    auto_step = max(1, span // 120)
+    profile_step = _parse_positive_int(profile.get("wavedrom_step", ""))
+    default_step = forced_step if forced_step > 0 else (profile_step if profile_step > 0 else auto_step)
+    step = _ask_positive_int("Step (sample ticks)", default_step)
 
-    out_raw = input(f"Output SVG path [{out_default}]: ").strip()
-    out_path = out_raw if out_raw else out_default
-    if not os.path.isabs(out_path):
-        out_path = os.path.normpath(os.path.join(project_dir, out_path))
+    if force_html is None:
+        profile_html = _parse_bool(profile.get("wavedrom_html", ""))
+        html_default = True if profile_html is None else profile_html
+        html_enabled = _ask_yes_no("Generate HTML viewer too?", default_yes=html_default)
+    else:
+        html_enabled = force_html
+        print(f"[INFO] HTML generation forced: {'ON' if html_enabled else 'OFF'}")
+
+    vcd_dir = os.path.dirname(vcd_path)
+    out_json_default = os.path.join(vcd_dir, "wavedrom", f"{base_name}_custom.json")
+    out_json_default = _path_from_profile(project_dir, profile.get("wavedrom_output", ""), out_json_default)
+    out_json_raw = input(f"Output JSON path [{out_json_default}]: ").strip()
+    out_json_path = out_json_raw if out_json_raw else out_json_default
+    if not os.path.isabs(out_json_path):
+        out_json_path = os.path.normpath(os.path.join(project_dir, out_json_path))
+
+    out_html_path = ""
+    if html_enabled:
+        out_html_default = os.path.splitext(out_json_path)[0] + ".html"
+        out_html_default = _path_from_profile(
+            project_dir, profile.get("wavedrom_html_output", ""), out_html_default
+        )
+        out_html_raw = input(f"Output HTML path [{out_html_default}]: ").strip()
+        out_html_path = out_html_raw if out_html_raw else out_html_default
+        if not os.path.isabs(out_html_path):
+            out_html_path = os.path.normpath(os.path.join(project_dir, out_html_path))
 
     tracked_ids = [s.id_code for s in selected]
     events_by_id = parse_events(
@@ -531,61 +522,84 @@ def _configure_one_vcd(project_dir: str, vcd_path: str) -> bool:
         end_time=end_t,
     )
 
-    span = max(1, end_t - start_t)
-    if scale <= 0:
-        scale = max(1e-6, 1800.0 / span)
-
-    rows = []
+    signal_entries: List[Dict[str, object]] = []
     for sig in selected:
-        segments = build_segments(events_by_id.get(sig.id_code, []), start_t, end_t, default="x")
-        rows.append((sig.full_name, sig.width, segments))
+        wave, data = _sample_wave(
+            events_by_id.get(sig.id_code, []),
+            sig.width,
+            start_t,
+            end_t,
+            step,
+        )
+        entry: Dict[str, object] = {"name": sig.full_name, "wave": wave}
+        if data:
+            entry["data"] = data
+        signal_entries.append(entry)
 
-    make_svg(
-        rows,
-        start_t,
-        end_t,
-        scale,
-        out_path,
-        value_formats=bus_fmt_overrides,
-        default_bus_fmt=bus_default_fmt,
-    )
-
-    bus_signals = [s for s in selected if s.width > 1]
-    profile_data = {
-        "include_tb": _signals_to_csv(selected_tb),
-        "include_dut": _signals_to_csv(selected_dut),
-        "exclude": _signals_to_csv(excluded_signals),
-        "time_range": f"{start_t}:{end_t}",
-        "zoom": zoom_text,
-        "output": _to_rel_if_under(out_path, project_dir),
-        "radix_default": bus_default_fmt,
-        "radix_overrides": _format_radix_overrides(bus_signals, bus_fmt_overrides, bus_default_fmt),
-        "wavedrom_step": default_wavedrom_step,
-        "wavedrom_output": default_wavedrom_output,
-        "wavedrom_html_output": default_wavedrom_html_output,
-        "wavedrom_html": default_wavedrom_html,
+    title = f"{base_name}: {start_t}..{end_t} (step={step})"
+    payload = {
+        "signal": signal_entries,
+        "head": {"text": title},
+        "config": {"hscale": 1},
     }
-    _write_profile(profile_path, profile_data)
 
-    print("\n[OK] SVG generated")
+    os.makedirs(os.path.dirname(os.path.abspath(out_json_path)), exist_ok=True)
+    with open(out_json_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
+    if html_enabled:
+        os.makedirs(os.path.dirname(os.path.abspath(out_html_path)), exist_ok=True)
+        json_for_html = os.path.relpath(out_json_path, os.path.dirname(os.path.abspath(out_html_path)))
+        _make_html(json_for_html.replace("\\", "/"), out_html_path)
+
+    profile_out = dict(profile)
+    profile_out["include_tb"] = _signals_to_csv(selected_tb)
+    profile_out["include_dut"] = _signals_to_csv(selected_dut)
+    profile_out["exclude"] = _signals_to_csv(excluded_signals)
+    profile_out["time_range"] = f"{start_t}:{end_t}"
+    profile_out["wavedrom_step"] = str(step)
+    profile_out["wavedrom_output"] = _to_rel_if_under(out_json_path, project_dir)
+    profile_out["wavedrom_html"] = "1" if html_enabled else "0"
+    if html_enabled:
+        profile_out["wavedrom_html_output"] = _to_rel_if_under(out_html_path, project_dir)
+    _write_profile(profile_path, profile_out)
+
+    print("\n[OK] WaveDrom generated")
     print(f"[OK] VCD    : {vcd_path}")
-    print(f"[OK] File   : {out_path}")
+    print(f"[OK] JSON   : {out_json_path}")
+    if html_enabled:
+        print(f"[OK] HTML   : {out_html_path}")
     print(f"[OK] Signals: {len(selected)}")
     print(f"[OK] Range  : {start_t}:{end_t}")
+    print(f"[OK] Step   : {step}")
     print(f"[OK] Profile: {profile_path}")
     return True
 
 
 def main() -> int:
-    if len(sys.argv) < 2:
-        print("Usage: vcd2svg_interactive.py <project_dir>")
-        return 1
+    ap = argparse.ArgumentParser(description="Interactive VCD to WaveDrom converter")
+    ap.add_argument("project_dir", help="Project directory")
+    ap.add_argument("--max-signals", type=int, default=10, help="Default TB-top signal count for blank selection")
+    ap.add_argument("--step", type=int, default=0, help="Default sample step (ticks)")
+    ap.add_argument("--html", action="store_true", help="Force HTML generation")
+    ap.add_argument("--no-html", action="store_true", help="Disable HTML generation")
+    args = ap.parse_args()
 
-    project_dir = os.path.abspath(sys.argv[1])
+    project_dir = os.path.abspath(args.project_dir)
     vcd_dir = os.path.join(project_dir, "vcd")
     if not os.path.isdir(vcd_dir):
         print(f"[ERROR] VCD folder not found: {vcd_dir}")
         return 1
+
+    if args.html and args.no_html:
+        print("[ERROR] --html and --no-html cannot be used together.")
+        return 1
+
+    force_html: Optional[bool] = None
+    if args.html:
+        force_html = True
+    elif args.no_html:
+        force_html = False
 
     vcd_paths = _choose_vcds(vcd_dir)
     if not vcd_paths:
@@ -595,27 +609,34 @@ def main() -> int:
     print(f"\n[INFO] Selected VCD count: {len(vcd_paths)}")
     ok_count = 0
     fail_count = 0
+    skip_count = 0
 
     for i, vcd_path in enumerate(vcd_paths, start=1):
         print("\n" + "=" * 79)
         print(f"[VCD {i}/{len(vcd_paths)}] {vcd_path}")
         print("=" * 79)
         try:
-            ok = _configure_one_vcd(project_dir, vcd_path)
+            result = _configure_one_vcd(
+                project_dir=project_dir,
+                vcd_path=vcd_path,
+                max_signals=max(1, args.max_signals),
+                forced_step=max(0, args.step),
+                force_html=force_html,
+            )
         except Exception as ex:
             print(f"[ERROR] Unexpected failure: {ex}")
-            ok = False
+            result = False
 
-        if ok:
+        if result is None:
+            skip_count += 1
+        elif result:
             ok_count += 1
         else:
             fail_count += 1
 
     print("\n" + "=" * 79)
-    print(f"[DONE] total={len(vcd_paths)} ok={ok_count} fail={fail_count}")
-    if fail_count > 0:
-        return 1
-    return 0
+    print(f"[DONE] total={len(vcd_paths)} ok={ok_count} skip={skip_count} fail={fail_count}")
+    return 0 if fail_count == 0 else 1
 
 
 if __name__ == "__main__":

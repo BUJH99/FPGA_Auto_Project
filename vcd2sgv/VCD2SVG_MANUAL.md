@@ -59,9 +59,10 @@
 - Profile path:
   - `<project>/vcd/svg_profiles/<vcd_name>.txt`
 - On next run, if profile exists:
-  - `U`: use profile defaults
+  - `Y`: load saved TXT values
   - `E`: open profile in Notepad, then continue
   - `N`: ignore and start new config
+  - `Q`: cancel this VCD
 - Profile keys:
   - `include_tb=...`
   - `include_dut=...`
@@ -141,3 +142,57 @@ templates\bat\sim_vcd_svg_run.bat Sensor_Uart --no-pause
 - Interactive Python tool: `vcd2sgv/vcd2svg_interactive.py`
 - Core converter: `vcd2sgv/vcd2svg.py`
 - Parser utilities: `vcd2sgv/vcd_parser.py`
+
+## 10. WaveDrom From SVG Profile
+- You can reuse the same profile TXT files:
+  - `<project>/vcd/svg_profiles/<tb>.txt`
+- Tool:
+  - `vcd2sgv/vcd2wavedrom_from_profile.py`
+- MAIN menu (`22`) now uses VCD-based interactive mode:
+  - `Generate WaveDrom from VCD (Select)`
+
+Example:
+
+```bat
+python vcd2sgv\vcd2wavedrom_from_profile.py ^
+  Sensor_Uart ^
+  --profiles tb_control_unit,tb_button_sync ^
+  --step 20000 --html
+```
+
+Behavior:
+- Confirmation:
+  - Each selected profile asks once: `Yes / Edit / Skip / Quit`
+  - Use `--yes` to skip prompts
+- Signal/range source:
+  - `include_tb`, `include_dut`, `exclude`, `time_range` from profile TXT
+- Step selection:
+  - `--step` (CLI) > `wavedrom_step` (profile) > auto
+- Outputs:
+  - JSON: `<project>/vcd/wavedrom/<tb>.json` (default)
+  - HTML: `<project>/vcd/wavedrom/<tb>.html` (default)
+- Profile keys updated after run:
+  - `wavedrom_step`
+  - `wavedrom_output`
+  - `wavedrom_html_output`
+  - `wavedrom_html`
+
+## 11. WaveDrom Interactive (VCD-Based)
+- MAIN menu:
+  - `22. Generate WaveDrom from VCD (Select)`
+- Batch:
+  - `templates/bat/sim_vcd_wavedrom_run.bat`
+- Python:
+  - `vcd2sgv/vcd2wavedrom_interactive.py`
+
+Flow:
+- Select one or more VCD files from `<project>/vcd`
+- Per VCD:
+  - If TXT exists, choose: `Y/E/N/Q`
+  - TB-top include
+  - DUT/internal include
+  - Exclude
+  - Time range
+  - Step
+  - HTML yes/no
+  - Output JSON/HTML paths
