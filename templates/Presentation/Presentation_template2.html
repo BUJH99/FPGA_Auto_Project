@@ -1,0 +1,1138 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Presentation – Design 2 (Minimal Navy)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Roboto+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.css" />
+  <style>
+    /* ─── CSS Variables : Minimal Navy Theme ─────────────────────────────── */
+    :root {
+      --navy: #003366;
+      --navy-lt: #0a4080;
+      --black: #000000;
+      --gray-d: #333333;
+      --gray-m: #666666;
+      --gray-l: #aaaaaa;
+      --bg-win: #f0f2f5;
+      --bg-card: #f7f9fc;
+      --white: #ffffff;
+      --border: #e0e4ea;
+      --accent-line: 3px solid var(--navy);
+    }
+
+    /* ─── Global Reset ───────────────────────────────────────────────────── */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      background: var(--bg-win);
+      font-family: 'Noto Sans KR', sans-serif;
+      color: var(--gray-d);
+    }
+
+    /* ─── Reveal.js Overrides ────────────────────────────────────────────── */
+    .reveal {
+      font-family: 'Noto Sans KR', sans-serif;
+      color: var(--gray-d);
+    }
+
+    .reveal .slides {
+      text-align: left;
+    }
+
+    .reveal .slides section {
+      padding: 0;
+      height: 100%;
+    }
+
+    /* ─── Slide Frame ────────────────────────────────────────────────────── */
+    .sf {
+      width: 100%;
+      height: 100%;
+      background: var(--white);
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+      display: flex;
+      flex-direction: column;
+      padding: 44px 60px 36px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ─── Slide Header ───────────────────────────────────────────────────── */
+    .sh {
+      border-bottom: var(--accent-line);
+      padding-bottom: 12px;
+      margin-bottom: 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+
+    .sh h1 {
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--black);
+      letter-spacing: -0.5px;
+    }
+
+    .sh .sh-tag {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--gray-m);
+      letter-spacing: 0.3px;
+      padding: 3px 10px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+    }
+
+    /* ─── Slide Body ─────────────────────────────────────────────────────── */
+    .sb {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ─── Typography ─────────────────────────────────────────────────────── */
+    h2.sect {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--black);
+      border-left: 4px solid var(--navy);
+      padding-left: 10px;
+      margin-bottom: 12px;
+    }
+
+    p,
+    li {
+      font-size: 14px;
+      line-height: 1.65;
+      color: var(--gray-d);
+    }
+
+    ul {
+      padding-left: 0;
+      list-style: none;
+    }
+
+    li {
+      position: relative;
+      padding-left: 16px;
+      margin-bottom: 6px;
+    }
+
+    li::before {
+      content: "•";
+      color: var(--navy);
+      font-weight: 700;
+      position: absolute;
+      left: 0;
+    }
+
+    strong {
+      color: var(--navy);
+      font-weight: 700;
+    }
+
+    code,
+    .mono {
+      font-family: 'Roboto Mono', monospace;
+      background: #eef1f6;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 0.88em;
+      color: var(--black);
+      border: 1px solid #d6dbe6;
+    }
+
+    /* ─── Cards ──────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--navy);
+      padding: 18px 20px;
+      border-radius: 2px;
+    }
+
+    .card.plain {
+      border-left-width: 1px;
+    }
+
+    .card.accent {
+      background: var(--navy);
+      border-color: var(--navy);
+    }
+
+    .card.accent h2.sect,
+    .card.accent li,
+    .card.accent p,
+    .card.accent strong {
+      color: #ffffff;
+    }
+
+    .card.accent li::before {
+      color: #a8c4e0;
+    }
+
+    .card.light {
+      background: var(--bg-card);
+      border-left-width: 1px;
+    }
+
+    /* ─── Grid Layouts ───────────────────────────────────────────────────── */
+    .g2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      min-height: 0;
+    }
+
+    .g3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+      min-height: 0;
+    }
+
+    .col {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-height: 0;
+    }
+
+    /* ─── Media Box ──────────────────────────────────────────────────────── */
+    .mbox {
+      flex: 1;
+      min-height: 0;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+      border-radius: 2px;
+    }
+
+    .mbox img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    .mbox.empty {
+      background: repeating-linear-gradient(-45deg, #f3f4f6, #f3f4f6 10px, #e9ecf0 10px, #e9ecf0 20px);
+    }
+
+    .mbox .empty-lbl {
+      font-size: 12px;
+      color: var(--gray-m);
+      text-align: center;
+      padding: 12px;
+      line-height: 1.5;
+    }
+
+    /* ─── Stat Pill ──────────────────────────────────────────────────────── */
+    .pill-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .pill {
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--navy);
+      background: var(--white);
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--gray-d);
+      border-radius: 2px;
+    }
+
+    .pill span {
+      color: var(--navy);
+    }
+
+    /* ─── Flow Chain ─────────────────────────────────────────────────────── */
+    .flow {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--navy);
+      padding: 12px;
+      background: var(--white);
+      overflow: auto;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .flow-step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--gray-d);
+    }
+
+    .flow-step .idx {
+      width: 20px;
+      height: 20px;
+      background: var(--navy);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .flow-arr {
+      text-align: center;
+      color: var(--navy);
+      font-size: 11px;
+      line-height: 1;
+    }
+
+    /* ─── Table ──────────────────────────────────────────────────────────── */
+    table.rpt {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      color: var(--gray-d);
+    }
+
+    table.rpt th {
+      background: var(--navy);
+      color: #fff;
+      padding: 5px 8px;
+      text-align: left;
+      font-weight: 700;
+      font-size: 10px;
+      letter-spacing: 0.4px;
+    }
+
+    table.rpt td {
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    table.rpt tr:nth-child(even) td {
+      background: var(--bg-card);
+    }
+
+    .bar-wrap {
+      background: #e9ecf0;
+      height: 6px;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 2px;
+    }
+
+    .bar-fill {
+      height: 100%;
+      background: var(--navy);
+      border-radius: 3px;
+    }
+
+    /* ─── Footer ─────────────────────────────────────────────────────────── */
+    .sf-footer {
+      position: absolute;
+      bottom: 14px;
+      right: 50px;
+      font-size: 11px;
+      color: var(--gray-l);
+      font-family: 'Roboto Mono', monospace;
+    }
+
+    /* ─── Cover Slide ────────────────────────────────────────────────────── */
+    .sf-cover {
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      gap: 0;
+      padding: 60px 80px;
+    }
+
+    .sf-cover .cover-eyebrow {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--gray-m);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .sf-cover h1 {
+      font-size: 56px;
+      font-weight: 900;
+      color: var(--black);
+      letter-spacing: -1.5px;
+      line-height: 1.1;
+      margin-bottom: 18px;
+    }
+
+    .sf-cover .cover-bar {
+      width: 60px;
+      height: 4px;
+      background: var(--navy);
+      margin: 0 auto 32px;
+    }
+
+    .sf-cover .cover-info {
+      margin-top: 36px;
+      border-top: 1px solid var(--border);
+      padding-top: 24px;
+      display: flex;
+      gap: 50px;
+      justify-content: center;
+      font-size: 14px;
+      color: var(--gray-m);
+    }
+
+    .sf-cover .cover-info strong {
+      color: var(--gray-d);
+    }
+
+    /* ─── TOC ────────────────────────────────────────────────────────────── */
+    .toc-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      flex: 1;
+      min-height: 0;
+      align-content: start;
+    }
+
+    .toc-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+    }
+
+    .toc-num {
+      width: 28px;
+      height: 28px;
+      background: var(--navy);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .toc-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--gray-d);
+    }
+
+    .toc-sub {
+      font-size: 11px;
+      color: var(--gray-m);
+      margin-top: 2px;
+    }
+
+    /* ─── Module State Table ─────────────────────────────────────────────── */
+    .state-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow: auto;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .state-item {
+      padding: 8px 12px;
+      border-left: 3px solid var(--navy);
+      background: var(--bg-card);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .state-item strong {
+      color: var(--navy);
+      font-size: 11px;
+      font-weight: 800;
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    /* ─── Child Modules ──────────────────────────────────────────────────── */
+    .child-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 10px;
+    }
+
+    .child-card {
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-top: 3px solid var(--navy);
+      background: var(--white);
+      font-size: 12px;
+    }
+
+    .child-card .cn {
+      font-weight: 800;
+      color: var(--black);
+      margin-bottom: 4px;
+    }
+
+    .child-card .cr {
+      color: var(--gray-m);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    /* ─── Report Panel ───────────────────────────────────────────────────── */
+    .report-panel {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      font-family: 'Roboto Mono', monospace;
+      font-size: 10px;
+      line-height: 1.6;
+      color: var(--gray-d);
+      white-space: pre-wrap;
+      padding: 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+    }
+
+    /* ─── Print ──────────────────────────────────────────────────────────── */
+    @media print {
+      @page {
+        size: 1000px 700px;
+        margin: 0;
+      }
+
+      html,
+      body {
+        background: #fff;
+      }
+
+      .reveal .slides section {
+        break-after: page;
+        page-break-after: always;
+        page-break-inside: avoid;
+      }
+
+      .reveal .slides section:last-child {
+        break-after: auto;
+        page-break-after: auto;
+      }
+
+      .sf {
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="reveal">
+    <div class="slides" id="slides-root"></div>
+  </div>
+
+  <!-- Jinja2 injects presentation_config JSON here -->
+  <script id="presentation-config-json" type="application/json">
+{% if presentation_config is defined %}{{ presentation_config | tojson | safe }}{% endif %}
+    </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.js"></script>
+  <script>
+    (() => {
+      /* ══════════════════════════════════════════════════════════════
+         1. CONFIG RESOLUTION
+      ══════════════════════════════════════════════════════════════ */
+      const DEFAULT = {
+        meta: {
+          projectTitle: "FPGA Project Presentation",
+          projectSubtitle: "Auto-generated presentation",
+          author: "Author",
+          date: "",
+          team: "FPGA Team",
+          cover: { titleLine1: "FPGA Project", titleLine2: "Presentation", subtitle: "", dateLabel: "Date", authorLabel: "Author" }
+        },
+        developmentEnvironment: { os: "Windows", tools: ["Vivado"], language: ["Verilog"] },
+        featurePlaceholders: [
+          { title: "Feature #1", description: "[Input Needed]" },
+          { title: "Feature #2", description: "[Input Needed]" }
+        ],
+        constraints: ["[Input Needed]"],
+        timingNotes: ["[Input Needed]"],
+        datapathFlowSteps: ["[Input Needed] Step 1", "[Input Needed] Step 2"],
+        clockFlowSteps: ["[Input Needed] CLK Step 1"],
+        resetFlowSteps: ["[Input Needed] RESET Step 1"],
+        conclusionPoints: ["[Input Needed]"],
+        conclusionNextSteps: ["[Input Needed]"],
+        assets: { topBlockSvg: "", testbenchWaveform: "", timingDiagramSvg: "", powerReportRpt: "", timingReportRpt: "", utilReportRpt: "" },
+        reportData: { power: null, timing: null, util: null },
+        troubleShootings: [{ title: "Trouble #1", issueItems: ["[Input Needed]"], solutionItems: ["[Input Needed]"] }],
+        modules: []
+      };
+
+      function readInjected() {
+        const el = document.getElementById("presentation-config-json");
+        if (!el) return null;
+        const raw = (el.textContent || "").trim();
+        {% raw %} if (!raw || raw.includes("{{") || raw.includes("{%")) return null; {% endraw %}
+        try { const p = JSON.parse(raw); return (p && typeof p === "object") ? p : null; }
+        catch (_) { return null; }
+      }
+
+      function merge(base, over) {
+        if (!over || typeof over !== "object") return base;
+        if (Array.isArray(base)) return Array.isArray(over) ? over : base;
+        const r = Object.assign({}, base);
+        Object.keys(over).forEach(k => {
+          if (over[k] === undefined || over[k] === null) return;
+          r[k] = (base[k] && typeof base[k] === "object" && !Array.isArray(base[k]) &&
+            typeof over[k] === "object" && !Array.isArray(over[k]))
+            ? merge(base[k], over[k]) : over[k];
+        });
+        return r;
+      }
+
+      const cfg = merge(DEFAULT, readInjected());
+
+      /* ══════════════════════════════════════════════════════════════
+         2. HELPERS
+      ══════════════════════════════════════════════════════════════ */
+      const esc = v => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      const tx = (v, fb = "") => { const s = String(v ?? "").trim(); return s || fb; };
+      const arr = v => Array.isArray(v) ? v.filter(x => x != null) : [];
+
+      function sfHeader(title, tag) {
+        return `<div class="sh"><h1>${esc(title)}</h1><span class="sh-tag">${esc(tag)}</span></div>`;
+      }
+
+      function sfFooter(cur, total) {
+        return `<div class="sf-footer">${cur} / ${total}</div>`;
+      }
+
+      function mediaBox(src, alt, fallback, extraClass = "") {
+        if (src && String(src).trim()) {
+          return `<div class="mbox ${extraClass}"><img src="${esc(src)}" alt="${esc(alt)}" loading="lazy"/></div>`;
+        }
+        return `<div class="mbox empty ${extraClass}"><span class="empty-lbl">${esc(fallback || alt)}</span></div>`;
+      }
+
+      function bulletList(items, fb = "[Input Needed]") {
+        const rows = arr(items).map(i => String(i || "").trim()).filter(Boolean);
+        if (!rows.length) return `<li>${esc(fb)}</li>`;
+        return rows.map(i => `<li>${esc(i)}</li>`).join("");
+      }
+
+      function flowChain(steps) {
+        const rows = arr(steps).map(s => String(s || "").trim()).filter(Boolean);
+        if (!rows.length) rows.push("[Input Needed]");
+        return rows.map((s, i) => {
+          const arrow = i < rows.length - 1 ? `<div class="flow-arr">↓</div>` : "";
+          return `<div class="flow-step"><span class="idx">${i + 1}</span><span>${esc(s)}</span></div>${arrow}`;
+        }).join("");
+      }
+
+      /* ══════════════════════════════════════════════════════════════
+         3. SLIDE BUILDERS
+      ══════════════════════════════════════════════════════════════ */
+
+      /* —— Slide 1: Cover —— */
+      function buildCover() {
+        const cv = (cfg.meta.cover && typeof cfg.meta.cover === "object") ? cfg.meta.cover : {};
+        const line1 = tx(cv.titleLine1, tx(cfg.meta.projectTitle, "FPGA Project"));
+        const line2 = tx(cv.titleLine2, "");
+        const sub = tx(cv.subtitle, tx(cfg.meta.projectSubtitle, ""));
+        const date = tx(cfg.meta.date, "");
+        const auth = tx(cfg.meta.author, "");
+        const team = tx(cfg.meta.team, tx(cv.team, ""));
+        const dLbl = tx(cv.dateLabel, "Date");
+        const aLbl = tx(cv.authorLabel, "Author");
+        const subtitle_html = sub ? `<p style="font-size:15px;color:var(--gray-m);margin-bottom:20px;">${esc(sub)}</p>` : "";
+        const line2_html = line2 ? `<br/><span style="color:var(--navy);">${esc(line2)}</span>` : "";
+        return `<section>
+          <div class="sf sf-cover">
+            ${team ? `<div class="cover-eyebrow">${esc(team)}</div>` : ""}
+            <h1>${esc(line1)}${line2_html}</h1>
+            <div class="cover-bar"></div>
+            ${subtitle_html}
+            <div class="cover-info">
+              ${date ? `<span><strong>${esc(dLbl)}</strong>: ${esc(date)}</span>` : ""}
+              ${auth ? `<span><strong>${esc(aLbl)}</strong>: ${esc(auth)}</span>` : ""}
+            </div>
+          </div>
+        </section>`;
+      }
+
+      /* —— Slide 2: Table of Contents —— */
+      function buildToc(moduleCount) {
+        const items = [
+          { n: "01", label: "서론 (Introduction)", sub: "프로젝트 개요 및 사양" },
+          { n: "02", label: "전체 시스템 구조", sub: "Top Block Diagram" },
+          { n: "03", label: "DataPath", sub: "신호 흐름 분석" },
+          { n: "04", label: "CLK / RESET Tree", sub: "클럭 및 리셋 경로" },
+          { n: "05", label: `세부 모듈 설계 (${moduleCount}개)`, sub: "모듈별 역할·FSM·블록 다이어그램" },
+          { n: "06", label: "테스트벤치", sub: "시뮬레이션 파형 검증" },
+          { n: "07", label: "타이밍 다이어그램", sub: "WaveDrom / SVG" },
+          { n: "08", label: "구현 분석 리포트", sub: "Power / Timing / Utilization" },
+          { n: "09", label: "Trouble Shooting", sub: "문제 원인 및 해결" },
+          { n: "10", label: "결론 (Conclusion)", sub: "핵심 결론 및 향후 계획" },
+        ];
+        const html = items.map(it => `
+          <div class="toc-item">
+            <div class="toc-num">${esc(it.n)}</div>
+            <div>
+              <div class="toc-label">${esc(it.label)}</div>
+              <div class="toc-sub">${esc(it.sub)}</div>
+            </div>
+          </div>`).join("");
+        return `<section>
+          <div class="sf">
+            ${sfHeader("목차 (Table of Contents)", "Index")}
+            <div class="sb"><div class="toc-grid">${html}</div></div>
+          </div>
+        </section>`;
+      }
+
+      /* —— Slide 3: Introduction / Dev Env —— */
+      function buildIntro() {
+        const dev = cfg.developmentEnvironment || {};
+        const os = tx(dev.os, "Windows");
+        const tools = arr(dev.tools).join(", ") || "Vivado";
+        const lang = arr(dev.language).join(", ") || "Verilog";
+        const feat = arr(cfg.featurePlaceholders);
+        const featHtml = (feat.length ? feat : [{ title: "Feature #1", description: "[Input Needed]" }]).map(f =>
+          `<div style="padding:10px 14px;border-left:3px solid var(--navy);background:var(--bg-card);margin-bottom:8px;">
+            <p style="font-weight:700;font-size:13px;color:var(--black);margin-bottom:4px;">${esc(f.title || "")}</p>
+            <p style="color:var(--gray-m);font-size:12px;">${esc(f.description || "")}</p>
+          </div>`).join("");
+        const conHtml = bulletList(cfg.constraints);
+        return `<section>
+          <div class="sf">
+            ${sfHeader("1. 서론 (Introduction)", "Project Overview")}
+            <div class="sb">
+              <div class="g2" style="margin-bottom:16px;">
+                <div class="card">
+                  <h2 class="sect">개발 환경</h2>
+                  <ul>
+                    <li><strong>OS:</strong> ${esc(os)}</li>
+                    <li><strong>Tools:</strong> ${esc(tools)}</li>
+                    <li><strong>Language:</strong> ${esc(lang)}</li>
+                  </ul>
+                </div>
+                <div class="card accent">
+                  <h2 class="sect">제약 조건 (Constraints)</h2>
+                  <ul>${conHtml}</ul>
+                </div>
+              </div>
+              <div class="card plain">
+                <h2 class="sect">구현 기능 요약</h2>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:10px;">
+                  ${featHtml}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>`;
+      }
+
+      /* —— Slide 4: Top Block Diagram —— */
+      function buildTopDiagram() {
+        return `<section>
+          <div class="sf">
+            ${sfHeader("2. 전체 시스템 구조", "System Architecture")}
+            <div class="sb">
+              ${mediaBox(cfg.assets.topBlockSvg, "Top Block Diagram", "Top Module Block Diagram을 여기에 배치하세요.\nassets.topBlockSvg 경로를 설정해 주세요.")}
+            </div>
+          </div>
+        </section>`;
+      }
+
+      /* —— Slide 5: DataPath —— */
+      function buildDataPath() {
+        const steps = arr(cfg.datapathFlowSteps);
+        return `<section>
+          <div class="sf">
+            ${sfHeader("3. DataPath", "Signal Flow Analysis")}
+            <div class="sb">
+              <div class="g2">
+                <div class="col">
+                  <h2 class="sect">신호 흐름 (DataPath)</h2>
+                  <div class="flow">${flowChain(steps)}</div>
+                </div>
+                <div class="col">
+                  <h2 class="sect">Topology</h2>
+                  ${mediaBox(cfg.assets.topBlockSvg, "Datapath topology", "Top SVG 위에 DataPath 화살표를 오버레이해 설명합니다.")}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>`;
+      }
+
+      /* —— Slide 6: CLK/RESET Tree —— */
+      function buildClkReset() {
+        return `<section>
+          <div class="sf">
+            ${sfHeader("4. CLK / RESET Tree", "Clock & Reset Path")}
+            <div class="sb">
+              <div class="g2">
+                <div class="col">
+                  <div style="margin-bottom:8px;"><span style="font-size:12px;font-weight:800;background:var(--navy);color:#fff;padding:3px 10px;">CLK</span></div>
+                  <div class="flow">${flowChain(cfg.clockFlowSteps)}</div>
+                </div>
+                <div class="col">
+                  <div style="margin-bottom:8px;"><span style="font-size:12px;font-weight:800;border:1px solid var(--navy);color:var(--navy);padding:3px 10px;">RESET</span></div>
+                  <div class="flow">${flowChain(cfg.resetFlowSteps)}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>`;
+      }
+
+      /* —— Module Slides (per module) —— */
+      function buildModuleSlide(mod, idx, total) {
+        const name = tx(mod.name, `Module ${idx}`);
+        const role = tx(mod.role, "-");
+        const summary = arr(mod.summary);
+        const states = arr(mod.stateDescription);
+        const layout = tx(mod.detailLayout, "leaf-module");
+        const isFsm = layout === "fsm-module" || states.length > 0;
+        const isParent = layout === "parent-module";
+
+        const summaryHtml = `<ul>${bulletList(summary)}</ul>`;
+        const roleBox = `
+          <h2 class="sect">${esc(name)}</h2>
+          <p style="font-size:12px;color:var(--gray-m);margin-bottom:10px;font-style:italic;">${esc(role)}</p>
+          ${summaryHtml}`;
+
+        let bodyHtml = "";
+
+        if (isParent) {
+          const children = arr(mod.childModules);
+          const childHtml = children.length
+            ? children.map(c => `
+              <div class="child-card">
+                <div class="cn">${esc(c.name || "")}</div>
+                <div class="cr">${esc(c.role || "")}</div>
+              </div>`).join("")
+            : `<div class="child-card"><div class="cn">[Sub-modules]</div></div>`;
+          bodyHtml = `
+            <div class="g2">
+              <div class="card">
+                ${roleBox}
+              </div>
+              <div class="col">
+                <h2 class="sect">Sub-module Structure</h2>
+                <div class="child-grid">${childHtml}</div>
+                ${mediaBox(mod.simpleDiagramSvg, `${name} diagram`, `${name} 블록 다이어그램을 연결하세요.`, "mbox")}
+              </div>
+            </div>`;
+        } else if (isFsm) {
+          const stateHtml = states.map(s => {
+            const colon = String(s).indexOf(":");
+            if (colon > 0) {
+              return `<div class="state-item"><strong>${esc(s.slice(0, colon).trim())}</strong>${esc(s.slice(colon + 1).trim())}</div>`;
+            }
+            return `<div class="state-item">${esc(s)}</div>`;
+          }).join("");
+          bodyHtml = `
+            <div class="g2" style="flex:1;min-height:0;">
+              <div class="col">
+                <div class="card">${roleBox}</div>
+                <div class="card plain" style="flex:1;min-height:0;">
+                  <h2 class="sect" style="margin-bottom:8px;">Block Diagram</h2>
+                  ${mediaBox(mod.simpleDiagramSvg || mod.fsmImage, `${name} diagram`, `${name} 블록 다이어그램을 연결하세요.`)}
+                </div>
+              </div>
+              <div class="col">
+                <h2 class="sect">FSM State Description</h2>
+                <div class="state-list">${stateHtml || '<div class="state-item">State descriptions not available.</div>'}</div>
+                ${mod.fsmImage ? mediaBox(mod.fsmImage, `${name} FSM`, "", "mbox") : ""}
+              </div>
+            </div>`;
+        } else {
+          bodyHtml = `
+            <div class="g2" style="flex:1;min-height:0;">
+              <div class="card">${roleBox}</div>
+              <div class="col">
+                <h2 class="sect">Block Diagram</h2>
+                ${mediaBox(mod.simpleDiagramSvg, `${name} diagram`, `${name} 블록 다이어그램을 연결하세요.`)}
+              </div>
+            </div>`;
+        }
+
+        return `<section>
+          <div class="sf">
+            ${sfHeader(`5-${idx}. ${name}`, "Module Detail")}
+            <div class="sb">${bodyHtml}</div>
+          </div>
+        </section>`;
+      }
+
+      /* —— Testbench Slide —— */
+      function buildTestbench() {
+        return `<section>
+          <div class="sf">
+            ${sfHeader("6. 테스트벤치 (Testbench)", "Simulation Verification")}
+            <div class="sb">
+              <div class="col">
+                <h2 class="sect">Waveform</h2>
+                <div style="flex:1;min-height:0;">
+                  ${mediaBox(cfg.assets.testbenchWaveform, "Testbench waveform", "Testbench 시뮬레이션 파형을 연결하세요.\nassets.testbenchWaveform 경로를 설정해 주세요.")}
+                </div>
+                <div class="card accent" style="margin-top:14px;">
+                  <h2 class="sect">Verification Points</h2>
+                  <ul>
+                    <li>Reset 해제 후 초기 동작 확인</li>
+                    <li>주요 제어/데이터 핸드쉐이크 검증</li>
+                    <li>경계값 및 에러 입력 처리 확인</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>`;
+      }
+
+      /* —— Timing Diagram Slide —— */
+      function buildTiming() {
+        const notes = arr(cfg.timingNotes);
+        return `<section>
+          <div class="sf">
+            ${sfHeader("7. 타이밍 다이어그램", "Timing Analysis")}
+            <div class="sb">
+              <div class="g2" style="flex:1;min-height:0;">
+                <div class="col">
+                  <h2 class="sect">Timing Diagram</h2>
+                  ${mediaBox(cfg.assets.timingDiagramSvg, "Timing diagram", "WaveDrom 또는 SVG 파형을 연결하세요.\nassets.timingDiagramSvg 경로를 설정해 주세요.")}
+                </div>
+                <div class="card">
+                  <h2 class="sect">타이밍 설명</h2>
+                  <ul>${bulletList(notes, "[Input Needed] 타이밍 노트를 입력하세요.")}</ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>`;
+      }
+
+      /* —— Report Slide —— */
+      function buildReport() {
+        const rd = cfg.reportData || {};
+        const pow = rd.power || {};
+        const tim = rd.timing || {};
+        const ut = rd.util || {};
+
+        const fmtN = (v, unit = "") => (v != null && String(v).trim()) ? `${v}${unit}` : "–";
+
+        const powerPills = pow.totalOnChipPowerW != null ? `
+          <div class="pill-row">
+            <div class="pill">Total On-Chip Power<br/><span>${fmtN(pow.totalOnChipPowerW, " W")}</span></div>
+            <div class="pill">Dynamic<br/><span>${fmtN(pow.dynamicPowerW, " W")}</span></div>
+            <div class="pill">Static<br/><span>${fmtN(pow.staticPowerW, " W")}</span></div>
+            <div class="pill">Junction Temp<br/><span>${fmtN(pow.junctionTempC, " °C")}</span></div>
+          </div>` : `<p style="color:var(--gray-l);font-size:12px;">Power report not available.</p>`;
+
+        const timPills = tim.wnsNs != null ? `
+          <div class="pill-row">
+            <div class="pill">WNS<br/><span>${fmtN(tim.wnsNs, " ns")}</span></div>
+            <div class="pill">TNS<br/><span>${fmtN(tim.tnsNs, " ns")}</span></div>
+            <div class="pill">Failing EP<br/><span>${fmtN(tim.failingEndpoints)}</span></div>
+            <div class="pill">Total EP<br/><span>${fmtN(tim.totalEndpoints)}</span></div>
+          </div>` : `<p style="color:var(--gray-l);font-size:12px;">Timing report not available.</p>`;
+
+        const utilRows = [
+          { label: "LUT", use: ut.lutUsed, avail: ut.lutAvailable },
+          { label: "Flip-Flop", use: ut.ffUsed, avail: ut.ffAvailable },
+          { label: "I/O", use: ut.ioUsed, avail: ut.ioAvailable },
+          { label: "BUFG", use: ut.bufgUsed, avail: ut.bufgAvailable },
+        ].filter(r => r.use != null);
+        const utilHtml = utilRows.length ? utilRows.map(r => {
+          const pct = r.avail ? Math.min((r.use / r.avail) * 100, 100).toFixed(1) : null;
+          const bar = pct ? `<div class="bar-wrap"><div class="bar-fill" style="width:${pct}%"></div></div>` : "";
+          return `<tr>
+            <td><strong>${esc(r.label)}</strong></td>
+            <td>${esc(r.use)}</td>
+            <td>${r.avail != null ? esc(r.avail) : "–"}</td>
+            <td>${pct != null ? pct + "%" : "–"}${bar}</td>
+          </tr>`;
+        }).join("") : `<tr><td colspan="4" style="color:var(--gray-l);">Utilization data not available.</td></tr>`;
+
+        return `<section>
+          <div class="sf">
+            ${sfHeader("8. 구현 분석 리포트", "Power / Timing / Utilization")}
+            <div class="sb">
+              <div class="g2" style="margin-bottom:14px;">
+                <div class="card plain">
+                  <h2 class="sect">Power Report</h2>
+                  ${powerPills}
+                </div>
+                <div class="card plain">
+                  <h2 class="sect">Timing Report</h2>
+                  ${timPills}
+                </div>
+              </div>
+              <div class="card plain">
+                <h2 class="sect">Utilization Report</h2>
+                <table class="rpt" style="margin-top:8px;">
+                  <thead><tr><th>Resource</th><th>Used</th><th>Available</th><th>Utilization</th></tr></thead>
+                  <tbody>${utilHtml}</tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>`;
+      }
+
+      /* —— Trouble Shooting Slide —— */
+      function buildTrouble() {
+        const cases = arr(cfg.troubleShootings);
+        const list = cases.length ? cases : [{ title: "Trouble #1", issueItems: ["[Input Needed]"], solutionItems: ["[Input Needed]"] }];
+        const html = list.map((item, i) => {
+          const title = tx(item.title, `Trouble #${i + 1}`);
+          const issues = arr(item.issueItems);
+          const sols = arr(item.solutionItems);
+          return `
+            <div style="margin-bottom:14px;">
+              <p style="font-size:13px;font-weight:800;color:var(--black);margin-bottom:8px;">${esc(title)}</p>
+              <div class="g2">
+                <div class="card">
+                  <h2 class="sect" style="font-size:14px;">문제 현상 / 원인</h2>
+                  <ul>${bulletList(issues)}</ul>
+                </div>
+                <div class="card accent">
+                  <h2 class="sect" style="font-size:14px;">조치 사항 / 해결</h2>
+                  <ul>${bulletList(sols)}</ul>
+                </div>
+              </div>
+            </div>`;
+        }).join("");
+        return `<section>
+          <div class="sf">
+            ${sfHeader("9. Trouble Shooting", "Problem & Solution")}
+            <div class="sb" style="overflow:auto;">${html}</div>
+          </div>
+        </section>`;
+      }
+
+      /* —— Conclusion Slide —— */
+      function buildConclusion() {
+        const pts = arr(cfg.conclusionPoints);
+        const next = arr(cfg.conclusionNextSteps);
+        return `<section>
+          <div class="sf">
+            ${sfHeader("10. 결론 (Conclusion)", "Summary & Lessons")}
+            <div class="sb">
+              <div class="g2">
+                <div class="card">
+                  <h2 class="sect">핵심 결론</h2>
+                  <ul>${bulletList(pts, "[Input Needed] 결론을 입력하세요.")}</ul>
+                </div>
+                <div class="card accent">
+                  <h2 class="sect">향후 계획</h2>
+                  <ul>${bulletList(next, "[Input Needed] 향후 계획을 입력하세요.")}</ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>`;
+      }
+
+      /* —— Q&A Slide —— */
+      function buildQA() {
+        const auth = tx(cfg.meta.author, "");
+        return `<section>
+          <div class="sf" style="justify-content:center;align-items:center;text-align:center;">
+            <h1 style="font-size:72px;font-weight:900;color:var(--black);letter-spacing:-2px;margin-bottom:24px;">Q & A</h1>
+            <div style="width:60px;height:4px;background:var(--navy);margin:0 auto 28px;"></div>
+            <p style="font-size:18px;color:var(--gray-m);">경청해 주셔서 감사합니다.</p>
+            ${auth ? `<p style="margin-top:30px;font-size:15px;color:var(--navy);font-weight:700;">${esc(auth)}</p>` : ""}
+          </div>
+        </section>`;
+      }
+
+      /* ══════════════════════════════════════════════════════════════
+         4. ASSEMBLE ALL SLIDES
+      ══════════════════════════════════════════════════════════════ */
+      const modules = arr(cfg.modules);
+      const slides = [];
+
+      slides.push(buildCover());
+      slides.push(buildToc(modules.length));
+      slides.push(buildIntro());
+      slides.push(buildTopDiagram());
+      slides.push(buildDataPath());
+      slides.push(buildClkReset());
+
+      modules.forEach((mod, i) => {
+        slides.push(buildModuleSlide(mod, i + 1, modules.length));
+      });
+
+      slides.push(buildTestbench());
+      slides.push(buildTiming());
+      slides.push(buildReport());
+      slides.push(buildTrouble());
+      slides.push(buildConclusion());
+      slides.push(buildQA());
+
+      /* Add page numbers */
+      const total = slides.length;
+      const numbered = slides.map((html, i) => {
+        // Insert footer before closing </div></section>
+        return html.replace(/(<\/div>\s*<\/section>)\s*$/, `${sfFooter(i + 1, total)}\n$1`);
+      });
+
+      document.getElementById("slides-root").innerHTML = numbered.join("\n");
+
+      /* ══════════════════════════════════════════════════════════════
+         5. REVEAL.JS INIT
+      ══════════════════════════════════════════════════════════════ */
+      const deck = new Reveal({
+        hash: true,
+        controls: true,
+        progress: true,
+        center: false,
+        width: 1000,
+        height: 700,
+        margin: 0.04,
+        slideNumber: "c/t",
+        transition: "fade",
+        backgroundTransition: "none",
+      });
+      deck.initialize();
+    })();
+  </script>
+</body>
+
+</html>
