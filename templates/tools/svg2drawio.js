@@ -301,9 +301,9 @@ function parseSvgTextNode(textNode) {
   const att = textNode.$ || {};
   const tspanLines = Array.isArray(textNode.tspan)
     ? textNode.tspan
-        .map((span) => (typeof span === "string" ? span : (typeof span?._ === "string" ? span._ : "")))
-        .map((x) => x.trim())
-        .filter(Boolean)
+      .map((span) => (typeof span === "string" ? span : (typeof span?._ === "string" ? span._ : "")))
+      .map((x) => x.trim())
+      .filter(Boolean)
     : [];
 
   let text = typeof textNode._ === "string" ? textNode._.trim() : "";
@@ -342,8 +342,13 @@ function escapeXmlTextContent(text) {
 
 function sanitizeSvgTextNodes(svgXml) {
   if (typeof svgXml !== "string") return svgXml;
+  // Only escape bare '&' characters that are NOT already part of a valid XML entity.
+  // Do NOT escape '<' since <tspan> child tags inside <text> must remain as tags
+  // so that xml2js can parse them as child nodes (not as raw text in t._).
   return svgXml.replace(/(<text\b[^>]*>)([\s\S]*?)(<\/text>)/g, (m, open, body, close) => {
-    return `${open}${escapeXmlTextContent(body)}${close}`;
+    // Escape only bare & that are not already an entity reference
+    const escaped = body.replace(/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9A-Fa-f]+);)/g, "&amp;");
+    return `${open}${escaped}${close}`;
   });
 }
 
@@ -381,25 +386,25 @@ fs.readFile(inputFile, (err, data) => {
 
       if (svg.rect) {
         svg.rect.forEach((rect) => {
-           const r = rect.$ || {};
-           const className = r.class || "";
-           // FSM SVG uses label background rectangles only for readability.
-           // In Draw.io these look like extra unwanted signal boxes, so skip them.
-           if (className.includes("label-bg")) {
-             return;
-           }
-           const x = parseFloat(r.x) * SCALE;
-           const y = parseFloat(r.y) * SCALE;
-           let w = parseFloat(r.width) * SCALE;
-           const h = parseFloat(r.height) * SCALE;
-           if (simpleLayout && (r.class || "").includes("box")) {
-             w = simpleLayout.newBoxWidth;
-           }
-           const style = "rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Helvetica;";
-           
-           rootCells.push(createMxCell(nextId(), "", style, true, "1", {
-             x, y, width: w, height: h
-           }));
+          const r = rect.$ || {};
+          const className = r.class || "";
+          // FSM SVG uses label background rectangles only for readability.
+          // In Draw.io these look like extra unwanted signal boxes, so skip them.
+          if (className.includes("label-bg")) {
+            return;
+          }
+          const x = parseFloat(r.x) * SCALE;
+          const y = parseFloat(r.y) * SCALE;
+          let w = parseFloat(r.width) * SCALE;
+          const h = parseFloat(r.height) * SCALE;
+          if (simpleLayout && (r.class || "").includes("box")) {
+            w = simpleLayout.newBoxWidth;
+          }
+          const style = "rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Helvetica;";
+
+          rootCells.push(createMxCell(nextId(), "", style, true, "1", {
+            x, y, width: w, height: h
+          }));
         });
       }
 
@@ -424,89 +429,94 @@ fs.readFile(inputFile, (err, data) => {
 
       if (svg.text) {
         svg.text.forEach((t) => {
-           const att = t.$ || {};
-           const className = att.class || "";
-           const classTokens = new Set(className.split(/\s+/).filter(Boolean));
-           const tspanLines = Array.isArray(t.tspan)
-             ? t.tspan
-                 .map((span) => (typeof span === "string" ? span : (typeof span?._ === "string" ? span._ : "")))
-                 .map((x) => x.trim())
-                 .filter(Boolean)
-             : [];
-           const multiline = tspanLines.length > 1;
-           let txt = typeof t._ === "string" ? t._ : "";
-           if (!txt && tspanLines.length) {
-             txt = multiline ? tspanLines.join("<br/>") : tspanLines[0];
-           }
-           if (!txt) return;
+          const att = t.$ || {};
+          const className = att.class || "";
+          const classTokens = new Set(className.split(/\s+/).filter(Boolean));
+          const tspanLines = Array.isArray(t.tspan)
+            ? t.tspan
+              .map((span) => (typeof span === "string" ? span : (typeof span?._ === "string" ? span._ : "")))
+              .map((x) => x.trim())
+              .filter(Boolean)
+            : [];
+          const multiline = tspanLines.length > 1;
+          // t._ may contain raw "<tspan ...>text</tspan>" markup that draw.io cannot render.
+          // Always prefer the xml2js-parsed tspanLines array when available.
+          let txt = "";
+          if (tspanLines.length) {
+            txt = multiline ? tspanLines.join("<br/>") : tspanLines[0];
+          } else if (typeof t._ === "string") {
+            // Strip any residual <tspan> tags and get plain text
+            txt = t._.replace(/<tspan[^>]*>([\s\S]*?)<\/tspan>/gi, "$1").replace(/\s+/g, " ").trim();
+          }
+          if (!txt) return;
 
-           let x = safeParseFloat(att.x, NaN) * SCALE;
-           let y = safeParseFloat(att.y, NaN) * SCALE;
-           if ((!Number.isFinite(x) || !Number.isFinite(y)) && Array.isArray(t.tspan) && t.tspan[0] && t.tspan[0].$) {
-             if (!Number.isFinite(x)) x = safeParseFloat(t.tspan[0].$.x, 0) * SCALE;
-             if (!Number.isFinite(y)) y = safeParseFloat(t.tspan[0].$.y, 0) * SCALE;
-           }
-           if (!Number.isFinite(x)) x = 0;
-           if (!Number.isFinite(y)) y = 0;
+          let x = safeParseFloat(att.x, NaN) * SCALE;
+          let y = safeParseFloat(att.y, NaN) * SCALE;
+          if ((!Number.isFinite(x) || !Number.isFinite(y)) && Array.isArray(t.tspan) && t.tspan[0] && t.tspan[0].$) {
+            if (!Number.isFinite(x)) x = safeParseFloat(t.tspan[0].$.x, 0) * SCALE;
+            if (!Number.isFinite(y)) y = safeParseFloat(t.tspan[0].$.y, 0) * SCALE;
+          }
+          if (!Number.isFinite(x)) x = 0;
+          if (!Number.isFinite(y)) y = 0;
 
-           // Some FSM SVG texts rely on CSS class-based text-anchor (not inline attr).
-           // Preserve visual parity with SVG by inferring center alignment from class.
-           let anchor = att["text-anchor"] || (att.class === "module-name" ? "middle" : "start");
-           if (classTokens.has("node-text") || classTokens.has("label")) {
-             anchor = "middle";
-           }
+          // Some FSM SVG texts rely on CSS class-based text-anchor (not inline attr).
+          // Preserve visual parity with SVG by inferring center alignment from class.
+          let anchor = att["text-anchor"] || (att.class === "module-name" ? "middle" : "start");
+          if (classTokens.has("node-text") || classTokens.has("label")) {
+            anchor = "middle";
+          }
 
-           if (simpleLayout) {
-             if (className.includes("module-name")) {
-               x = simpleLayout.boxX + simpleLayout.newBoxWidth / 2;
-             } else if (className.includes("port-label") && anchor === "end") {
-               x += simpleLayout.deltaWidth;
-             }
-           }
+          if (simpleLayout) {
+            if (className.includes("module-name")) {
+              x = simpleLayout.boxX + simpleLayout.newBoxWidth / 2;
+            } else if (className.includes("port-label") && anchor === "end") {
+              x += simpleLayout.deltaWidth;
+            }
+          }
 
-           let align = "left";
-           if (anchor === "middle") align = "center";
-           if (anchor === "end") align = "right";
+          let align = "left";
+          if (anchor === "middle") align = "center";
+          if (anchor === "end") align = "right";
 
-           // Font size heuristic
-           let fontSize = 12;
-           if (att.class === "module-name") fontSize = 16;
-           const maxLineLen = multiline ? Math.max(...tspanLines.map((x) => x.length)) : txt.length;
-           const w = Math.max(24, maxLineLen * 8);
-           const h = multiline ? Math.max(20, tspanLines.length * 14) : 20;
+          // Font size heuristic
+          let fontSize = 12;
+          if (att.class === "module-name") fontSize = 16;
+          const maxLineLen = multiline ? Math.max(...tspanLines.map((x) => x.length)) : txt.length;
+          const w = Math.max(24, maxLineLen * 8);
+          const h = multiline ? Math.max(20, tspanLines.length * 14) : 20;
 
-           // Adjust x for alignment because Draw.io x is left-top usually
-           let finalX = x;
-           if (align === "center") finalX = x - w/2;
-           if (align === "right") finalX = x - w;
+          // Adjust x for alignment because Draw.io x is left-top usually
+          let finalX = x;
+          if (align === "center") finalX = x - w / 2;
+          if (align === "right") finalX = x - w;
 
-           const whiteSpace = multiline ? "wrap" : "nowrap";
-           const style = `text;html=1;strokeColor=none;fillColor=none;align=${align};verticalAlign=middle;whiteSpace=${whiteSpace};rounded=0;fontSize=${fontSize};fontFamily=Helvetica;`;
-           
-           rootCells.push(createMxCell(nextId(), txt, style, true, "1", {
-             x: finalX, y: y - h / 2, width: w, height: h
-           }));
+          const whiteSpace = multiline ? "wrap" : "nowrap";
+          const style = `text;html=1;strokeColor=none;fillColor=none;align=${align};verticalAlign=middle;whiteSpace=${whiteSpace};rounded=0;fontSize=${fontSize};fontFamily=Helvetica;`;
+
+          rootCells.push(createMxCell(nextId(), txt, style, true, "1", {
+            x: finalX, y: y - h / 2, width: w, height: h
+          }));
         });
       }
 
       if (svg.line) {
         svg.line.forEach((l) => {
-           const att = l.$;
-           let x1 = parseFloat(att.x1) * SCALE;
-           const y1 = parseFloat(att.y1) * SCALE;
-           let x2 = parseFloat(att.x2) * SCALE;
-           const y2 = parseFloat(att.y2) * SCALE;
+          const att = l.$;
+          let x1 = parseFloat(att.x1) * SCALE;
+          const y1 = parseFloat(att.y1) * SCALE;
+          let x2 = parseFloat(att.x2) * SCALE;
+          const y2 = parseFloat(att.y2) * SCALE;
 
-           if (simpleLayout && isNear(x1, simpleLayout.oldRightX) && x2 >= x1) {
-             x1 += simpleLayout.deltaWidth;
-             x2 += simpleLayout.deltaWidth;
-           }
-           
-           const style = "endArrow=classic;html=1;rounded=0;";
-           rootCells.push(createMxCell(nextId(), "", style, false, "1", {
-             sourcePoint: { x: x1, y: y1 },
-             targetPoint: { x: x2, y: y2 }
-           }));
+          if (simpleLayout && isNear(x1, simpleLayout.oldRightX) && x2 >= x1) {
+            x1 += simpleLayout.deltaWidth;
+            x2 += simpleLayout.deltaWidth;
+          }
+
+          const style = "endArrow=classic;html=1;rounded=0;";
+          rootCells.push(createMxCell(nextId(), "", style, false, "1", {
+            sourcePoint: { x: x1, y: y1 },
+            targetPoint: { x: x2, y: y2 }
+          }));
         });
       }
 
@@ -534,61 +544,61 @@ fs.readFile(inputFile, (err, data) => {
       }
 
       if (svg.polygon) {
-         // Arrows usually
-         // We can try to replace polygons with actual arrows on lines, but for now just drawing them as shapes
-         svg.polygon.forEach((p) => {
-            const pointsStr = p.$.points;
-            // points="x1,y1 x2,y2 ..."
-            // Draw.io expects points in geometry or as a shape
-            // Let's just create a triangle shape or path
-            // For simplicity, skip polygons if they are just arrowheads, assuming lines cover it?
-            // "generate_simple_svg.ps1" draws lines AND polygons for arrows.
-             
-            // To make it cleaner in DrawIO, we might want to attach arrow style to the lines instead?
-            // But matching them is hard. Let's just draw the polygon.
-            
-            // Map points to absolute scale
-            const pts = pointsStr.split(" ").map(pair => {
-               const [px, py] = pair.split(",").map(parseFloat);
-               return { x: px * SCALE, y: py * SCALE };
-            });
+        // Arrows usually
+        // We can try to replace polygons with actual arrows on lines, but for now just drawing them as shapes
+        svg.polygon.forEach((p) => {
+          const pointsStr = p.$.points;
+          // points="x1,y1 x2,y2 ..."
+          // Draw.io expects points in geometry or as a shape
+          // Let's just create a triangle shape or path
+          // For simplicity, skip polygons if they are just arrowheads, assuming lines cover it?
+          // "generate_simple_svg.ps1" draws lines AND polygons for arrows.
 
-            // Calculate bounding box
-            const minX = Math.min(...pts.map(p => p.x));
-            const minY = Math.min(...pts.map(p => p.y));
-            const maxX = Math.max(...pts.map(p => p.x));
-            const maxY = Math.max(...pts.map(p => p.y));
-            const w = maxX - minX;
-            const h = maxY - minY;
+          // To make it cleaner in DrawIO, we might want to attach arrow style to the lines instead?
+          // But matching them is hard. Let's just draw the polygon.
 
-            // Normalize points relative to bbox
-            // Draw.io custom shape is complex.
-            // Alternative: Use a standard triangle if it looks like one.
-            const style = "triangle;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=none;rotation=-90;"; // Verify rotation?
-            // Actually, simply ignoring polygons might be cleaner if we can make lines have arrows.
-            // But let's verify generate_simple_svg.ps1. It draws a line then a polygon.
-            
-            // Let's just try to map standard arrowHead if possible.
-            // For now, let's LEAVE OUT polygons (arrowheads) and just trust lines?
-            // Or better, logic to detect lines and add arrows.
-            // Simple SVG: line x1,y1 -> x2,y2. 
-            // If we assume input lines have arrows at x2,y2 and output lines have arrows at x2,y2?
-            
-            // Let's just process lines in Simple SVG mode to Have arrows by default if class='wire'?
-            // generate_simple_svg.ps1 uses class="wire" for lines.
-         });
+          // Map points to absolute scale
+          const pts = pointsStr.split(" ").map(pair => {
+            const [px, py] = pair.split(",").map(parseFloat);
+            return { x: px * SCALE, y: py * SCALE };
+          });
+
+          // Calculate bounding box
+          const minX = Math.min(...pts.map(p => p.x));
+          const minY = Math.min(...pts.map(p => p.y));
+          const maxX = Math.max(...pts.map(p => p.x));
+          const maxY = Math.max(...pts.map(p => p.y));
+          const w = maxX - minX;
+          const h = maxY - minY;
+
+          // Normalize points relative to bbox
+          // Draw.io custom shape is complex.
+          // Alternative: Use a standard triangle if it looks like one.
+          const style = "triangle;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=none;rotation=-90;"; // Verify rotation?
+          // Actually, simply ignoring polygons might be cleaner if we can make lines have arrows.
+          // But let's verify generate_simple_svg.ps1. It draws a line then a polygon.
+
+          // Let's just try to map standard arrowHead if possible.
+          // For now, let's LEAVE OUT polygons (arrowheads) and just trust lines?
+          // Or better, logic to detect lines and add arrows.
+          // Simple SVG: line x1,y1 -> x2,y2. 
+          // If we assume input lines have arrows at x2,y2 and output lines have arrows at x2,y2?
+
+          // Let's just process lines in Simple SVG mode to Have arrows by default if class='wire'?
+          // generate_simple_svg.ps1 uses class="wire" for lines.
+        });
       }
-      
+
       // Update lines to have arrows for Simple Diagram
       // In generate_simple_svg.ps1, inputs are lines ending at the box. Outputs are lines starting from box.
       // Arrows are detached polygons.
       // Let's just force all lines in "Simple" mode to have endArrow=classic if they are wires?
       // But some might not be.
       // Let's just Iterate processed lines above and set endArrow=classic?
-      
+
       // Re-visiting LINES loop:
       if (svg.line) {
-         // Clear previous loop if I want to redo it correctly
+        // Clear previous loop if I want to redo it correctly
       }
     } else {
       console.log("[JS] Detected netlistsvg format");
@@ -692,11 +702,11 @@ fs.readFile(inputFile, (err, data) => {
               rootCells.push(createMxCell(nextId(), plain,
                 `text;html=1;strokeColor=none;fillColor=none;align=${txt.align};verticalAlign=middle;whiteSpace=nowrap;rounded=0;fontSize=${txt.fontSize};fontFamily=Helvetica;`,
                 true, "1", {
-                  x: finalX,
-                  y: absY - h / 2,
-                  width: w,
-                  height: h,
-                }));
+                x: finalX,
+                y: absY - h / 2,
+                width: w,
+                height: h,
+              }));
             });
           }
 
@@ -823,11 +833,11 @@ fs.readFile(inputFile, (err, data) => {
                 const portLabelCell = createMxCell(nextId(), txt.text,
                   `text;html=1;strokeColor=none;fillColor=none;align=${txt.align};verticalAlign=middle;whiteSpace=nowrap;rounded=0;fontSize=${txt.fontSize};fontFamily=Helvetica;`,
                   true, "1", {
-                    x: finalX,
-                    y: absY - h / 2,
-                    width: w,
-                    height: h,
-                  });
+                  x: finalX,
+                  y: absY - h / 2,
+                  width: w,
+                  height: h,
+                });
                 rootCells.push(portLabelCell);
 
                 const plainName = txt.text.replace(/<br\/>/g, "").trim();
@@ -903,7 +913,7 @@ fs.readFile(inputFile, (err, data) => {
 
       // 2. Process Wires (svg.line) & Collect Bus Widths
       const wireEndpoints = new Map(); // "x,y" (SCALED) -> bitWidth
-      
+
       if (svg.line) {
         svg.line.forEach((line) => {
           const attrs = line.$;
