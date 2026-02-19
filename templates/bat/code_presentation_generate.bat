@@ -11,6 +11,7 @@ if "%~1"=="" (
 set "TARGET_PROJECT=%~f1"
 set "SCRIPT_DIR=%~dp0"
 set "PY_TOOL=%SCRIPT_DIR%..\tools\generate_presentation.py"
+set "TEMPLATE_DIR=%SCRIPT_DIR%..\Presentation"
 
 echo ============================================================================
 echo      Presentation Generator (Python + Jinja2)
@@ -55,6 +56,36 @@ if errorlevel 1 (
     exit /b 1
 )
 
+:: ── Design Template Selection ─────────────────────────────────────────────
+echo ----------------------------------------------------------------------------
+echo  Design Template Selection
+echo ----------------------------------------------------------------------------
+echo   [1] Design 1 - Classic Brutalist  (reveal.js, dark bold borders)
+echo   [2] Design 2 - Minimal Navy    (reveal.js, clean white + navy accent)
+echo.
+set "DESIGN_INPUT="
+set /p "DESIGN_INPUT=Select design [1/2, default 1]: "
+if "!DESIGN_INPUT!"=="" set "DESIGN_INPUT=1"
+
+if "!DESIGN_INPUT!"=="1" (
+    set "TEMPLATE_FILE=%TEMPLATE_DIR%\Presentation_template1.html"
+    echo [INFO] Design 1 selected: Presentation_template1.html
+) else if "!DESIGN_INPUT!"=="2" (
+    set "TEMPLATE_FILE=%TEMPLATE_DIR%\Presentation_template2.html"
+    echo [INFO] Design 2 selected: Presentation_template2.html
+) else (
+    echo [WARN] Invalid input. Using Design 1 by default.
+    set "TEMPLATE_FILE=%TEMPLATE_DIR%\Presentation_template1.html"
+)
+
+if not exist "!TEMPLATE_FILE!" (
+    echo [ERROR] Template file not found: !TEMPLATE_FILE!
+    pause
+    exit /b 1
+)
+echo.
+
+:: ── Clean Assets ──────────────────────────────────────────────────────────
 set "CLEAN_ARG="
 set "CLEAN_INPUT=%~2"
 if "!CLEAN_INPUT!"=="" (
@@ -64,7 +95,8 @@ if /i "!CLEAN_INPUT!"=="Y" set "CLEAN_ARG=--clean-assets"
 if /i "!CLEAN_INPUT!"=="YES" set "CLEAN_ARG=--clean-assets"
 if /i "!CLEAN_INPUT!"=="--clean-assets" set "CLEAN_ARG=--clean-assets"
 
-%PY_CMD% "%PY_TOOL%" --project "%TARGET_PROJECT%" !CLEAN_ARG!
+:: ── Run Generator ─────────────────────────────────────────────────────────
+%PY_CMD% "%PY_TOOL%" --project "%TARGET_PROJECT%" --template "!TEMPLATE_FILE!" !CLEAN_ARG!
 if errorlevel 1 (
     echo.
     echo [FAILURE] Presentation generation failed.
