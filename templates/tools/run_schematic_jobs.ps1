@@ -164,6 +164,46 @@ $moduleWorker = {
     }
   }
 
+  function Sanitize-SvgTextNodes {
+    param(
+      [string]$SvgPath
+    )
+
+    if (-not (Test-Path $SvgPath)) {
+      return $false
+    }
+
+    try {
+      $rawSvg = Get-Content -Path $SvgPath -Raw -Encoding UTF8
+      $sanitizedSvg = [regex]::Replace(
+        $rawSvg,
+        '(?s)(<text\b[^>]*>)(.*?)(</text>)',
+        {
+          param($m)
+          $open = $m.Groups[1].Value
+          $body = $m.Groups[2].Value
+          $close = $m.Groups[3].Value
+
+          # Escape raw special chars while preserving existing entities.
+          $body = [regex]::Replace($body, '&(?!#\d+;|#x[0-9A-Fa-f]+;|[A-Za-z][A-Za-z0-9]+;)', '&amp;')
+          $body = $body -replace '<', '&lt;'
+
+          return "$open$body$close"
+        }
+      )
+
+      if ($sanitizedSvg -ne $rawSvg) {
+        Set-Content -Path $SvgPath -Value $sanitizedSvg -Encoding UTF8
+        Write-Log "[INFO] Sanitized SVG text nodes: $SvgPath"
+      }
+      return $true
+    }
+    catch {
+      Write-Log ("[WARN] SVG sanitization failed for {0}: {1}" -f $SvgPath, $_.Exception.Message)
+      return $false
+    }
+  }
+
   $moduleSuccess = $true
 
   Write-Log "--------------------------------------------------------"
@@ -242,6 +282,7 @@ $moduleWorker = {
     }
     elseif (Test-Path $svgDetailed) {
       Write-Log "[SUCCESS] Generated $svgDetailed"
+      [void](Sanitize-SvgTextNodes -SvgPath $svgDetailed)
       Write-Log "[INFO] Converting detailed to Draw.io..."
       $detailedDrawioOk = Invoke-ExternalCommand -Label "Detailed Draw.io conversion for $Module" -Command "node" -Arguments @($Svg2DrawioScript, $svgDetailed, $drawioDetailed)
       if ($detailedDrawioOk) {
@@ -284,6 +325,7 @@ $moduleWorker = {
 
   if (Test-Path $svgSimple) {
     Write-Log "[SUCCESS] Generated $svgSimple"
+    [void](Sanitize-SvgTextNodes -SvgPath $svgSimple)
     Write-Log "[INFO] Converting simple to Draw.io..."
     $simpleDrawioOk = Invoke-ExternalCommand -Label "Simple Draw.io conversion for $Module" -Command "node" -Arguments @($Svg2DrawioScript, $svgSimple, $drawioSimple)
     if ($simpleDrawioOk) {

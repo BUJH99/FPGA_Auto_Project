@@ -13,6 +13,7 @@ const SIMPLE_MIN_WIDTH = 200;
 const SIMPLE_MAX_WIDTH = 700;
 const SIMPLE_LABEL_PADDING = 32;
 const LEGACY_SIMPLE_BOX_WIDTHS = [300, 400];
+const PREFER_NATIVE_GATE_SHAPES = false;
 
 console.log(`[JS] Converting ${inputFile} -> ${outputFile} with SCALE=${SCALE}`);
 
@@ -179,8 +180,10 @@ function getLogicGateStyle(type) {
     nor: "nor",
     xor: "xor",
     reduce_xor: "xor",
-    xnor: "xnor",
-    reduce_xnor: "xnor",
+    reduce_and: "and",
+    reduce_or: "or",
+    reduce_bool: "or",
+    reduce_xnor: "or",
   };
 
   if (type === "not") {
@@ -192,6 +195,158 @@ function getLogicGateStyle(type) {
   return `shape=mxgraph.electrical.logic_gates.${shapeName};html=1;whiteSpace=wrap;`;
 }
 
+function getCellBodyStyle(type, g) {
+  if (PREFER_NATIVE_GATE_SHAPES) {
+    const gateStyle = getLogicGateStyle(type);
+    if (gateStyle) return gateStyle;
+  }
+
+  const circleTypes = new Set([
+    "add", "sub", "mul", "div", "mod",
+    "eq", "ne", "ge", "gt", "lt", "le",
+    "eqx", "nex", "xnor",
+  ]);
+  if (circleTypes.has(type) || (Array.isArray(g.circle) && g.circle.length > 0)) {
+    return "ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;";
+  }
+
+  const shiftTypes = new Set(["shiftx", "shl", "shr"]);
+  if (shiftTypes.has(type)) {
+    return "shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;";
+  }
+
+  // Default to rectangular body for FF/latch and other unsupported custom cells.
+  return "rounded=0;whiteSpace=wrap;html=1;";
+}
+
+function escapeXmlAttrValue(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function parseInlineStyle(styleText) {
+  const map = {};
+  String(styleText || "")
+    .split(";")
+    .forEach((chunk) => {
+      const idx = chunk.indexOf(":");
+      if (idx < 0) return;
+      const key = chunk.slice(0, idx).trim().toLowerCase();
+      const val = chunk.slice(idx + 1).trim();
+      if (!key) return;
+      map[key] = val;
+    });
+  return map;
+}
+
+function sanitizeDrawableAttrs(attrs) {
+  const out = {};
+  Object.entries(attrs || {}).forEach(([k, v]) => {
+    if (k === "class" || k === "id") return;
+    if (k.startsWith("s:")) return;
+    out[k] = String(v);
+  });
+
+  const styleMap = parseInlineStyle(out.style);
+  if (!("stroke" in out) && !("stroke" in styleMap)) out.stroke = "#000000";
+  if (!("fill" in out) && !("fill" in styleMap)) out.fill = "none";
+  if (!("stroke-width" in out) && !("stroke-width" in styleMap)) out["stroke-width"] = "1";
+  if (!("stroke-linecap" in out) && !("stroke-linecap" in styleMap)) out["stroke-linecap"] = "round";
+  if (!("stroke-linejoin" in out) && !("stroke-linejoin" in styleMap)) out["stroke-linejoin"] = "round";
+
+  return out;
+}
+
+function buildSvgElement(tag, attrs) {
+  const attrText = Object.entries(attrs || {})
+    .map(([k, v]) => `${k}="${escapeXmlAttrValue(v)}"`)
+    .join(" ");
+  return `<${tag}${attrText ? ` ${attrText}` : ""}/>`;
+}
+
+function buildGroupBodyImageStyle(g, rawWidth, rawHeight) {
+  const drawableTags = ["path", "rect", "circle", "ellipse", "line", "polyline", "polygon"];
+  const chunks = [];
+
+  drawableTags.forEach((tag) => {
+    const nodes = Array.isArray(g[tag]) ? g[tag] : [];
+    nodes.forEach((node) => {
+      const attrs = sanitizeDrawableAttrs(node.$ || {});
+      if (!Object.keys(attrs).length) return;
+      chunks.push(buildSvgElement(tag, attrs));
+    });
+  });
+
+  if (!chunks.length) return null;
+  const w = Number.isFinite(rawWidth) && rawWidth > 0 ? rawWidth : 40;
+  const h = Number.isFinite(rawHeight) && rawHeight > 0 ? rawHeight : 40;
+  const marginRaw = 8;
+
+  const symbolSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-marginRaw} ${-marginRaw} ${w + marginRaw * 2} ${h + marginRaw * 2}">${chunks.join("")}</svg>`;
+  const dataUri = `data:image/svg+xml,${encodeURIComponent(symbolSvg)}`;
+
+  return {
+    dataUri,
+    marginRaw,
+    widthRaw: w + marginRaw * 2,
+    heightRaw: h + marginRaw * 2,
+  };
+}
+
+function parseSvgTextNode(textNode) {
+  if (!textNode) return null;
+  const att = textNode.$ || {};
+  const tspanLines = Array.isArray(textNode.tspan)
+    ? textNode.tspan
+        .map((span) => (typeof span === "string" ? span : (typeof span?._ === "string" ? span._ : "")))
+        .map((x) => x.trim())
+        .filter(Boolean)
+    : [];
+
+  let text = typeof textNode._ === "string" ? textNode._.trim() : "";
+  if (!text && tspanLines.length > 0) {
+    text = tspanLines.join("<br/>");
+  }
+  if (!text) return null;
+
+  const className = att.class || "";
+  const styleText = att.style || "";
+  const styleAnchorMatch = styleText.match(/text-anchor\s*:\s*(start|middle|end)/i);
+  const anchor = att["text-anchor"] || styleAnchorMatch?.[1]?.toLowerCase() || (className.includes("nodelabel") ? "middle" : "start");
+  let align = "left";
+  if (anchor === "middle") align = "center";
+  if (anchor === "end") align = "right";
+  const styleFontSizeMatch = styleText.match(/font-size\s*:\s*([0-9.]+)px/i);
+  const fontSize = safeParseFloat(att["font-size"], safeParseFloat(styleFontSizeMatch?.[1], 10));
+
+  return {
+    text,
+    x: safeParseFloat(att.x, 0) * SCALE,
+    y: safeParseFloat(att.y, 0) * SCALE,
+    align,
+    className,
+    fontSize: Math.max(8, fontSize),
+  };
+}
+
+function escapeXmlTextContent(text) {
+  if (typeof text !== "string") return text;
+  // Keep valid entities intact, escape only raw XML-special chars in text nodes.
+  return text
+    .replace(/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9A-Fa-f]+);)/g, "&amp;")
+    .replace(/</g, "&lt;");
+}
+
+function sanitizeSvgTextNodes(svgXml) {
+  if (typeof svgXml !== "string") return svgXml;
+  return svgXml.replace(/(<text\b[^>]*>)([\s\S]*?)(<\/text>)/g, (m, open, body, close) => {
+    return `${open}${escapeXmlTextContent(body)}${close}`;
+  });
+}
+
 fs.readFile(inputFile, (err, data) => {
   if (err) {
     console.error("Error reading input file:", err);
@@ -199,7 +354,9 @@ fs.readFile(inputFile, (err, data) => {
   }
 
   const parser = new xml2js.Parser();
-  parser.parseString(data, (err, result) => {
+  const rawSvg = data.toString("utf8");
+  const sanitizedSvg = sanitizeSvgTextNodes(rawSvg);
+  parser.parseString(sanitizedSvg, (err, result) => {
     if (err) {
       console.error("Error parsing SVG:", err);
       return;
@@ -438,6 +595,7 @@ fs.readFile(inputFile, (err, data) => {
       const genericInputAnchors = [];
       const deferredOutputPortSymbols = [];
       const netClassEndpoints = new Map();
+      const netWireCells = [];
 
       // 1. Process Modules (svg.g)
       if (svg.g) {
@@ -447,8 +605,10 @@ fs.readFile(inputFile, (err, data) => {
           const transform = parseTransform(attrs.transform);
 
           // Get Dimensions & Apply Scale
-          let width = parseFloat(attrs["s:width"] || 40) * SCALE;
-          let height = parseFloat(attrs["s:height"] || 40) * SCALE;
+          const rawWidth = safeParseFloat(attrs["s:width"], 40);
+          const rawHeight = safeParseFloat(attrs["s:height"], 40);
+          let width = rawWidth * SCALE;
+          let height = rawHeight * SCALE;
 
           // For generic/split/join modules, prefer internal body rect size when present.
           if ((type === "generic" || type === "split" || type === "join") && g.rect) {
@@ -461,37 +621,49 @@ fs.readFile(inputFile, (err, data) => {
           }
 
           let style = "rounded=0;whiteSpace=wrap;html=1;";
-          let value = "";
-          if (g.text) {
-            g.text.forEach((t) => { if (t._) value = t._; });
-          }
+          let cellX = transform.x;
+          let cellY = transform.y;
+          let cellW = width;
+          let cellH = height;
+          let usesImageBody = false;
+          const directTexts = Array.isArray(g.text) ? g.text.map(parseSvgTextNode).filter(Boolean) : [];
+          const firstDirectText = directTexts.length > 0 ? directTexts[0].text : "";
 
           // specific styles
           if (type === "generic") {
             style = "rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontColor=#000000;fontFamily=Helvetica;";
-          } else if (type === "inputExt" || type === "outputExt") {
-            style = "text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontFamily=Helvetica;";
           } else {
-            // Logic gates etc.
-            const gateStyle = getLogicGateStyle(type);
-            if (gateStyle) style = gateStyle;
+            const bodyImage = buildGroupBodyImageStyle(g, rawWidth, rawHeight);
+            if (bodyImage) {
+              const margin = bodyImage.marginRaw * SCALE;
+              usesImageBody = true;
+              cellX = transform.x - margin;
+              cellY = transform.y - margin;
+              cellW = bodyImage.widthRaw * SCALE;
+              cellH = bodyImage.heightRaw * SCALE;
+              style = `shape=image;html=1;imageAspect=0;aspect=fixed;strokeColor=none;fillColor=none;image=${bodyImage.dataUri};`;
+            } else if (type === "inputExt" || type === "outputExt") {
+              style = "text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontFamily=Helvetica;";
+            } else {
+              style = getCellBodyStyle(type, g);
+            }
           }
 
           const cellId = nextId();
 
           // Draw Main Box
           const vertex = createMxCell(cellId, "", style, true, "1", {
-            x: transform.x,
-            y: transform.y,
-            width,
-            height,
+            x: cellX,
+            y: cellY,
+            width: cellW,
+            height: cellH,
           });
           rootCells.push(vertex);
 
           // Module Name Label (Top Outside)
-          if (value && type === "generic") {
-            const nameWidth = Math.max(width, value.length * 8 + 20);
-            rootCells.push(createMxCell(nextId(), value,
+          if (firstDirectText && type === "generic") {
+            const nameWidth = Math.max(width, firstDirectText.length * 8 + 20);
+            rootCells.push(createMxCell(nextId(), firstDirectText,
               "text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=bottom;whiteSpace=nowrap;rounded=0;fontSize=12;fontStyle=1;fontFamily=Helvetica;",
               true, "1", {
               x: transform.x + (width - nameWidth) / 2,
@@ -499,22 +671,45 @@ fs.readFile(inputFile, (err, data) => {
               width: nameWidth,
               height: 20
             }));
-          } else if (value && (type === "inputExt" || type === "outputExt")) {
+          } else if (firstDirectText && (type === "inputExt" || type === "outputExt")) {
             // For Ext ports, put text on the node
-            vertex.$.value = value;
+            vertex.$.value = firstDirectText;
             vertex.$.style += "fontSize=11;fontStyle=1;";
+          } else if (type !== "generic") {
+            // Preserve symbol text inside custom cell bodies (e.g. +, <=, ^~, SH, ===, ...).
+            directTexts.forEach((txt) => {
+              const plain = txt.text || "";
+              if (!plain) return;
+              const textLen = plain.replace(/<br\/>/g, "").length;
+              const w = Math.max(10, textLen * Math.max(6, txt.fontSize * 0.55) + 6);
+              const h = Math.max(12, txt.fontSize + 4);
+              const absX = transform.x + txt.x;
+              const absY = transform.y + txt.y;
+              let finalX = absX;
+              if (txt.align === "center") finalX = absX - w / 2;
+              if (txt.align === "right") finalX = absX - w;
+
+              rootCells.push(createMxCell(nextId(), plain,
+                `text;html=1;strokeColor=none;fillColor=none;align=${txt.align};verticalAlign=middle;whiteSpace=nowrap;rounded=0;fontSize=${txt.fontSize};fontFamily=Helvetica;`,
+                true, "1", {
+                  x: finalX,
+                  y: absY - h / 2,
+                  width: w,
+                  height: h,
+                }));
+            });
           }
 
           // Reproduce external port symbol strokes from netlistsvg:
           // - inputExt: plain short line (no arrowhead)
           // - outputExt: short line with one arrowhead
-          if (type === "inputExt") {
+          if (!usesImageBody && type === "inputExt") {
             const sy = transform.y + 10 * SCALE;
             rootCells.push(createMxCell(nextId(), "", "startArrow=none;endArrow=none;edgeStyle=none;html=1;rounded=0;", false, "1", {
               sourcePoint: { x: transform.x + 10 * SCALE, y: sy },
               targetPoint: { x: transform.x + 30 * SCALE, y: sy },
             }));
-          } else if (type === "outputExt") {
+          } else if (!usesImageBody && type === "outputExt") {
             const sy = transform.y + 10 * SCALE;
             rootCells.push(createMxCell(nextId(), "", "startArrow=none;endArrow=classic;edgeStyle=none;html=1;rounded=0;", false, "1", {
               sourcePoint: { x: transform.x, y: sy },
@@ -600,6 +795,50 @@ fs.readFile(inputFile, (err, data) => {
                 y: port.wireY,
                 name: port.name
               };
+            });
+          }
+
+          // Render labeled port names for non-generic symbols as text cells.
+          // This keeps D/Q/A/B/Y labels visible in Draw.io for custom skin cells.
+          if (g.g && type !== "generic" && type !== "split" && type !== "join") {
+            g.g.forEach((childG) => {
+              if (!childG || !childG.$ || !Array.isArray(childG.text)) return;
+              const childTransform = parseTransform(childG.$.transform);
+              const wireX = transform.x + safeParseFloat(childG.$["s:x"], childTransform.x);
+              const wireY = transform.y + safeParseFloat(childG.$["s:y"], childTransform.y);
+
+              childG.text.forEach((t) => {
+                const txt = parseSvgTextNode(t);
+                if (!txt || !txt.text) return;
+                const textLen = txt.text.replace(/<br\/>/g, "").length;
+                const w = Math.max(10, textLen * Math.max(6, txt.fontSize * 0.55) + 6);
+                const h = Math.max(12, txt.fontSize + 4);
+                const absX = transform.x + childTransform.x + txt.x;
+                const absY = transform.y + childTransform.y + txt.y;
+
+                let finalX = absX;
+                if (txt.align === "center") finalX = absX - w / 2;
+                if (txt.align === "right") finalX = absX - w;
+
+                const portLabelCell = createMxCell(nextId(), txt.text,
+                  `text;html=1;strokeColor=none;fillColor=none;align=${txt.align};verticalAlign=middle;whiteSpace=nowrap;rounded=0;fontSize=${txt.fontSize};fontFamily=Helvetica;`,
+                  true, "1", {
+                    x: finalX,
+                    y: absY - h / 2,
+                    width: w,
+                    height: h,
+                  });
+                rootCells.push(portLabelCell);
+
+                const plainName = txt.text.replace(/<br\/>/g, "").trim();
+                if (plainName) {
+                  portLabelCell._portInfo = {
+                    x: wireX,
+                    y: wireY,
+                    name: plainName,
+                  };
+                }
+              });
             });
           }
 
@@ -698,8 +937,13 @@ fs.readFile(inputFile, (err, data) => {
             sourcePoint: { x: x1, y: y1 },
             targetPoint: { x: x2, y: y2 },
           });
-          rootCells.push(edge);
+          netWireCells.push(edge);
         });
+      }
+
+      // Draw net wires behind symbols/labels to avoid false-looking extra input pins.
+      if (netWireCells.length > 0) {
+        rootCells.splice(2, 0, ...netWireCells);
       }
 
       // 2.5. Recreate net junction points from root-level circles.

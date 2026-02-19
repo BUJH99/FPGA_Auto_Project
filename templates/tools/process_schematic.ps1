@@ -169,83 +169,491 @@ text {
   </g>
 
   <!-- Standard Gates -->
-  <g s:type="and" transform="translate(150,50)" s:width="30" s:height="25">
+  <g s:type="and" transform="translate(150,50)" s:width="62" s:height="54">
     <s:alias val="`$and"/>
     <s:alias val="`$logic_and"/>
     <s:alias val="`$_AND_"/>
-    <path d="M0,0 L0,25 L15,25 A15 12.5 0 0 0 15,0 Z" class="`$cell_id"/>
-    <g s:x="0" s:y="5" s:pid="A"/>
-    <g s:x="0" s:y="20" s:pid="B"/>
-    <g s:x="30" s:y="12.5" s:pid="Y"/>
+    <path d="M0,0 L26,0 A26 27 0 0 1 26,54 L0,54 Z" class="`$cell_id"/>
+    <g s:x="0" s:y="18" s:pid="A"/>
+    <g s:x="0" s:y="36" s:pid="B"/>
+    <g s:x="52" s:y="27" s:pid="Y"/>
   </g>
 
-  <g s:type="nand" transform="translate(150,100)" s:width="30" s:height="25">
+  <g s:type="nand" transform="translate(150,100)" s:width="68" s:height="54">
     <s:alias val="`$nand"/>
     <s:alias val="`$logic_nand"/>
     <s:alias val="`$_NAND_"/>
-    <path d="M0,0 L0,25 L15,25 A15 12.5 0 0 0 15,0 Z" class="`$cell_id"/>
-    <circle cx="34" cy="12.5" r="3" class="`$cell_id"/>
-    <g s:x="0" s:y="5" s:pid="A"/>
-    <g s:x="0" s:y="20" s:pid="B"/>
-    <g s:x="36" s:y="12.5" s:pid="Y"/>
+    <path d="M0,0 L26,0 A26 27 0 0 1 26,54 L0,54 Z" class="`$cell_id"/>
+    <circle cx="66" cy="27" r="3" class="`$cell_id"/>
+    <g s:x="0" s:y="18" s:pid="A"/>
+    <g s:x="0" s:y="36" s:pid="B"/>
+    <g s:x="68" s:y="27" s:pid="Y"/>
   </g>
 
-  <g s:type="or" transform="translate(250,50)" s:width="30" s:height="25">
+  <g s:type="or" transform="translate(250,50)" s:width="62" s:height="54">
     <s:alias val="`$or"/>
     <s:alias val="`$logic_or"/>
     <s:alias val="`$_OR_"/>
-    <path d="M0,25 L0,25 L15,25 A15 12.5 0 0 0 15,0 L0,0" class="`$cell_id"/>
-    <path d="M0,0 A30 25 0 0 1 0,25" class="`$cell_id"/>
-    <g s:x="3" s:y="5" s:pid="A"/>
-    <g s:x="3" s:y="20" s:pid="B"/>
-    <g s:x="30" s:y="12.5" s:pid="Y"/>
+    <path d="M0,0 C8,0 24,5 62,27 C24,49 8,54 0,54 C10,44 10,10 0,0 Z" class="`$cell_id"/>
+    <g s:x="4" s:y="18" s:pid="A"/>
+    <g s:x="4" s:y="36" s:pid="B"/>
+    <g s:x="62" s:y="27" s:pid="Y"/>
   </g>
 
-  <g s:type="reduce_xor" transform="translate(350, 50)" s:width="33" s:height="25">
+  <g s:type="xor" transform="translate(350, 50)" s:width="62" s:height="54">
     <s:alias val="`$xor"/>
-    <s:alias val="`$reduce_xor"/>
     <s:alias val="`$_XOR_"/>
-    <path d="M3,0 A30 25 0 0 1 3,25 A30 25 0 0 0 33,12.5 A30 25 0 0 0 3,0" class="`$cell_id"/>
-    <path d="M0,0 A30 25 0 0 1 0,25" class="`$cell_id"/>
-    <g s:x="3" s:y="5" s:pid="A"/>
-    <g s:x="3" s:y="20" s:pid="B"/>
-    <g s:x="33" s:y="12.5" s:pid="Y"/>
+    <path d="M0,0 C8,0 24,5 62,27 C24,49 8,54 0,54 C10,44 10,10 0,0 Z" class="`$cell_id"/>
+    <path d="M-5,0 C7,12 7,42 -5,54" class="`$cell_id"/>
+    <g s:x="4" s:y="18" s:pid="A"/>
+    <g s:x="4" s:y="36" s:pid="B"/>
+    <g s:x="62" s:y="27" s:pid="Y"/>
+  </g>
+
+  <g s:type="reduce_xor" transform="translate(350, 50)" s:width="62" s:height="54">
+    <s:alias val="`$reduce_xor"/>
+    <path d="M0,0 C8,0 24,5 62,27 C24,49 8,54 0,54 C10,44 10,10 0,0 Z" class="`$cell_id"/>
+    <path d="M-5,0 C7,12 7,42 -5,54" class="`$cell_id"/>
+    <g s:x="4" s:y="27" s:pid="A"/>
+    <g s:x="62" s:y="27" s:pid="Y"/>
   </g>
   
-  <!-- NOT Gate: Standard Triangle with Bubble -->
-  <g s:type="not" transform="translate(450,100)" s:width="30" s:height="20">
+  <!-- NOT symbol based on Primitive_Symbols/not.svg -->
+  <g s:type="not" transform="translate(450,100)" s:width="68" s:height="54">
     <s:alias val="`$_NOT_"/>
     <s:alias val="`$not"/>
     <s:alias val="`$logic_not"/>
-    <!-- Triangle -->
-    <path d="M0,0 L0,20 L20,10 Z" class="`$cell_id"/>
-    <!-- Bubble -->
-    <circle cx="23" cy="10" r="3" class="`$cell_id"/>
-    <g s:x="0" s:y="10" s:pid="A"/>
-    <!-- Output at the bubble tip -->
-    <g s:x="26" s:y="10" s:pid="Y"/>
+    <path d="M0,0 L0,54 L54,27 Z" class="`$cell_id"/>
+    <circle cx="60" cy="27" r="4.5" class="`$cell_id"/>
+    <g transform="translate(0,27)" s:x="0" s:y="27" s:pid="A">
+      <text x="2" y="0" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(68,27)" s:x="68" s:y="27" s:pid="Y">
+      <text x="-24" y="0" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
   </g>
 
-  <g s:type="dff" transform="translate(350,150)" s:width="42" s:height="64">
+  <g s:type="dff" transform="translate(350,150)" s:width="54" s:height="64">
     <s:alias val="`$dff"/>
-    <s:alias val="`$adff"/>
     <s:alias val="`$_DFF_"/>
     <s:alias val="`$_DFF_P_"/>
-    <rect width="42" height="64" x="0" y="0" class="`$cell_id"/>
-    <text x="21" y="-4" class="nodelabel">D-FF</text>
-    <path d="M0,35 L6,32 L0,29" class="`$cell_id"/>
-    <g transform="translate(0,16)" s:x="0" s:y="16" s:pid="D">
+    <s:alias val="`$_DFF_N_"/>
+    <rect width="54" height="64" x="0" y="0" class="`$cell_id"/>
+    <path d="M0,46 L6,43 L0,40" class="`$cell_id"/>
+    <g transform="translate(0,22)" s:x="0" s:y="22" s:pid="D">
       <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">D</text>
     </g>
-    <g transform="translate(0,32)" s:x="0" s:y="32" s:pid="CLK">
+    <g transform="translate(0,46)" s:x="0" s:y="46" s:pid="CLK">
       <text x="8" y="3" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">CLK</text>
     </g>
-    <g s:x="0" s:y="32" s:pid="C"/>
-    <g transform="translate(0,48)" s:x="0" s:y="48" s:pid="ARST">
-      <text x="2" y="4" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">ARST</text>
-    </g>
-    <g transform="translate(42,16)" s:x="42" s:y="16" s:pid="Q">
+    <g s:x="0" s:y="46" s:pid="C"/>
+    <g transform="translate(54,22)" s:x="54" s:y="22" s:pid="Q">
       <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Q</text>
+    </g>
+  </g>
+
+  <!-- ADFF symbol based on Primitive_Symbols/adff.svg -->
+  <g s:type="adff" transform="translate(350,150)" s:width="54" s:height="82">
+    <s:alias val="`$adff"/>
+    <rect x="0" y="18" width="54" height="64" class="`$cell_id"/>
+    <path d="M27,0 L27,18" class="`$cell_id"/>
+    <path d="M0,64 L6,61 L0,58" class="`$cell_id"/>
+
+    <g transform="translate(0,39)" s:x="0" s:y="39" s:pid="D">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">D</text>
+    </g>
+    <g transform="translate(0,61)" s:x="0" s:y="61" s:pid="CLK">
+      <text x="8" y="3" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">CLK</text>
+    </g>
+    <g s:x="0" s:y="61" s:pid="C"/>
+    <g transform="translate(54,39)" s:x="54" s:y="39" s:pid="Q">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Q</text>
+    </g>
+    <g transform="translate(27,0)" s:x="27" s:y="0" s:pid="ARST">
+      <text x="0" y="28" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle;" class="`$cell_id">CLR</text>
+    </g>
+  </g>
+
+  <!-- ADFFE symbol based on Primitive_Symbols/adffe.svg -->
+  <g s:type="adffe" transform="translate(350,150)" s:width="54" s:height="96">
+    <s:alias val="`$adffe"/>
+    <rect x="0" y="24" width="54" height="72" class="`$cell_id"/>
+    <path d="M27,0 L27,24" class="`$cell_id"/>
+    <path d="M0,78 L6,75 L0,72" class="`$cell_id"/>
+
+    <g transform="translate(0,42)" s:x="0" s:y="42" s:pid="D">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">D</text>
+    </g>
+    <g transform="translate(0,60)" s:x="0" s:y="60" s:pid="EN">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">EN</text>
+    </g>
+    <g transform="translate(0,78)" s:x="0" s:y="78" s:pid="CLK">
+      <text x="8" y="3" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">CLK</text>
+    </g>
+    <g s:x="0" s:y="78" s:pid="C"/>
+    <g transform="translate(54,42)" s:x="54" s:y="42" s:pid="Q">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Q</text>
+    </g>
+    <g transform="translate(27,0)" s:x="27" s:y="0" s:pid="ARST">
+      <text x="0" y="34" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle;" class="`$cell_id">CLR</text>
+    </g>
+  </g>
+
+  <!-- DFFE symbol based on Primitive_Symbols/dffe.svg -->
+  <g s:type="dffe" transform="translate(350,150)" s:width="54" s:height="82">
+    <s:alias val="`$dffe"/>
+    <s:alias val="`$_DFFE_NN_"/>
+    <s:alias val="`$_DFFE_NP_"/>
+    <s:alias val="`$_DFFE_PN_"/>
+    <s:alias val="`$_DFFE_PP_"/>
+    <rect x="0" y="18" width="54" height="64" class="`$cell_id"/>
+    <path d="M0,62 L6,59 L0,56" class="`$cell_id"/>
+
+    <g transform="translate(0,34)" s:x="0" s:y="34" s:pid="D">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">D</text>
+    </g>
+    <g transform="translate(0,48)" s:x="0" s:y="48" s:pid="EN">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">EN</text>
+    </g>
+    <g transform="translate(0,62)" s:x="0" s:y="62" s:pid="CLK">
+      <text x="8" y="3" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">CLK</text>
+    </g>
+    <g s:x="0" s:y="62" s:pid="C"/>
+    <g transform="translate(54,34)" s:x="54" s:y="34" s:pid="Q">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Q</text>
+    </g>
+  </g>
+
+  <!-- DLATCH symbol based on Primitive_Symbols/dlatch.svg -->
+  <g s:type="dlatch" transform="translate(350,150)" s:width="54" s:height="64">
+    <s:alias val="`$dlatch"/>
+    <rect x="0" y="12" width="54" height="52" class="`$cell_id"/>
+    <g transform="translate(0,28)" s:x="0" s:y="28" s:pid="D">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">D</text>
+    </g>
+    <g transform="translate(0,44)" s:x="0" s:y="44" s:pid="EN">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">EN</text>
+    </g>
+    <g transform="translate(54,28)" s:x="54" s:y="28" s:pid="Q">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Q</text>
+    </g>
+  </g>
+
+  <!-- Arithmetic / Compare symbols from Primitive_Symbols -->
+  <g s:type="add" transform="translate(50,150)" s:width="54" s:height="54">
+    <s:alias val="`$add"/>
+    <circle cx="27" cy="27" r="27" class="`$cell_id"/>
+    <text x="27" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:16px;" class="`$cell_id">+</text>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(54,27)" s:x="54" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="sub" transform="translate(120,150)" s:width="54" s:height="54">
+    <s:alias val="`$sub"/>
+    <circle cx="27" cy="27" r="27" class="`$cell_id"/>
+    <text x="27" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:16px;" class="`$cell_id">-</text>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(54,27)" s:x="54" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="mul" transform="translate(150,150)" s:width="54" s:height="54">
+    <s:alias val="`$mul"/>
+    <circle cx="27" cy="27" r="27" class="`$cell_id"/>
+    <text x="27" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:16px;" class="`$cell_id">*</text>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(54,27)" s:x="54" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="div" transform="translate(220,150)" s:width="54" s:height="54">
+    <s:alias val="`$div"/>
+    <circle cx="27" cy="27" r="27" class="`$cell_id"/>
+    <text x="27" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:16px;" class="`$cell_id">/</text>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(54,27)" s:x="54" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="mod" transform="translate(290,150)" s:width="54" s:height="54">
+    <s:alias val="`$mod"/>
+    <circle cx="27" cy="27" r="27" class="`$cell_id"/>
+    <text x="27" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:16px;" class="`$cell_id">%</text>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(54,27)" s:x="54" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="pow" transform="translate(360,150)" s:width="54" s:height="54">
+    <s:alias val="`$pow"/>
+    <circle cx="27" cy="27" r="27" class="`$cell_id"/>
+    <text x="27" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:14px;" class="`$cell_id">**</text>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(54,27)" s:x="54" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="eq" transform="translate(190,150)" s:width="54" s:height="54">
+    <s:alias val="`$eq"/>
+    <circle cx="27" cy="27" r="27" class="`$cell_id"/>
+    <text x="27" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:16px;" class="`$cell_id">=</text>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(54,27)" s:x="54" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="ne" transform="translate(260,150)" s:width="54" s:height="54">
+    <s:alias val="`$ne"/>
+    <circle cx="27" cy="27" r="27" class="`$cell_id"/>
+    <text x="27" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:14px;" class="`$cell_id">!=</text>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(54,27)" s:x="54" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="ge" transform="translate(330,150)" s:width="54" s:height="54">
+    <s:alias val="`$ge"/>
+    <circle cx="27" cy="27" r="27" class="`$cell_id"/>
+    <text x="27" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:14px;" class="`$cell_id">&gt;=</text>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(54,27)" s:x="54" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="gt" transform="translate(400,150)" s:width="54" s:height="54">
+    <s:alias val="`$gt"/>
+    <circle cx="27" cy="27" r="27" class="`$cell_id"/>
+    <text x="27" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:16px;" class="`$cell_id">&gt;</text>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(54,27)" s:x="54" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="lt" transform="translate(470,150)" s:width="54" s:height="54">
+    <s:alias val="`$lt"/>
+    <circle cx="27" cy="27" r="27" class="`$cell_id"/>
+    <text x="27" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:16px;" class="`$cell_id">&lt;</text>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(54,27)" s:x="54" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="le" transform="translate(540,150)" s:width="54" s:height="54">
+    <s:alias val="`$le"/>
+    <circle cx="27" cy="27" r="27" class="`$cell_id"/>
+    <text x="27" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:14px;" class="`$cell_id">&lt;=</text>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(54,27)" s:x="54" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="eqx" transform="translate(610,150)" s:width="54" s:height="54">
+    <s:alias val="`$eqx"/>
+    <circle cx="27" cy="27" r="27" class="`$cell_id"/>
+    <text x="27" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:12px;" class="`$cell_id">===</text>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(54,27)" s:x="54" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="nex" transform="translate(680,150)" s:width="54" s:height="54">
+    <s:alias val="`$nex"/>
+    <circle cx="27" cy="27" r="27" class="`$cell_id"/>
+    <text x="27" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:12px;" class="`$cell_id">!==</text>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(54,27)" s:x="54" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="xnor" transform="translate(750,150)" s:width="68" s:height="54">
+    <s:alias val="`$xnor"/>
+    <s:alias val="`$_XNOR_"/>
+    <path d="M0,0 C10,0 30,5 58,27 C30,49 10,54 0,54 C14,42 14,12 0,0 Z" class="`$cell_id"/>
+    <path d="M-5,0 C7,12 7,42 -5,54" class="`$cell_id"/>
+    <circle cx="62" cy="27" r="3" class="`$cell_id"/>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="10" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="10" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(68,27)" s:x="68" s:y="27" s:pid="Y">
+      <text x="-15" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <!-- Reduce / Shift symbols from Primitive_Symbols -->
+  <g s:type="reduce_and" transform="translate(50,220)" s:width="62" s:height="54">
+    <s:alias val="`$reduce_and"/>
+    <path d="M0,0 L26,0 A26 27 0 0 1 26,54 L0,54 Z" class="`$cell_id"/>
+    <g transform="translate(0,27)" s:x="0" s:y="27" s:pid="A">
+      <text x="4" y="0" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(52,27)" s:x="52" s:y="27" s:pid="Y">
+      <text x="-12" y="0" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="reduce_or" transform="translate(130,220)" s:width="62" s:height="54">
+    <s:alias val="`$reduce_or"/>
+    <path d="M0,0 C8,0 24,5 62,27 C24,49 8,54 0,54 C10,44 10,10 0,0 Z" class="`$cell_id"/>
+    <g transform="translate(0,27)" s:x="0" s:y="27" s:pid="A">
+      <text x="8" y="0" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(62,27)" s:x="62" s:y="27" s:pid="Y">
+      <text x="-8" y="0" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="reduce_bool" transform="translate(210,220)" s:width="62" s:height="54">
+    <s:alias val="`$reduce_bool"/>
+    <path d="M0,0 C8,0 24,5 62,27 C24,49 8,54 0,54 C10,44 10,10 0,0 Z" class="`$cell_id"/>
+    <text x="35" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:16px;" class="`$cell_id">?</text>
+    <g transform="translate(0,27)" s:x="0" s:y="27" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(62,27)" s:x="62" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="reduce_xnor" transform="translate(290,220)" s:width="68" s:height="54">
+    <s:alias val="`$reduce_xnor"/>
+    <path d="M0,0 C10,0 30,5 58,27 C30,49 10,54 0,54 C14,42 14,12 0,0 Z" class="`$cell_id"/>
+    <path d="M-5,0 C7,12 7,42 -5,54" class="`$cell_id"/>
+    <circle cx="62" cy="27" r="3" class="`$cell_id"/>
+    <g transform="translate(0,27)" s:x="0" s:y="27" s:pid="A">
+      <text x="10" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(68,27)" s:x="68" s:y="27" s:pid="Y">
+      <text x="-15" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="neg" transform="translate(370,220)" s:width="54" s:height="54">
+    <s:alias val="`$neg"/>
+    <circle cx="27" cy="27" r="27" class="`$cell_id"/>
+    <text x="27" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:16px;" class="`$cell_id">~</text>
+    <g transform="translate(0,27)" s:x="0" s:y="27" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(54,27)" s:x="54" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="shiftx" transform="translate(290,220)" s:width="62" s:height="54">
+    <s:alias val="`$shiftx"/>
+    <path d="M8,0 L62,0 L54,54 L0,54 Z" class="`$cell_id"/>
+    <text x="31" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:12px;" class="`$cell_id">SH</text>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="2" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(62,27)" s:x="62" s:y="27" s:pid="Y">
+      <text x="-2" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
+    </g>
+  </g>
+
+  <g s:type="shl" transform="translate(370,220)" s:width="62" s:height="54">
+    <s:alias val="`$shl"/>
+    <path d="M8,0 L62,0 L54,54 L0,54 Z" class="`$cell_id"/>
+    <text x="31" y="27" style="fill:#000; stroke:none; text-anchor:middle; dominant-baseline: middle; font-size:12px;" class="`$cell_id">&lt;&lt;</text>
+    <g transform="translate(0,18)" s:x="0" s:y="18" s:pid="A">
+      <text x="6" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">A</text>
+    </g>
+    <g transform="translate(0,36)" s:x="0" s:y="36" s:pid="B">
+      <text x="6" y="2" style="fill:#000; stroke:none; text-anchor:start; dominant-baseline: middle;" class="`$cell_id">B</text>
+    </g>
+    <g transform="translate(62,27)" s:x="62" s:y="27" s:pid="Y">
+      <text x="-6" y="2" style="fill:#000; stroke:none; text-anchor:end; dominant-baseline: middle;" class="`$cell_id">Y</text>
     </g>
   </g>
 
