@@ -86,6 +86,9 @@ if {$safe_top eq ""} {
 
 set work_dir [file join $vivado_root "project"]
 file mkdir $work_dir
+set wcfg_dir [file join $vivado_root "wcfg"]
+file mkdir $wcfg_dir
+set wcfg_file [file join $wcfg_dir "${safe_top}.wcfg"]
 set project_name "sim_$safe_top"
 set project_dir [file join $work_dir $project_name]
 
@@ -116,6 +119,24 @@ puts "\[INFO\] Launching simulation GUI..."
 if {[catch {launch_simulation} sim_err]} {
     puts "\[ERROR\] launch_simulation failed: $sim_err"
     return -code error
+}
+
+set wcfg_loaded 0
+if {[file exists $wcfg_file]} {
+    puts "\[INFO\] Loading waveform config: $wcfg_file"
+    if {[catch {open_wave_config $wcfg_file} wcfg_open_err]} {
+        puts "\[WARNING\] Failed to load waveform config: $wcfg_open_err"
+    } else {
+        set wcfg_loaded 1
+    }
+}
+
+if {!$wcfg_loaded} {
+    if {[catch {save_wave_config $wcfg_file} wcfg_save_err]} {
+        puts "\[WARNING\] Failed to initialize waveform config path: $wcfg_save_err"
+    } else {
+        puts "\[INFO\] Initialized waveform config path: $wcfg_file"
+    }
 }
 
 puts "\[SUCCESS\] Vivado simulation launched for top: $sim_top"
