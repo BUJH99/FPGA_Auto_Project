@@ -865,39 +865,172 @@ def parse_index_or_name_selection(
     return selected, errors
 
 
-def prompt_select_datapath_signals(top_module: ModuleInfo) -> List[str]:
-    signal_items = top_signal_entries(top_module)
-    if not signal_items:
-        raise RuntimeError(f"No signals found in top module: {top_module.name}")
+def parse_datapath_module_spec(
+    raw: str,
+    module_names: Sequence[str],
+) -> Tuple[List[str], List[str]]:
+    tokens = [tok.strip() for tok in raw.split(",") if tok.strip()]
+    if not tokens:
+        return [], ["Selection cannot be empty."]
 
+    selected: List[str] = []
+    errors: List[str] = []
+    name_map = {name.lower(): name for name in module_names}
+
+    for token in tokens:
+        match = re.fullmatch(r"(.+?)(?:\s*[*:xX]\s*(\d+))?", token)
+        if not match:
+            errors.append(f"Invalid format token: {token}")
+            continue
+        name_token = (match.group(1) or "").strip()
+        count_text = (match.group(2) or "").strip()
+        count = int(count_text) if count_text else 1
+        if count <= 0:
+            errors.append(f"Count must be >= 1: {token}")
+            continue
+
+        picked = ""
+        if name_token.isdigit():
+            idx = int(name_token)
+            if 1 <= idx <= len(module_names):
+                picked = module_names[idx - 1]
+            else:
+                errors.append(f"Index out of range: {name_token}")
+                continue
+        else:
+            picked = name_map.get(name_token.lower(), "")
+            if not picked:
+                errors.append(f"Unknown module name: {name_token}")
+                continue
+
+        selected.extend([picked] * count)
+
+    return selected, errors
+
+
+def parse_datapath_pages_spec(
+    raw: str,
+    module_names: Sequence[str],
+) -> Tuple[List[Dict[str, object]], List[str]]:
+    segments_raw = raw.split("|")
+    segments = [seg.strip() for seg in segments_raw if seg.strip()]
+    if not segments:
+        return [], ["Selection cannot be empty."]
+
+    errors: List[str] = []
+    pages: List[Dict[str, object]] = []
+    has_multiple_segments = len(segments) > 1
+
+    for page_idx, segment in enumerate(segments, start=1):
+        title = ""
+        module_spec = segment
+
+        if "=" in segment:
+            left, right = segment.split("=", 1)
+            title = left.strip()
+            module_spec = right.strip()
+            if not title:
+                errors.append(f"Page {page_idx}: title is empty before '='")
+                continue
+            if not module_spec:
+                errors.append(f"Page {page_idx}: module list is empty after '='")
+                continue
+
+        selected, page_errors = parse_datapath_module_spec(module_spec, module_names)
+        if page_errors:
+            for err in page_errors:
+                errors.append(f"Page {page_idx}: {err}")
+            continue
+        if not selected:
+            errors.append(f"Page {page_idx}: no valid module selected")
+            continue
+
+        default_title = f"DataPath #{page_idx}" if has_multiple_segments else "DataPath"
+        page_title = title or default_title
+        pages.append(
+            {
+                "title": page_title,
+                "flowSteps": selected,
+                "flowBoxCount": len(selected),
+            }
+        )
+
+    if not pages and not errors:
+        errors.append("No valid DataPath page parsed.")
+    return pages, errors
+
+
+def prompt_select_datapath_slides(module_names: Sequence[str]) -> List[Dict[str, object]]:
     print("")
-    print(f"[INFO] Top module signal list: {top_module.name}")
-    names_ordered: List[str] = []
-    for idx, (name, kind) in enumerate(signal_items, start=1):
-        names_ordered.append(name)
-        print(f"  [{idx}] {name} ({kind})")
+    print("[INFO] DataPath page input:")
+    for idx, name in enumerate(module_names, start=1):
+        print(f"  [{idx}] {name}")
     print("")
-    print("[INFO] DataPath signal selection format:")
-    print("  - ALL")
-    print("  - Number list: 1,2,3")
-    print("  - Name list: signal_a,signal_b")
+    print("[INFO] DataPath input format:")
+    print("  - Single page (legacy): TOP,ControlUnit,DisplayMux")
+    print("  - Multi page: TOP,ControlUnit | DisplayMux,UartTx")
+    print("  - Titled pages: Sensor Path=TOP,Hcsr04Core | UI Path=ControlUnit,DisplayMux")
+    print("  - Count syntax in each page: TOP*1,ControlUnit*2,DisplayMux")
+    print("  * Page delimiter: |")
+    print("  * Count delimiter supports *, x, :")
 
     while True:
-        raw = input("DataPath signal selection (required): ").strip()
+        raw = input("DataPath page input (required): ").strip()
         if not raw:
             print("[ERROR] Selection cannot be empty.")
             continue
-        selected, errors = parse_index_or_name_selection(raw, names_ordered, allow_all=True)
+        pages, errors = parse_datapath_pages_spec(raw, module_names)
+        if errors:
+            for err in errors:
+                print(f"[ERROR] {err}")
+            continue
+        if not pages:
+            print("[ERROR] No valid DataPath page parsed.")
+            continue
+
+        print("[INFO] Selected DataPath pages:")
+        for idx, page in enumerate(pages, start=1):
+            title = str(page.get("title", "")).strip() or f"DataPath #{idx}"
+            steps = page.get("flowSteps")
+            step_list = steps if isinstance(steps, list) else []
+            print(f"  [Page {idx}] {title} ({len(step_list)} boxes)")
+            for step_idx, mod_name in enumerate(step_list, start=1):
+                print(f"    {step_idx}. {mod_name}")
+        return pages
+
+
+def prompt_select_detail_modules(module_names: Sequence[str], top_name: str) -> List[str]:
+    detail_candidates = [name for name in module_names if name != top_name]
+    if not detail_candidates:
+        print("[WARN] No non-top modules found. Module detail slides will be skipped.")
+        return []
+
+    print("")
+    print("[INFO] Module detail selection input:")
+    print(f"[INFO] Top module '{top_name}' is excluded from detail slides.")
+    for idx, name in enumerate(detail_candidates, start=1):
+        print(f"  [{idx}] {name}")
+    print("")
+    print("[INFO] Selection format:")
+    print("  - ALL")
+    print("  - Number list: 1,5,3")
+    print("  - Name list: uart_rx,uart_tx")
+
+    while True:
+        raw = input("Module detail selection (required, default ALL): ").strip()
+        if not raw:
+            raw = "ALL"
+        selected, errors = parse_index_or_name_selection(raw, detail_candidates, allow_all=True)
         if errors:
             for err in errors:
                 print(f"[ERROR] {err}")
             continue
         if not selected:
-            print("[ERROR] No valid signal selected.")
+            print("[ERROR] No valid module selected.")
             continue
-        print("[INFO] Selected DataPath signals:")
-        for sig in selected:
-            print(f"  - {sig}")
+        print("[INFO] Selected module detail targets:")
+        for idx, name in enumerate(selected, start=1):
+            print(f"  [{idx}] {name}")
         return selected
 
 
@@ -910,7 +1043,7 @@ def prompt_select_module_rank(module_names: Sequence[str]) -> Dict[str, int]:
     print("[INFO] Order selection format:")
     print("  - ALL")
     print("  - Number list: 1,5,3")
-    print("  - Name list: TOP,uart_rx,uart_tx")
+    print("  - Name list: uart_rx,uart_tx")
 
     while True:
         raw = input("Module order input (required, default ALL): ").strip()
@@ -936,6 +1069,95 @@ def prompt_select_module_rank(module_names: Sequence[str]) -> Dict[str, int]:
         return rank
 
 
+def prompt_manual_tb_insertions(
+    detail_modules: Sequence[str],
+    tb_files: Sequence[Path],
+) -> Dict[str, List[Optional[Path]]]:
+    print("")
+    print("[INFO] Manual TB page insertion (last step)")
+    if not detail_modules:
+        print("[INFO] No module detail targets found. Manual TB page insertion skipped.")
+        return {}
+
+    print("[INFO] Select the target module where manual TB page is inserted right after.")
+    for idx, name in enumerate(detail_modules, start=1):
+        print(f"  [M{idx}] {name}")
+
+    tb_names = [tb.name for tb in tb_files]
+    tb_lookup: Dict[str, Path] = {tb.name.lower(): tb for tb in tb_files}
+    print("")
+    if tb_names:
+        print("[INFO] Available testbench files:")
+        for idx, tb_name in enumerate(tb_names, start=1):
+            print(f"  [T{idx}] {tb_name}")
+    else:
+        print("[WARN] No testbench file found under project tb folder.")
+        print("[WARN] Manual TB page will use placeholder file text only.")
+
+    while True:
+        raw_count = input("Manual TB page count [0 or more, default 0]: ").strip()
+        if not raw_count:
+            raw_count = "0"
+        if re.fullmatch(r"\d+", raw_count):
+            manual_count = int(raw_count)
+            break
+        print(f"[ERROR] Invalid manual TB page count: {raw_count}")
+
+    if manual_count <= 0:
+        print("[INFO] Manual TB page insertion skipped.")
+        return {}
+
+    manual_map: Dict[str, List[Optional[Path]]] = defaultdict(list)
+    for page_idx in range(manual_count):
+        print("")
+        print(f"[INFO] Configure manual TB page #{page_idx + 1}")
+
+        target_module = ""
+        while True:
+            raw_module = input("  Target module (index/name): ").strip()
+            if not raw_module:
+                print("[ERROR] Target module is required.")
+                continue
+            selected, errors = parse_index_or_name_selection(raw_module, detail_modules, allow_all=False)
+            if errors:
+                for err in errors:
+                    print(f"[ERROR] {err}")
+                continue
+            if len(selected) != 1:
+                print("[ERROR] Please select exactly one module.")
+                continue
+            target_module = selected[0]
+            break
+
+        selected_tb: Optional[Path] = None
+        if tb_names:
+            while True:
+                raw_tb = input("  TB file (index/name, ENTER for placeholder): ").strip()
+                if not raw_tb or raw_tb.lower() in {"none", "placeholder"}:
+                    break
+                selected_tb_names, errors = parse_index_or_name_selection(raw_tb, tb_names, allow_all=False)
+                if errors:
+                    for err in errors:
+                        print(f"[ERROR] {err}")
+                    continue
+                if len(selected_tb_names) != 1:
+                    print("[ERROR] Please select exactly one TB file.")
+                    continue
+                selected_tb = tb_lookup.get(selected_tb_names[0].lower())
+                if selected_tb is None:
+                    print(f"[ERROR] TB file not found: {selected_tb_names[0]}")
+                    continue
+                break
+
+        manual_map[target_module].append(selected_tb)
+        tb_label = selected_tb.name if selected_tb is not None else "[placeholder]"
+        print(f"[INFO] Added manual TB page: {target_module} <- {tb_label}")
+
+    total_pages = sum(len(items) for items in manual_map.values())
+    print(f"[INFO] Manual TB pages configured: {total_pages}")
+    return dict(manual_map)
+
+
 def build_sorted_children(mod: ModuleInfo, modules_by_name: Dict[str, ModuleInfo], rank: Dict[str, int]) -> List[str]:
     children = mod.direct_children(set(modules_by_name.keys()))
     children.sort(key=lambda n: (rank.get(n, 10**9), n.lower()))
@@ -953,7 +1175,12 @@ def auto_map_testbench(tb_file: Path, module_names: Sequence[str]) -> Optional[s
     stem = tb_file.stem.lower()
     for mod in module_names:
         mod_l = mod.lower()
-        if stem == f"tb_{mod_l}" or stem == f"{mod_l}_tb":
+        if (
+            stem == f"tb_{mod_l}"
+            or stem == f"{mod_l}_tb"
+            or stem.startswith(f"tb_{mod_l}_")
+            or stem.startswith(f"{mod_l}_tb_")
+        ):
             return mod
     return None
 
@@ -972,21 +1199,22 @@ def prompt_map_unmatched_testbenches(
         print(f"[TB] {tb.name}")
         for idx, name in enumerate(module_names, start=1):
             print(f"  [{idx}] {name}")
+        print("  -> Input format: 1 or TOP or 1,3,5 or TOP,ControlUnit")
         while True:
-            raw = input("Map to module (index/name/skip): ").strip()
+            raw = input("Map to module(s) (index/name list/skip): ").strip()
             if not raw or raw.lower() == "skip":
                 break
-            picked: Optional[str] = None
-            if raw.isdigit():
-                idx = int(raw)
-                if 1 <= idx <= len(module_names):
-                    picked = module_names[idx - 1]
-            else:
-                picked = next((name for name in module_names if name.lower() == raw.lower()), None)
-            if picked:
+            selected, errors = parse_index_or_name_selection(raw, module_names, allow_all=False)
+            if errors:
+                for err in errors:
+                    print(f"[ERROR] {err}")
+                continue
+            if not selected:
+                print("[ERROR] Invalid module selection.")
+                continue
+            for picked in selected:
                 mapping[picked].append(tb)
-                break
-            print("[ERROR] Invalid module selection.")
+            break
     return mapping
 
 
@@ -1361,8 +1589,11 @@ def module_layout(mod: ModuleInfo, modules_by_name: Dict[str, ModuleInfo]) -> st
 def build_module_slides(
     top_name: str,
     modules_by_name: Dict[str, ModuleInfo],
+    detail_modules: Sequence[str],
     rank: Dict[str, int],
     tb_map: Dict[str, List[Path]],
+    manual_tb_map: Dict[str, List[Optional[Path]]],
+    top_testbench_pages: int,
     project_root: Path,
     presentation_dir: Path,
     image_index: Dict[str, List[Path]],
@@ -1370,6 +1601,39 @@ def build_module_slides(
     emitted: Set[str] = set()
     visiting: Set[str] = set()
     slides: List[dict] = []
+    detail_module_set: Set[str] = set(detail_modules)
+
+    def build_testbench_slide(
+        module_name: str,
+        tb_file: Optional[Path],
+        page_index: int,
+        subtitle: str = "",
+        placeholder_label: str = "",
+    ) -> dict:
+        if tb_file is not None:
+            tb_name = tb_file.stem
+            tb_files = [os.path.relpath(tb_file, presentation_dir).replace("\\", "/")]
+            waveform = choose_waveform_asset(project_root, module_name, tb_file, presentation_dir)
+        else:
+            tb_name = f"tb_{module_name}_{page_index + 1}"
+            fallback_label = placeholder_label.strip() or f"[Input Needed] Map TOP testbench file #{page_index + 1}"
+            tb_files = [fallback_label]
+            waveform = ""
+        slide = {
+            "slideKind": "testbench",
+            "name": tb_name,
+            "linkedModule": module_name,
+            "testbenchFiles": tb_files,
+            "testbenchWaveform": waveform,
+            "testbenchChecks": [
+                "Reset release and startup behavior",
+                "Main control/data handshake timing",
+                "Boundary/error stimulus handling result",
+            ],
+        }
+        if subtitle.strip():
+            slide["testbenchSubtitle"] = subtitle.strip()
+        return slide
 
     def emit_module(name: str) -> None:
         if name in emitted:
@@ -1417,7 +1681,7 @@ def build_module_slides(
         ]
 
         # TOP module is explained by Top Block Diagram slide, so skip detail slide generation.
-        if not is_top_module:
+        if (not is_top_module) and (name in detail_module_set):
             slides.append(
                 {
                     "slideKind": "module",
@@ -1431,38 +1695,45 @@ def build_module_slides(
                     "childModules": child_modules,
                 }
             )
+            for manual_tb_idx, manual_tb_file in enumerate(manual_tb_map.get(name, [])):
+                slides.append(
+                    build_testbench_slide(
+                        name,
+                        manual_tb_file,
+                        manual_tb_idx,
+                        subtitle="TESTBENCH",
+                        placeholder_label=f"[Input Needed] Map manual testbench file #{manual_tb_idx + 1}",
+                    )
+                )
 
         for child in children:
             emit_module(child)
 
-        if (not is_top_module) and layout == "parent-module":
-            for tb_file in tb_map.get(name, []):
-                waveform = choose_waveform_asset(project_root, name, tb_file, presentation_dir)
-                slides.append(
-                    {
-                        "slideKind": "testbench",
-                        "name": tb_file.stem,
-                        "linkedModule": name,
-                        "testbenchFiles": [os.path.relpath(tb_file, presentation_dir).replace("\\", "/")],
-                        "testbenchWaveform": waveform,
-                        "testbenchChecks": [
-                            "Reset release and startup behavior",
-                            "Main control/data handshake timing",
-                            "Boundary/error stimulus handling result",
-                        ],
-                    }
-                )
+        if (not is_top_module) and (name in detail_module_set) and layout == "parent-module":
+            for tb_idx, tb_file in enumerate(tb_map.get(name, [])):
+                slides.append(build_testbench_slide(name, tb_file, tb_idx))
+
+        if is_top_module and top_testbench_pages > 0:
+            top_tb_files = tb_map.get(name, [])
+            for top_tb_idx in range(top_testbench_pages):
+                tb_file = top_tb_files[top_tb_idx] if top_tb_idx < len(top_tb_files) else None
+                slides.append(build_testbench_slide(name, tb_file, top_tb_idx))
 
         visiting.remove(name)
         emitted.add(name)
 
-    ordered_roots = [top_name] + [n for n in sorted(modules_by_name, key=lambda x: (rank.get(x, 10**9), x.lower())) if n != top_name]
+    ordered_selected_roots = sorted(detail_module_set, key=lambda x: (rank.get(x, 10**9), x.lower()))
+    ordered_roots = [top_name] + [n for n in ordered_selected_roots if n != top_name]
     for root in ordered_roots:
         emit_module(root)
     return slides
 
 
-def collect_tb_mapping(project_root: Path, module_names: Sequence[str]) -> Dict[str, List[Path]]:
+def collect_tb_mapping(
+    project_root: Path,
+    module_names: Sequence[str],
+    include_auto_mapped_tb_pages: bool = True,
+) -> Dict[str, List[Path]]:
     tb_files = discover_testbenches(project_root / "tb")
     mapped: Dict[str, List[Path]] = defaultdict(list)
     unmatched: List[Path] = []
@@ -1470,7 +1741,8 @@ def collect_tb_mapping(project_root: Path, module_names: Sequence[str]) -> Dict[
     for tb_file in tb_files:
         target = auto_map_testbench(tb_file, module_names)
         if target:
-            mapped[target].append(tb_file)
+            if include_auto_mapped_tb_pages:
+                mapped[target].append(tb_file)
         else:
             unmatched.append(tb_file)
 
@@ -1835,9 +2107,12 @@ def build_presentation_config(
     project_root: Path,
     top_name: str,
     modules_by_name: Dict[str, ModuleInfo],
-    datapath_signals: Sequence[str],
+    datapath_slides: Sequence[Dict[str, object]],
+    detail_modules: Sequence[str],
     rank: Dict[str, int],
     tb_map: Dict[str, List[Path]],
+    manual_tb_map: Dict[str, List[Optional[Path]]],
+    top_testbench_pages: int,
     presentation_dir: Path,
     image_index: Dict[str, List[Path]],
     project_display_name: str,
@@ -1845,7 +2120,6 @@ def build_presentation_config(
 ) -> dict:
     now = datetime.now()
     project_name = project_root.name
-    top_module = modules_by_name[top_name]
 
     top_block_svg = resolve_top_block_image(
         top_name=top_name,
@@ -1903,15 +2177,54 @@ def build_presentation_config(
     module_slides = build_module_slides(
         top_name=top_name,
         modules_by_name=modules_by_name,
+        detail_modules=detail_modules,
         rank=rank,
         tb_map=tb_map,
+        manual_tb_map=manual_tb_map,
+        top_testbench_pages=top_testbench_pages,
         project_root=project_root,
         presentation_dir=presentation_dir,
         image_index=image_index,
     )
 
-    signal_kind_map = {name: kind for name, kind in top_signal_entries(top_module)}
-    datapath_steps = [f"{name} ({signal_kind_map.get(name, 'signal')})" for name in datapath_signals]
+    normalized_datapath_slides: List[Dict[str, object]] = []
+    fallback_datapath_steps = [
+        "[Input Needed] Datapath step #1",
+        "[Input Needed] Datapath step #2",
+        "[Input Needed] Datapath step #3",
+    ]
+    for idx, raw_slide in enumerate(datapath_slides, start=1):
+        if not isinstance(raw_slide, dict):
+            continue
+        raw_title = str(raw_slide.get("title", "")).strip()
+        page_title = raw_title or (f"DataPath #{idx}" if len(datapath_slides) > 1 else "DataPath")
+        raw_flow_steps = raw_slide.get("flowSteps")
+        flow_steps = (
+            [str(item).strip() for item in raw_flow_steps if str(item).strip()]
+            if isinstance(raw_flow_steps, list)
+            else []
+        )
+        if not flow_steps:
+            continue
+        normalized_datapath_slides.append(
+            {
+                "title": page_title,
+                "flowSteps": flow_steps,
+                "flowBoxCount": len(flow_steps),
+            }
+        )
+
+    if not normalized_datapath_slides:
+        normalized_datapath_slides = [
+            {
+                "title": "DataPath",
+                "flowSteps": fallback_datapath_steps,
+                "flowBoxCount": len(fallback_datapath_steps),
+            }
+        ]
+
+    legacy_datapath_steps = list(normalized_datapath_slides[0].get("flowSteps", fallback_datapath_steps))
+    legacy_datapath_box_count = int(normalized_datapath_slides[0].get("flowBoxCount", len(legacy_datapath_steps)))
 
     os_label = f"{platform.system()} {platform.release()}".strip()
 
@@ -1946,7 +2259,7 @@ def build_presentation_config(
             },
             {
                 "title": "Datapath",
-                "description": "Selected signal path list from top module",
+                "description": "User-defined module chain for datapath flow",
             },
             {
                 "title": "Verification",
@@ -1964,7 +2277,9 @@ def build_presentation_config(
             "[Input Needed] Setup/hold exception rationale",
             "[Input Needed] Validation vs design intent",
         ],
-        "datapathFlowSteps": datapath_steps,
+        "datapathSlides": normalized_datapath_slides,
+        "datapathFlowSteps": legacy_datapath_steps,
+        "datapathFlowBoxCount": legacy_datapath_box_count,
         "clockFlowSteps": [
             "[Input Needed] Clock source generation",
             "[Input Needed] Clock distribution path",
@@ -2069,6 +2384,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Clean existing Presentation/assets folder before generation",
     )
+    parser.add_argument(
+        "--top-testbench-pages",
+        type=int,
+        default=0,
+        help="Number of TOP-linked testbench slides to generate",
+    )
+    parser.add_argument(
+        "--disable-auto-mapped-tb-pages",
+        action="store_true",
+        help="Disable TB slide insertion for filename auto-matched testbenches",
+    )
     return parser.parse_args()
 
 
@@ -2101,26 +2427,50 @@ def main() -> int:
         else:
             top_name = prompt_select_top(modules_by_name, choose_top_module(modules_by_name))
         print(f"[INFO] Selected top module: {top_name}")
+        if args.top_testbench_pages < 0:
+            raise RuntimeError(f"--top-testbench-pages must be >= 0: {args.top_testbench_pages}")
+        top_testbench_pages = args.top_testbench_pages
+        print(f"[INFO] TOP testbench page count: {top_testbench_pages}")
+        include_auto_mapped_tb_pages = not args.disable_auto_mapped_tb_pages
+        print(f"[INFO] Auto-matched TB page insertion: {include_auto_mapped_tb_pages}")
 
         default_project_title = args.project_title.strip() or project_root.name
         default_author_name = args.author.strip() or "KOREA"
         project_display_name, author_name = prompt_cover_meta(default_project_title, default_author_name)
 
-        datapath_signals = prompt_select_datapath_signals(modules_by_name[top_name])
-        rank = prompt_select_module_rank(module_names)
+        datapath_slides = prompt_select_datapath_slides(module_names)
+        detail_modules = prompt_select_detail_modules(module_names, top_name)
+        if detail_modules:
+            rank = prompt_select_module_rank(detail_modules)
+        else:
+            rank = {}
+            print("[INFO] Module detail target is empty. Module detail order input skipped.")
 
-        tb_map = collect_tb_mapping(project_root, module_names)
+        tb_map = collect_tb_mapping(
+            project_root,
+            module_names,
+            include_auto_mapped_tb_pages=include_auto_mapped_tb_pages,
+        )
         mapped_tb_count = sum(len(items) for items in tb_map.values())
         print(f"[INFO] Testbench files mapped: {mapped_tb_count}")
         image_index = build_output_image_index(project_root)
+        manual_tb_map = prompt_manual_tb_insertions(
+            detail_modules=detail_modules,
+            tb_files=discover_testbenches(project_root / "tb"),
+        )
+        manual_tb_count = sum(len(items) for items in manual_tb_map.values())
+        print(f"[INFO] Manual TB pages inserted by user: {manual_tb_count}")
 
         presentation_config = build_presentation_config(
             project_root=project_root,
             top_name=top_name,
             modules_by_name=modules_by_name,
-            datapath_signals=datapath_signals,
+            datapath_slides=datapath_slides,
+            detail_modules=detail_modules,
             rank=rank,
             tb_map=tb_map,
+            manual_tb_map=manual_tb_map,
+            top_testbench_pages=top_testbench_pages,
             presentation_dir=output_html.parent,
             image_index=image_index,
             project_display_name=project_display_name,

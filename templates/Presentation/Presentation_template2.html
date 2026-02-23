@@ -590,6 +590,13 @@
         ],
         constraints: ["[Input Needed]"],
         timingNotes: ["[Input Needed]"],
+        datapathSlides: [
+          {
+            title: "DataPath",
+            flowSteps: ["[Input Needed] Step 1", "[Input Needed] Step 2"],
+            flowBoxCount: 2
+          }
+        ],
         datapathFlowSteps: ["[Input Needed] Step 1", "[Input Needed] Step 2"],
         clockFlowSteps: ["[Input Needed] CLK Step 1"],
         resetFlowSteps: ["[Input Needed] RESET Step 1"],
@@ -662,6 +669,26 @@
         }).join("");
       }
 
+      function resolveDatapathSlides(config) {
+        const rawSlides = arr(config && config.datapathSlides);
+        const fallbackSteps = arr(config && config.datapathFlowSteps)
+          .map(s => String(s || "").trim())
+          .filter(Boolean);
+        if (!rawSlides.length) {
+          return [{ title: "DataPath", steps: fallbackSteps.length ? fallbackSteps : ["[Input Needed]"] }];
+        }
+        const fallbackPerPage = fallbackSteps.length ? fallbackSteps : ["[Input Needed]"];
+        return rawSlides.map((item, idx) => {
+          const safe = (item && typeof item === "object") ? item : {};
+          const steps = arr(safe.flowSteps).map(s => String(s || "").trim()).filter(Boolean);
+          const title = tx(safe.title, rawSlides.length > 1 ? `DataPath #${idx + 1}` : "DataPath");
+          return {
+            title,
+            steps: steps.length ? steps : fallbackPerPage
+          };
+        });
+      }
+
       /* ══════════════════════════════════════════════════════════════
          3. SLIDE BUILDERS
       ══════════════════════════════════════════════════════════════ */
@@ -694,11 +721,11 @@
       }
 
       /* —— Slide 2: Table of Contents —— */
-      function buildToc(moduleCount) {
+      function buildToc(moduleCount, datapathCount) {
         const items = [
           { n: "01", label: "서론 (Introduction)", sub: "프로젝트 개요 및 사양" },
           { n: "02", label: "전체 시스템 구조", sub: "Top Block Diagram" },
-          { n: "03", label: "DataPath", sub: "신호 흐름 분석" },
+          { n: "03", label: `DataPath (${datapathCount}p)`, sub: "신호 흐름 분석" },
           { n: "04", label: "CLK / RESET Tree", sub: "클럭 및 리셋 경로" },
           { n: "05", label: `세부 모듈 설계 (${moduleCount}개)`, sub: "모듈별 역할·FSM·블록 다이어그램" },
           { n: "06", label: "테스트벤치", sub: "시뮬레이션 파형 검증" },
@@ -778,20 +805,23 @@
       }
 
       /* —— Slide 5: DataPath —— */
-      function buildDataPath() {
-        const steps = arr(cfg.datapathFlowSteps);
+      function buildDataPathSlide(page, index, total) {
+        const safePage = (page && typeof page === "object") ? page : {};
+        const steps = arr(safePage.steps);
+        const title = tx(safePage.title, total > 1 ? `DataPath #${index}` : "DataPath");
+        const headerTitle = total > 1 ? `3.${index} ${title}` : "3. DataPath";
         return `<section>
           <div class="sf">
-            ${sfHeader("3. DataPath", "Signal Flow Analysis")}
+            ${sfHeader(headerTitle, "Signal Flow Analysis")}
             <div class="sb">
               <div class="g2">
                 <div class="col">
-                  <h2 class="sect">신호 흐름 (DataPath)</h2>
+                  <h2 class="sect">${esc(title)}</h2>
                   <div class="flow">${flowChain(steps)}</div>
                 </div>
                 <div class="col">
                   <h2 class="sect">Topology</h2>
-                  ${mediaBox(cfg.assets.topBlockSvg, "Datapath topology", "Top SVG 위에 DataPath 화살표를 오버레이해 설명합니다.")}
+                  ${mediaBox(cfg.assets.topBlockSvg, "Datapath topology", "Overlay datapath arrows on the Top SVG for each page.")}
                 </div>
               </div>
             </div>
@@ -896,6 +926,43 @@
           <div class="sf">
             ${sfHeader(`5-${idx}. ${name}`, "Module Detail")}
             <div class="sb">${bodyHtml}</div>
+          </div>
+        </section>`;
+      }
+
+      function buildMappedTestbenchSlide(mod, idx) {
+        const linked = tx(mod.linkedModule, tx(mod.name, "TOP"));
+        const tbSubtitle = tx(mod.testbenchSubtitle, `${linked} Testbench`);
+        const files = arr(mod.testbenchFiles).map(f => String(f || "").trim()).filter(Boolean);
+        const checks = arr(mod.testbenchChecks).map(c => String(c || "").trim()).filter(Boolean);
+        const waveform = tx(mod.testbenchWaveform, tx(cfg.assets.testbenchWaveform, ""));
+        const fileHtml = files.length ? `<ul>${bulletList(files)}</ul>` : `<p style="color:var(--gray-l);font-size:12px;">No testbench file mapped.</p>`;
+        const checkHtml = checks.length
+          ? `<ul>${bulletList(checks)}</ul>`
+          : `<ul>${bulletList(["[Input Needed] Reset/Startup check", "[Input Needed] Main datapath/control check", "[Input Needed] Boundary/error handling check"])}</ul>`;
+        return `<section>
+          <div class="sf">
+            ${sfHeader(`6-${idx}. ${tbSubtitle}`, "Simulation Verification")}
+            <div class="sb">
+              <div class="g2" style="flex:1;min-height:0;">
+                <div class="col">
+                  <h2 class="sect">Waveform</h2>
+                  ${mediaBox(waveform, `${linked} testbench waveform`, "Link testbench waveform image path.")}
+                </div>
+                <div class="col">
+                  <div class="card">
+                    <h2 class="sect">Linked Module</h2>
+                    <p>${esc(linked)}</p>
+                    <h2 class="sect" style="margin-top:10px;">Testbench Files</h2>
+                    ${fileHtml}
+                  </div>
+                  <div class="card accent" style="margin-top:10px;">
+                    <h2 class="sect">Verification Checks</h2>
+                    ${checkHtml}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </section>`;
       }
@@ -1086,17 +1153,25 @@
          4. ASSEMBLE ALL SLIDES
       ══════════════════════════════════════════════════════════════ */
       const modules = arr(cfg.modules);
+      const moduleEntries = modules.filter(mod => tx(mod && mod.slideKind, "module").toLowerCase() !== "testbench");
+      const mappedTestbenchEntries = modules.filter(mod => tx(mod && mod.slideKind, "module").toLowerCase() === "testbench");
+      const datapathSlides = resolveDatapathSlides(cfg);
       const slides = [];
 
       slides.push(buildCover());
-      slides.push(buildToc(modules.length));
+      slides.push(buildToc(moduleEntries.length, datapathSlides.length));
       slides.push(buildIntro());
       slides.push(buildTopDiagram());
-      slides.push(buildDataPath());
+      datapathSlides.forEach((page, i) => {
+        slides.push(buildDataPathSlide(page, i + 1, datapathSlides.length));
+      });
       slides.push(buildClkReset());
 
-      modules.forEach((mod, i) => {
-        slides.push(buildModuleSlide(mod, i + 1, modules.length));
+      moduleEntries.forEach((mod, i) => {
+        slides.push(buildModuleSlide(mod, i + 1, moduleEntries.length));
+      });
+      mappedTestbenchEntries.forEach((mod, i) => {
+        slides.push(buildMappedTestbenchSlide(mod, i + 1));
       });
 
       slides.push(buildTestbench());

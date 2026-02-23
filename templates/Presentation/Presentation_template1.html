@@ -2032,6 +2032,17 @@
           ],
           constraints: ["[Input Needed]"],
           timingNotes: ["[Input Needed]"],
+          datapathSlides: [
+            {
+              title: "DataPath",
+              flowSteps: [
+                "[Input Needed] Datapath step #1",
+                "[Input Needed] Datapath step #2",
+                "[Input Needed] Datapath step #3"
+              ],
+              flowBoxCount: 3
+            }
+          ],
           datapathFlowSteps: [
             "[Input Needed] Datapath step #1",
             "[Input Needed] Datapath step #2",
@@ -2522,6 +2533,7 @@
             "[Input Needed] RESET step #3"
           ];
 
+          const rawDatapathSlides = Array.isArray(safeConfig.datapathSlides) ? safeConfig.datapathSlides : [];
           const rawDatapathFlowSteps = Array.isArray(safeConfig.datapathFlowSteps)
             ? safeConfig.datapathFlowSteps
             : [];
@@ -2544,12 +2556,81 @@
           const legacyResetBoxCount =
             clockResetFlowBoxCount === null ? null : Math.floor(clockResetFlowBoxCount / 2);
 
-          const datapathFlowSteps = buildFlowSteps(
-            rawDatapathFlowSteps,
-            defaultDatapathFlow,
-            datapathFlowBoxCount,
-            "Datapath step"
-          );
+          const normalizedDatapathSlides = (() => {
+            if (rawDatapathSlides.length > 0) {
+              const normalized = rawDatapathSlides
+                .map((item, idx) => {
+                  const safeItem = isPlainObject(item) ? item : {};
+                  const rawFlowSteps = Array.isArray(safeItem.flowSteps) ? safeItem.flowSteps : [];
+                  const flowBoxCount = toOptionalBoxCount(safeItem.flowBoxCount);
+                  const flowSteps = buildFlowSteps(
+                    rawFlowSteps,
+                    defaultDatapathFlow,
+                    flowBoxCount,
+                    "Datapath step"
+                  );
+                  const fallbackTitle = rawDatapathSlides.length > 1 ? `DataPath #${idx + 1}` : "DataPath";
+                  return {
+                    title: ensureText(safeItem.title, fallbackTitle),
+                    flowSteps
+                  };
+                })
+                .filter((item) => item.flowSteps.length > 0);
+              if (normalized.length > 0) return normalized;
+            }
+            return [
+              {
+                title: "DataPath",
+                flowSteps: buildFlowSteps(
+                  rawDatapathFlowSteps,
+                  defaultDatapathFlow,
+                  datapathFlowBoxCount,
+                  "Datapath step"
+                )
+              }
+            ];
+          })();
+          const datapathSlideCount = normalizedDatapathSlides.length;
+          const datapathTocItemsHtml = normalizedDatapathSlides
+            .map((item, idx) => `<li>5.${idx + 1} ${escapeHtml(item.title)}</li>`)
+            .join("");
+          const datapathSlidesHtml = normalizedDatapathSlides
+            .map((item, idx) => {
+              const datapathFlowHtml = renderFlowChain(item.flowSteps);
+              const datapathFlowStyle = resolveFlowChainStyle(item.flowSteps.length);
+              const datapathTitle = `5.${idx + 1} ${item.title}`;
+              return `
+                <section>
+                  <div class="slide-frame">
+                    ${renderHeader("Data Path", datapathTitle, "05")}
+                    <div class="grid-2 path-flow-grid">
+                      <div class="card flow-mix-card">
+                        <h3>Datapath</h3>
+                        <div class="flow-chain" style="${datapathFlowStyle}">
+                          ${datapathFlowHtml}
+                        </div>
+                      </div>
+                      <div class="card plain">
+                        <h3>Topology</h3>
+                        <div class="datapath-overlay-box">
+                          <img src="${escapeHtml(assets.topBlockSvg)}" alt="Datapath base diagram" loading="lazy" />
+                          <svg class="datapath-overlay-svg" viewBox="0 0 1000 700" role="img" aria-label="datapath overlay area">
+                            <text x="500" y="350" text-anchor="middle" class="datapath-overlay-text">
+                              datapath overlay authoring area
+                            </text>
+                          </svg>
+                        </div>
+                        <p class="media-caption">Annotate datapath arrows directly over the Top SVG in this area.</p>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              `;
+            })
+            .join("");
+          const clockResetChapterLabel = `5.${datapathSlideCount + 1}`;
+          const clockResetSlideTitle = `${clockResetChapterLabel} clk / RESET Tree`;
+
           const clockFlowSource = rawClockFlowSteps.length > 0 ? rawClockFlowSteps : legacyClockFlow;
           const resetFlowSource = rawResetFlowSteps.length > 0 ? rawResetFlowSteps : legacyResetFlow;
           const effectiveClockFlowBoxCount =
@@ -2577,10 +2658,8 @@
             "RESET step"
           );
 
-          const datapathFlowHtml = renderFlowChain(datapathFlowSteps);
           const clockFlowHtml = renderFlowChain(clockFlowSteps);
           const resetFlowHtml = renderFlowChain(resetFlowSteps);
-          const datapathFlowStyle = resolveFlowChainStyle(datapathFlowSteps.length);
           const clockFlowStyle = resolveFlowChainStyle(clockFlowSteps.length);
           const resetFlowStyle = resolveFlowChainStyle(resetFlowSteps.length);
 
@@ -2614,6 +2693,7 @@
                 if (slideKind === "testbench") {
                   testbenchIndex += 1;
                   const linkedModule = ensureText(safeModule.linkedModule, moduleName);
+                  const tbSubtitle = ensureText(safeModule.testbenchSubtitle, linkedModule);
                   const tbWave = ensureText(
                     safeModule.testbenchWaveform,
                     ensureText(assets.testbenchWaveform, "")
@@ -2641,7 +2721,7 @@
                   return `
                     <section>
                       <div class="slide-frame">
-                        ${renderHeader("테스트벤치", `7-${testbenchIndex}. ${linkedModule}`, "07")}
+                        ${renderHeader("테스트벤치", `7-${testbenchIndex}. ${tbSubtitle}`, "07")}
                         <div class="col-flex testbench-layout">
                           <div class="card testbench-wave-card">
                             <h3>Waveform</h3>
@@ -2955,8 +3035,8 @@
                       <li>3. 개발환경 및 제약조건</li>
                       <li>4. 구현 요약</li>
                       <li>5. Top 블록 다이어그램</li>
-                      <li>5.1 DataPath</li>
-                      <li>5.2 CLK/RESET 트리</li>
+                      ${datapathTocItemsHtml}
+                      <li>${escapeHtml(clockResetChapterLabel)} CLK/RESET Tree</li>
                       <li>6. 모듈 상세 (${moduleCount}페이지)</li>
                       ${tocModuleSubItemsHtml}
                       ${tocParentOverflowHtml}
@@ -3024,34 +3104,10 @@
               </div>
             </section>
 
+            ${datapathSlidesHtml}
             <section>
               <div class="slide-frame">
-                ${renderHeader("Data Path", "5.1 DataPath", "05")}
-                <div class="grid-2 path-flow-grid">
-                  <div class="card flow-mix-card">
-                    <h3>Datapath</h3>
-                    <div class="flow-chain" style="${datapathFlowStyle}">
-                      ${datapathFlowHtml}
-                    </div>
-                  </div>
-                  <div class="card plain">
-                    <h3>Topology</h3>
-                    <div class="datapath-overlay-box">
-                      <img src="${escapeHtml(assets.topBlockSvg)}" alt="Datapath base diagram" loading="lazy" />
-                      <svg class="datapath-overlay-svg" viewBox="0 0 1000 700" role="img" aria-label="datapath overlay area">
-                        <text x="500" y="350" text-anchor="middle" class="datapath-overlay-text">
-                          화살표 오버레이 작성 영역
-                        </text>
-                      </svg>
-                    </div>
-                    <p class="media-caption">우측 영역에서 Top SVG 위에 datapath 화살표를 직접 추가해 설명합니다.</p>
-                  </div>
-                </div>
-              </div>
-            </section>
-            <section>
-              <div class="slide-frame">
-                ${renderHeader("Clock & Reset", "5-2. clk / RESET Tree", "05")}
+                ${renderHeader("Clock & Reset", clockResetSlideTitle, "05")}
                 <div class="grid-2 path-flow-grid">
                   <div class="card flow-mix-card">
                     <h3>CLK/RESET TREE</h3>
