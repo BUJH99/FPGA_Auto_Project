@@ -11,6 +11,7 @@ if "%~1"=="" (
 set "TARGET_PROJECT=%~f1"
 set "SCRIPT_DIR=%~dp0"
 set "PY_TOOL=%SCRIPT_DIR%..\tools\generate_presentation.py"
+set "HDL_INDEXER=%SCRIPT_DIR%..\tools\hdl_indexer.js"
 set "TEMPLATE_DIR=%SCRIPT_DIR%..\Presentation"
 
 echo ============================================================================
@@ -46,6 +47,17 @@ if not defined PY_CMD (
     echo [ERROR] Python was not found in PATH.
     pause
     exit /b 1
+)
+
+where node >nul 2>nul
+if !errorlevel! equ 0 (
+    if exist "%HDL_INDEXER%" (
+        echo [INFO] Building HDL index cache...
+        node "%HDL_INDEXER%" "%TARGET_PROJECT%" --write >nul
+        if errorlevel 1 (
+            echo [WARN] HDL index cache generation failed. Continuing.
+        )
+    )
 )
 
 %PY_CMD% -c "import jinja2" >nul 2>nul

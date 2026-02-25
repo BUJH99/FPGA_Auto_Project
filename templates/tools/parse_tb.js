@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 function usageAndExit() {
-    console.error('Usage: node tools/parse_tb.js <path_to_tb_file.v> [project_root]');
+    console.error('Usage: node tools/parse_tb.js <path_to_tb_file.(v|sv)> [project_root]');
     process.exit(1);
 }
 
@@ -519,12 +519,46 @@ const inferredProjectPath = path.dirname(path.dirname(tbFile));
 const projectPath = projectRootArg || inferredProjectPath;
 const projectName = path.basename(projectPath);
 const topModule = extractTopModuleName(tbContent, path.basename(tbFile, path.extname(tbFile)));
+const tbRelPath = path.relative(projectPath, tbFile).replace(/\\/g, '/');
+const tbExt = path.extname(tbFile).toLowerCase() || '.v';
+let hdlLang = 'verilog';
+try {
+    const srcDir = path.join(projectPath, 'src');
+    const tbDir = path.join(projectPath, 'tb');
+    let hasV = false;
+    let hasSv = false;
+    const dirs = [srcDir, tbDir];
+    for (const dir of dirs) {
+        if (!fs.existsSync(dir)) continue;
+        const stack = [dir];
+        while (stack.length > 0) {
+            const cur = stack.pop();
+            const entries = fs.readdirSync(cur, { withFileTypes: true });
+            for (const e of entries) {
+                const p = path.join(cur, e.name);
+                if (e.isDirectory()) {
+                    stack.push(p);
+                    continue;
+                }
+                if (!e.isFile()) continue;
+                if (/\.v$/i.test(e.name)) hasV = true;
+                if (/\.(sv|svh)$/i.test(e.name)) hasSv = true;
+            }
+        }
+    }
+    hdlLang = hasV && hasSv ? 'mixed' : (hasSv ? 'systemverilog' : 'verilog');
+} catch {
+    hdlLang = tbExt === '.sv' ? 'systemverilog' : 'verilog';
+}
 
 const config = {
     config: {
         project_name: projectName,
         top_module: topModule,
         sim_duration_ns: simDurationNs,
+        tb_file: tbRelPath,
+        tb_file_ext: tbExt,
+        hdl_lang: hdlLang,
         vcd_file: 'output/mcp_sim_wave.vcd',
         html_file: `output/view_wave_${path.basename(tbFile, path.extname(tbFile))}.html`
     },

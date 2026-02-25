@@ -116,7 +116,7 @@ echo [INFO] report.md generated successfully.
 echo [INFO] Features included:
 echo - Professional Table-based Cover Page
 echo - Detailed Project Directory Structure
-echo - Enhanced Clock/Reset & Design Methodology Sections
+echo - Enhanced Clock/Reset ^& Design Methodology Sections
 echo - Refactored for better readability and style.
 if "%NO_PAUSE%"=="0" pause
 exit /b 0

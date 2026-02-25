@@ -30,19 +30,48 @@ if ($modules.Count -eq 0) {
 
 Set-Location $ProjectPath
 
+function Get-ProjectRelativePath {
+  param([string]$BasePath, [string]$TargetPath)
+  try {
+    $resolved = Resolve-Path -LiteralPath $TargetPath -Relative
+    if ($resolved -is [array]) { $resolved = $resolved[0] }
+    $resolved = [string]$resolved
+    if ($resolved.StartsWith(".\")) { $resolved = $resolved.Substring(2) }
+    return $resolved.Replace('\', '/')
+  }
+  catch {
+    $base = [IO.Path]::GetFullPath($BasePath)
+    $target = [IO.Path]::GetFullPath($TargetPath)
+    if ($target.StartsWith($base, [StringComparison]::OrdinalIgnoreCase)) {
+      return $target.Substring($base.Length).TrimStart('\','/').Replace('\','/')
+    }
+    return $TargetPath.Replace('\','/')
+  }
+}
+
 $srcDir = Join-Path $ProjectPath "src"
 if (-not (Test-Path $srcDir)) {
   Write-Host "[ERROR] src/ folder not found in project."
   exit 1
 }
 
-$srcFiles = Get-ChildItem -Path $srcDir -Filter "*.v" -File | Sort-Object Name
+$srcFiles = Get-ChildItem -Path $srcDir -Recurse -File | Where-Object { $_.Extension -in ".v", ".sv" } | Sort-Object FullName
 if ($srcFiles.Count -eq 0) {
-  Write-Host "[ERROR] No .v files found in src/."
+  Write-Host "[ERROR] No .v/.sv files found in src/."
   exit 1
 }
 
-$verilogFiles = $srcFiles | ForEach-Object { "src/$($_.Name)" }
+$verilogFiles = $srcFiles | ForEach-Object {
+  $rel = Get-ProjectRelativePath -BasePath $ProjectPath -TargetPath $_.FullName
+  $rel
+}
+$headerRoots = @($srcDir, (Join-Path $ProjectPath "include"), (Join-Path $ProjectPath "inc")) | Where-Object { Test-Path $_ }
+$includeDirs = @()
+foreach ($root in $headerRoots) {
+  $includeDirs += Get-ChildItem -Path $root -Recurse -File | Where-Object { $_.Extension -in ".svh", ".vh" } | Select-Object -ExpandProperty DirectoryName -Unique
+}
+$includeDirs = @($includeDirs | Select-Object -Unique)
+if ($includeDirs.Count -eq 0) { $includeDirs = @() }
 
 $moduleToSource = @{}
 foreach ($src in $srcFiles) {
@@ -51,7 +80,7 @@ foreach ($src in $srcFiles) {
   foreach ($m in $moduleMatches) {
     $name = $m.Groups[1].Value
     if (-not $moduleToSource.ContainsKey($name)) {
-      $moduleToSource[$name] = "src/$($src.Name)"
+      $moduleToSource[$name] = Get-ProjectRelativePath -BasePath $ProjectPath -TargetPath $src.FullName
     }
   }
 }
@@ -106,7 +135,8 @@ $moduleWorker = {
     [string]$GenerateSimpleSvgScript,
     [string]$Svg2DrawioScript,
     [string]$SkinPath,
-    [string]$LogDir
+    [string]$LogDir,
+    [string[]]$IncludeDirs
   )
 
   $ErrorActionPreference = "Stop"
@@ -241,7 +271,8 @@ $moduleWorker = {
   }
 
   $quotedVerilogFiles = $VerilogFiles | ForEach-Object { '"' + $_ + '"' }
-  $yosysScript = "read_verilog -sv $($quotedVerilogFiles -join ' '); hierarchy -top $Module; proc; opt; write_json `"$jsonFile`""
+  $quotedIncludeDirs = $IncludeDirs | ForEach-Object { '-I "' + ($_.Replace('\','/')) + '"' }
+  $yosysScript = "read_verilog -sv $($quotedIncludeDirs -join ' ') $($quotedVerilogFiles -join ' '); hierarchy -top $Module; proc; opt; write_json `"$jsonFile`""
   $yosysOk = Invoke-ExternalCommand -Label "Yosys synthesis for $Module" -Command $YosysCmd -Arguments @("-p", $yosysScript)
   if (-not $yosysOk) {
     $moduleSuccess = $false
@@ -392,7 +423,8 @@ while ($queue.Count -gt 0 -or $runningJobs.Count -gt 0) {
       $generateSimpleSvgScript,
       $svg2drawioScript,
       $skinPath,
-      $logDir
+      $logDir,
+      $includeDirs
     )
     $runningJobs += $job
     Write-Host ("[INFO] Started module: {0} (running: {1}/{2})" -f $item.Module, $runningJobs.Count, $MaxParallel)

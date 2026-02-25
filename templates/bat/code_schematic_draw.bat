@@ -37,7 +37,7 @@ if not exist "%NETLISTSVG_CMD%" (
     exit /b 1
 )
 
-REM Dynamically find all Verilog files in src folder
+REM Dynamically find all HDL files in src folder (.v/.sv)
 set "VERILOG_FILES="
 set "ALL_MODULES="
 set "MODULE_COUNT=0"
@@ -53,9 +53,20 @@ for %%f in (src\*.v) do (
         set "TOP_MODULE_NAME=!MODULE_NAME!"
     )
 )
+for %%f in (src\*.sv) do (
+    set /a MODULE_COUNT+=1
+    set "MODULE_NAME=%%~nf"
+    set "VERILOG_FILES=!VERILOG_FILES! src/%%~nxf"
+    set "ALL_MODULES=!ALL_MODULES! !MODULE_NAME!"
+    set "MODULE_!MODULE_COUNT!=!MODULE_NAME!"
+    if /i "!MODULE_NAME!"=="Top" (
+        set "HAS_TOP=1"
+        set "TOP_MODULE_NAME=!MODULE_NAME!"
+    )
+)
 
 if !MODULE_COUNT! equ 0 (
-    echo [ERROR] No .v files found in src/ folder.
+    echo [ERROR] No .v/.sv files found in src/ folder.
     pause
     exit /b 1
 )

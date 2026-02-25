@@ -40,6 +40,7 @@ Install and expose the following tools in system `PATH`:
 Optional for full flow:
 - **Pandoc** (for `md -> html/docx`)
 - **Yosys** / `yowasp-yosys` (for schematic generation)
+- **Visual Studio Build Tools (C++)** *(Windows, optional but recommended for AST-backed HDL parsing via `tree-sitter-verilog`)*
 
 #### 2. Install dependencies
 Run once:
@@ -70,6 +71,7 @@ Generate report assets from HDL/TB and build deliverables from one Markdown sour
 
 #### B. Interactive Simulation (Vivado GUI)
 - `sim_vivado_run.bat` scans testbenches, lets you choose sim top, and opens Vivado simulation GUI.
+- Supports testbench sources in `.v` and `.sv`.
 - Vivado simulation artifacts are contained inside project:
   - `<ProjectDir>/vivado_project/`
   - `<ProjectDir>/vivado_project/vivado_sim_log/`
@@ -77,6 +79,13 @@ Generate report assets from HDL/TB and build deliverables from one Markdown sour
 #### C. Build & Program
 - Step-by-step: `vivado_build_flow_run.bat` -> `vivado_fpga_program.bat`
 - One-click: `vivado_build_and_program_auto.bat`
+
+### SystemVerilog Notes
+- HDL sources: `.v`, `.sv`
+- Headers/includes: `.svh` (include/header only; not a sim-top selection target)
+- Draft support matrix: `templates/docs/systemverilog_support_matrix.md`
+- Icarus Verilog support depends on SV feature level. Advanced TB constructs (e.g. `class`, `mailbox`) may require Vivado/xsim.
+- `templates/tools/hdl_indexer.js` uses optional AST parsing when `tree-sitter` dependencies are installed; otherwise it falls back to heuristic parsing with warnings.
 
 ### Project Layout
 Example project structure after setup:

@@ -1186,10 +1186,17 @@ def auto_map_testbench(tb_file: Path, module_names: Sequence[str]) -> Optional[s
 
 
 def prompt_map_unmatched_testbenches(
-    unmatched: Sequence[Path], module_names: Sequence[str]
+    unmatched: Sequence[Path], module_names: Sequence[str], non_interactive: bool = False
 ) -> Dict[str, List[Path]]:
     mapping: Dict[str, List[Path]] = defaultdict(list)
     if not unmatched:
+        return mapping
+
+    if non_interactive:
+        print("")
+        print("[WARN] Unmatched testbench files skipped in non-interactive mode:")
+        for tb in unmatched:
+            print(f"  - {tb.name}")
         return mapping
 
     print("")
@@ -1733,6 +1740,7 @@ def collect_tb_mapping(
     project_root: Path,
     module_names: Sequence[str],
     include_auto_mapped_tb_pages: bool = True,
+    non_interactive: bool = False,
 ) -> Dict[str, List[Path]]:
     tb_files = discover_testbenches(project_root / "tb")
     mapped: Dict[str, List[Path]] = defaultdict(list)
@@ -1747,7 +1755,11 @@ def collect_tb_mapping(
             unmatched.append(tb_file)
 
     if unmatched:
-        manual_map = prompt_map_unmatched_testbenches(unmatched, module_names)
+        manual_map = prompt_map_unmatched_testbenches(
+            unmatched,
+            module_names,
+            non_interactive=non_interactive,
+        )
         for module_name, files in manual_map.items():
             mapped[module_name].extend(files)
 
@@ -2103,6 +2115,25 @@ def parse_report_file(path: Optional[Path], parser) -> Dict[str, object]:
         return {}
 
 
+def load_hdl_index(project_root: Path) -> Dict[str, object]:
+    candidates = [
+        project_root / "output" / "cache" / "hdl_index.json",
+        project_root / "Presentation" / "assets" / "hdl_index.json",
+    ]
+    for p in candidates:
+        if not p.exists():
+            continue
+        try:
+            raw = p.read_text(encoding="utf-8")
+            obj = json.loads(raw)
+            if isinstance(obj, dict):
+                obj["_source_path"] = str(p)
+                return obj
+        except Exception:
+            continue
+    return {}
+
+
 def build_presentation_config(
     project_root: Path,
     top_name: str,
@@ -2117,6 +2148,7 @@ def build_presentation_config(
     image_index: Dict[str, List[Path]],
     project_display_name: str,
     author_name: str,
+    hdl_index: Optional[Dict[str, object]] = None,
 ) -> dict:
     now = datetime.now()
     project_name = project_root.name
@@ -2173,6 +2205,11 @@ def build_presentation_config(
     parsed_power_report = parse_report_file(power_report_path, parse_power_report_text)
     parsed_timing_report = parse_report_file(timing_report_path, parse_timing_report_text)
     parsed_util_report = parse_report_file(util_report_path, parse_util_report_text)
+    hdl_index = hdl_index or {}
+    hdl_summary = hdl_index.get("summary") if isinstance(hdl_index.get("summary"), dict) else {}
+    hdl_decls = hdl_index.get("declarations") if isinstance(hdl_index.get("declarations"), dict) else {}
+    sv_packages = hdl_decls.get("packages") if isinstance(hdl_decls.get("packages"), list) else []
+    sv_interfaces = hdl_decls.get("interfaces") if isinstance(hdl_decls.get("interfaces"), list) else []
 
     module_slides = build_module_slides(
         top_name=top_name,
@@ -2247,6 +2284,19 @@ def build_presentation_config(
             "os": os_label,
             "tools": ["Vivado", "Python", "Jinja2"],
             "language": ["Verilog", "SystemVerilog"],
+            "hdlIndex": {
+                "available": bool(hdl_index),
+                "sourcePath": str(hdl_index.get("_source_path", "")),
+                "summary": hdl_summary,
+            },
+        },
+        "svDeclarations": {
+            "packages": sv_packages,
+            "interfaces": sv_interfaces,
+            "counts": {
+                "packages": len(sv_packages),
+                "interfaces": len(sv_interfaces),
+            },
         },
         "featurePlaceholders": [
             {
@@ -2395,6 +2445,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable TB slide insertion for filename auto-matched testbenches",
     )
+    parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Use defaults for prompts (for automation/CI)",
+    )
     return parser.parse_args()
 
 
@@ -2411,6 +2466,18 @@ def main() -> int:
         print("==============================================================================")
         print(f"[INFO] Project: {project_root}")
         print(f"[INFO] Template: {template_path}")
+        hdl_index = load_hdl_index(project_root)
+        if hdl_index:
+            hdl_summary = hdl_index.get("summary", {}) if isinstance(hdl_index.get("summary"), dict) else {}
+            pkg_count = len((hdl_index.get("declarations", {}) or {}).get("packages", []) or [])
+            if_count = len((hdl_index.get("declarations", {}) or {}).get("interfaces", []) or [])
+            print(
+                f"[INFO] HDL index: {hdl_index.get('_source_path','')} "
+                f"(files={hdl_summary.get('totalFiles','?')}, modules={hdl_summary.get('modules','?')}, "
+                f"packages={pkg_count}, interfaces={if_count})"
+            )
+        else:
+            print("[INFO] HDL index: not found (continuing with local parser)")
 
         modules_by_name = build_module_db(src_dir)
         if not modules_by_name:
@@ -2424,6 +2491,11 @@ def main() -> int:
             top_name = next((name for name in module_names if name.lower() == requested_top.lower()), "")
             if not top_name:
                 raise RuntimeError(f"Top module not found: {requested_top}")
+        elif args.non_interactive:
+            auto_top = choose_top_module(modules_by_name)
+            if not auto_top:
+                raise RuntimeError("No module found for auto top selection.")
+            top_name = auto_top
         else:
             top_name = prompt_select_top(modules_by_name, choose_top_module(modules_by_name))
         print(f"[INFO] Selected top module: {top_name}")
@@ -2436,28 +2508,47 @@ def main() -> int:
 
         default_project_title = args.project_title.strip() or project_root.name
         default_author_name = args.author.strip() or "KOREA"
-        project_display_name, author_name = prompt_cover_meta(default_project_title, default_author_name)
-
-        datapath_slides = prompt_select_datapath_slides(module_names)
-        detail_modules = prompt_select_detail_modules(module_names, top_name)
-        if detail_modules:
-            rank = prompt_select_module_rank(detail_modules)
+        if args.non_interactive:
+            print("[INFO] Non-interactive mode: using default cover metadata and slide selections.")
+            project_display_name = default_project_title
+            author_name = default_author_name
+            datapath_slides = [
+                {
+                    "title": "DataPath",
+                    "flowSteps": list(module_names),
+                    "flowBoxCount": len(module_names),
+                }
+            ] if module_names else []
+            detail_modules = [name for name in module_names if name != top_name]
+            rank = {name: idx for idx, name in enumerate(detail_modules)}
         else:
-            rank = {}
-            print("[INFO] Module detail target is empty. Module detail order input skipped.")
+            project_display_name, author_name = prompt_cover_meta(default_project_title, default_author_name)
+
+            datapath_slides = prompt_select_datapath_slides(module_names)
+            detail_modules = prompt_select_detail_modules(module_names, top_name)
+            if detail_modules:
+                rank = prompt_select_module_rank(detail_modules)
+            else:
+                rank = {}
+                print("[INFO] Module detail target is empty. Module detail order input skipped.")
 
         tb_map = collect_tb_mapping(
             project_root,
             module_names,
             include_auto_mapped_tb_pages=include_auto_mapped_tb_pages,
+            non_interactive=args.non_interactive,
         )
         mapped_tb_count = sum(len(items) for items in tb_map.values())
         print(f"[INFO] Testbench files mapped: {mapped_tb_count}")
         image_index = build_output_image_index(project_root)
-        manual_tb_map = prompt_manual_tb_insertions(
-            detail_modules=detail_modules,
-            tb_files=discover_testbenches(project_root / "tb"),
-        )
+        if args.non_interactive:
+            manual_tb_map = {}
+            print("[INFO] Non-interactive mode: manual TB page insertion skipped.")
+        else:
+            manual_tb_map = prompt_manual_tb_insertions(
+                detail_modules=detail_modules,
+                tb_files=discover_testbenches(project_root / "tb"),
+            )
         manual_tb_count = sum(len(items) for items in manual_tb_map.values())
         print(f"[INFO] Manual TB pages inserted by user: {manual_tb_count}")
 
@@ -2475,6 +2566,7 @@ def main() -> int:
             image_index=image_index,
             project_display_name=project_display_name,
             author_name=author_name,
+            hdl_index=hdl_index,
         )
         materialize_presentation_assets(presentation_config, project_root, output_html.parent)
 

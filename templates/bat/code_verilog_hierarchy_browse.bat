@@ -9,6 +9,10 @@ if "%~1"=="" (
 )
 
 set "TARGET_PROJECT=%~f1"
+set "HDL_INDEXER=%~dp0..\tools\hdl_indexer.js"
+set "BROWSE_ONCE=0"
+if /i "%~2"=="--once" set "BROWSE_ONCE=1"
+if /i "%~3"=="--once" set "BROWSE_ONCE=1"
 cd /d "%TARGET_PROJECT%"
 
 :: -----------------------------------------------------------------
@@ -21,7 +25,7 @@ for /f "tokens=1 delims=:" %%a in ('findstr /n "^%MARKER%" "%~f0"') do set "STAR
 more +%START_LINE% "%~f0" > "%PS_FILE%"
 
 :: Run PowerShell
-powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_FILE%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_FILE%" "%TARGET_PROJECT%" "%HDL_INDEXER%" "%BROWSE_ONCE%"
 
 del "%PS_FILE%"
 goto :eof
@@ -29,12 +33,90 @@ goto :eof
 
 :POWERSHELL_SCRIPT_START
 # -------------------------------------------------------------------------
-# Interactive Verilog Viewer
+# Interactive HDL Viewer (Verilog/SystemVerilog)
 # -------------------------------------------------------------------------
-$Host.UI.RawUI.WindowTitle = "Verilog Project Navigator"
+param(
+    [string]$ProjectRoot = (Get-Location).Path,
+    [string]$HdlIndexerPath = "",
+    [string]$BrowseOnce = "0"
+)
+$Host.UI.RawUI.WindowTitle = "HDL Project Navigator"
 $srcDir = 'src';
 $global:fileIndexMap = @{} # Index -> FullPath
 $global:counter = 1
+
+function Try-LoadHdlIndex {
+    param(
+        [string]$ProjectRoot,
+        [string]$HdlIndexerPath
+    )
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return $null }
+    if ([string]::IsNullOrWhiteSpace($HdlIndexerPath) -or -not (Test-Path $HdlIndexerPath)) { return $null }
+    try {
+        $json = & node $HdlIndexerPath $ProjectRoot --pretty 2>$null
+        if (-not $json) { return $null }
+        return ($json -join "`n") | ConvertFrom-Json
+    } catch {
+        return $null
+    }
+}
+
+function Convert-IndexToHierarchyData {
+    param($IndexObj)
+
+    $moduleMap = @{}
+    $moduleFileMap = @{}
+    $modulePathMap = @{}
+    $declGroups = @{ Packages=@(); Interfaces=@() }
+    $firstDeclPath = @{}
+
+    foreach ($f in $IndexObj.files) {
+        foreach ($decl in $f.declarations) {
+            $dType = [string]$decl.type
+            $dName = [string]$decl.name
+            if (-not $firstDeclPath.ContainsKey("$dType::$dName")) {
+                $firstDeclPath["$dType::$dName"] = [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot $f.path))
+            }
+            if ($dType -eq "module") {
+                if (-not $moduleMap.ContainsKey($dName)) { $moduleMap[$dName] = "" }
+                if (-not $moduleFileMap.ContainsKey($dName)) { $moduleFileMap[$dName] = [System.IO.Path]::GetFileName($f.path) }
+                if (-not $modulePathMap.ContainsKey($dName)) { $modulePathMap[$dName] = [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot $f.path)) }
+            } elseif ($dType -eq "package") {
+                $declGroups.Packages += [pscustomobject]@{ Name = $dName; Path = $firstDeclPath["$dType::$dName"] }
+            } elseif ($dType -eq "interface") {
+                $declGroups.Interfaces += [pscustomobject]@{ Name = $dName; Path = $firstDeclPath["$dType::$dName"] }
+            }
+        }
+    }
+
+    $dependencies = @{}
+    $usageCounts = @{}
+    foreach ($m in $moduleMap.Keys) { $usageCounts[$m] = 0 }
+    foreach ($prop in $IndexObj.graph.moduleInstances.PSObject.Properties) {
+        $deps = @()
+        foreach ($child in $prop.Value) {
+            $deps += [string]$child
+            if ($usageCounts.ContainsKey([string]$child)) { $usageCounts[[string]$child]++ }
+        }
+        $dependencies[$prop.Name] = $deps
+    }
+    foreach ($m in $moduleMap.Keys) {
+        if (-not $dependencies.ContainsKey($m)) { $dependencies[$m] = @() }
+    }
+
+    $topModules = @($usageCounts.Keys | Where-Object { $usageCounts[$_] -eq 0 } | Sort-Object)
+    if ($topModules.Count -eq 0) { $topModules = @($moduleMap.Keys | Sort-Object) }
+    elseif ($topModules -contains "Top") { $topModules = @("Top") }
+
+    return @{
+        Top   = $topModules
+        Deps  = $dependencies
+        Files = $moduleFileMap
+        Paths = $modulePathMap
+        SvDecls = $declGroups
+        Indexer = $true
+    }
+}
 
 function Get-Hierarchy {
     # 1. Reset
@@ -46,7 +128,12 @@ function Get-Hierarchy {
         return @{ Error = "Source directory not found" }
     }
     
-    $files = Get-ChildItem -Path $srcDir -Filter *.v;
+    $idx = Try-LoadHdlIndex -ProjectRoot $ProjectRoot -HdlIndexerPath $HdlIndexerPath
+    if ($idx -and $idx.files) {
+        return (Convert-IndexToHierarchyData -IndexObj $idx)
+    }
+
+    $files = Get-ChildItem -Path $srcDir -Recurse -File | Where-Object { $_.Extension -in ".v", ".sv" } | Sort-Object FullName;
     $moduleMap = @{}
     $moduleFileMap = @{}
     $modulePathMap = @{}
@@ -91,6 +178,8 @@ function Get-Hierarchy {
         Deps = $dependencies;
         Files = $moduleFileMap;
         Paths = $modulePathMap;
+        SvDecls = @{ Packages=@(); Interfaces=@() };
+        Indexer = $false;
     }
 }
 
@@ -129,11 +218,40 @@ function Print-Node {
     }
 }
 
+function Print-SvDeclList {
+    param($data)
+
+    if (-not $data.SvDecls) { return }
+    $pkgs = @($data.SvDecls.Packages)
+    $ifs  = @($data.SvDecls.Interfaces)
+    if ($pkgs.Count -eq 0 -and $ifs.Count -eq 0) { return }
+
+    Write-Host ""
+    Write-Host " [SV Declarations]" -ForegroundColor Yellow
+
+    foreach ($pkg in $pkgs) {
+        $idx = $global:counter
+        $global:fileIndexMap[$idx] = $pkg.Path
+        $global:counter++
+        Write-Host (" +-- ") -NoNewline -ForegroundColor DarkGray
+        Write-Host ("[{0,2}] " -f $idx) -NoNewline -ForegroundColor Yellow
+        Write-Host (" package " + $pkg.Name) -ForegroundColor Magenta
+    }
+    foreach ($ifc in $ifs) {
+        $idx = $global:counter
+        $global:fileIndexMap[$idx] = $ifc.Path
+        $global:counter++
+        Write-Host (" +-- ") -NoNewline -ForegroundColor DarkGray
+        Write-Host ("[{0,2}] " -f $idx) -NoNewline -ForegroundColor Yellow
+        Write-Host (" interface " + $ifc.Name) -ForegroundColor Magenta
+    }
+}
+
 # --- Main Loop ---
 while ($true) {
     Clear-Host
     Write-Host "============================================================" -ForegroundColor Green
-    Write-Host "   Verilog Project Navigator" -ForegroundColor Green
+    Write-Host "   HDL Project Navigator (Verilog/SystemVerilog)" -ForegroundColor Green
     Write-Host "============================================================" -ForegroundColor Green
     Write-Host " [Numbers] Open File  |  [ENTER] Refresh  |  [Q] Quit" -ForegroundColor White
     Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
@@ -142,16 +260,23 @@ while ($true) {
     if ($data.Error) {
         Write-Host $data.Error -ForegroundColor Red
     } else {
+        if ($data.Indexer) {
+            Write-Host " [Indexer] hdl_indexer.js active" -ForegroundColor DarkGray
+            Write-Host ""
+        }
         if ($data.Top.Count -gt 0) {
             foreach ($root in $data.Top) {
                 Print-Node -mName $root -indent "" -last $true -data $data
             }
+            Print-SvDeclList -data $data
         } else {
              Write-Host "No modules found."
         }
     }
     
     Write-Host ""
+    if ($BrowseOnce -eq "1") { break }
+
     $input = Read-Host " Command"
     
     if ($input -eq 'q' -or $input -eq 'Q') { break; }
