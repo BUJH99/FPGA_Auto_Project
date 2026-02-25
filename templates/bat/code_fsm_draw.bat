@@ -54,9 +54,20 @@ for %%f in (src\*.v) do (
         set "TOP_MODULE_NAME=!MODULE_NAME!"
     )
 )
+for %%f in (src\*.sv) do (
+    set /a MODULE_COUNT+=1
+    set "MODULE_NAME=%%~nf"
+    set "VERILOG_FILES=!VERILOG_FILES! src/%%~nxf"
+    set "ALL_MODULES=!ALL_MODULES! !MODULE_NAME!"
+    set "MODULE_!MODULE_COUNT!=!MODULE_NAME!"
+    if /i "!MODULE_NAME!"=="Top" (
+        set "HAS_TOP=1"
+        set "TOP_MODULE_NAME=!MODULE_NAME!"
+    )
+)
 
 if !MODULE_COUNT! equ 0 (
-    echo [ERROR] No .v files found in src folder.
+    echo [ERROR] No .v/.sv files found in src folder.
     pause
     exit /b 1
 )
@@ -192,11 +203,18 @@ echo  Processing FSM: !MOD!
 echo --------------------------------------------------------
 
 set "SOURCE_FILE=src\!MOD!.v"
+if not exist "!SOURCE_FILE!" set "SOURCE_FILE=src\!MOD!.sv"
 if not exist "!SOURCE_FILE!" (
     set "SOURCE_FILE="
     for %%F in (src\*.v) do (
         findstr /i /c:"module !MOD!" "%%F" >nul 2>&1
         if !errorlevel! equ 0 set "SOURCE_FILE=%%F"
+    )
+    if "!SOURCE_FILE!"=="" (
+        for %%F in (src\*.sv) do (
+            findstr /i /c:"module !MOD!" "%%F" >nul 2>&1
+            if !errorlevel! equ 0 set "SOURCE_FILE=%%F"
+        )
     )
 )
 

@@ -11,6 +11,13 @@ function parseModuleList(value) {
     return Array.from(new Set(list));
 }
 
+let hdlIndexer = null;
+try {
+    hdlIndexer = require('./hdl_indexer.js');
+} catch {
+    hdlIndexer = null;
+}
+
 function parseCliArgs(argv) {
     let projectArg = null;
     let listModules = false;
@@ -1309,6 +1316,17 @@ function buildMarkdown(allModules, subBlockModules, hierarchy) {
 }
 
 function main() {
+    if (hdlIndexer && typeof hdlIndexer.buildIndex === 'function') {
+        try {
+            const index = hdlIndexer.buildIndex(projectRoot);
+            const cacheDir = path.join(outputDir, 'cache');
+            ensureDir(cacheDir);
+            fs.writeFileSync(path.join(cacheDir, 'hdl_index.json'), JSON.stringify(index, null, 2), 'utf8');
+        } catch (e) {
+            console.warn(`[WARN] HDL index generation skipped: ${e.message}`);
+        }
+    }
+
     const allModules = readVerilogModules();
 
     if (cli.listModules) {

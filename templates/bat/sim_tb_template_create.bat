@@ -3,16 +3,25 @@ setlocal
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
-    echo Usage: %~nx0 ^<Project_Directory^>
+    echo Usage: %~nx0 ^<Project_Directory^> [--tb-ext v^|sv]
     pause
     exit /b 1
 )
 
 set "TARGET_PROJECT=%~f1"
+set "TB_EXT=v"
+set "ARG2=%~2"
+if /i "%~2"=="--tb-ext" (
+    if /i "%~3"=="sv" set "TB_EXT=sv"
+    if /i "%~3"=="v" set "TB_EXT=v"
+) else if /i "%ARG2:~0,9%"=="--tb-ext=" (
+    set "TB_EXT=%ARG2:~9%"
+)
+if /i not "%TB_EXT%"=="v" if /i not "%TB_EXT%"=="sv" set "TB_EXT=v"
 cd /d "%TARGET_PROJECT%"
 
 echo ============================================================================
-echo      Verilog Testbench Generator (Auto-DUT Parsing)
+echo      HDL Testbench Generator (Auto-DUT Parsing)
 echo ============================================================================
 
 if not exist "src" (
@@ -37,7 +46,7 @@ for /f "tokens=1 delims=:" %%a in ('findstr /n "^%MARKER%" "%~f0"') do set "STAR
 more +%START_LINE% "%~f0" > "%PS_FILE%"
 
 :: Run PowerShell script
-powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_FILE%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_FILE%" "%TB_EXT%"
 
 :: Cleanup
 del "%PS_FILE%"
@@ -48,15 +57,19 @@ goto :eof
 :: PowerShell Script Start
 :: ============================================================================
 :POWERSHELL_SCRIPT_START
+param(
+    [string]$TbExt = "v"
+)
 $ErrorActionPreference = "Stop"
+if ($TbExt -notin @("v", "sv")) { $TbExt = "v" }
 
 $srcDir = "src"
 $tbDir = "tb"
 
 # 1. Scan Source Files
-$files = Get-ChildItem -Path $srcDir -File -Recurse -Filter "*.v" | Where-Object { $_.Name -notlike "tb_*" }
+$files = Get-ChildItem -Path $srcDir -File -Recurse | Where-Object { $_.Extension -in ".v", ".sv" -and $_.Name -notlike "tb_*" }
 if ($files.Count -eq 0) {
-    Write-Host "[Error] No source files (*.v) found in src directory (excluding tb_*)." -ForegroundColor Red
+    Write-Host "[Error] No source files (*.v/*.sv) found in src directory (excluding tb_*)." -ForegroundColor Red
     exit 1
 }
 
@@ -86,8 +99,8 @@ if ($selection -match '^\d+$') {
 }
 
 $targetFile = $files[$selInt - 1]
-$modName = $targetFile.BaseName
-$tbFilename = "tb_$modName.v"
+$modName = $targetFile.BaseName.Trim()
+$tbFilename = "tb_$modName.$TbExt"
 $tbPath = Join-Path $tbDir $tbFilename
 
 Write-Host "`nTarget Module: $modName" -ForegroundColor Green
@@ -148,30 +161,45 @@ $sb = [System.Text.StringBuilder]::new()
 [void]$sb.AppendLine('    // Automation Variables')
 [void]$sb.AppendLine('')
 
-# Generate Reg/Wire Declarations
+# Identify canonical TB-driven clock/reset signals (use DUT names when available)
+$clkPort = $ports | Where-Object { $_.Direction -eq "input" -and $_.Name -match '^(i?Clk|clk)$|clock' } | Select-Object -First 1
+$rstPort = $ports | Where-Object { $_.Direction -eq "input" -and $_.Name -match '^(i?Rst|rst)' } | Select-Object -First 1
+$clockStimName = if ($clkPort) { $clkPort.Name } else { "iClk" }
+$resetStimName = if ($rstPort) { $rstPort.Name } else { "iRstn" }
+$resetActiveLow = ($resetStimName -match '(?i)n$')
+
+# Generate Reg/Wire/Logic Declarations
 foreach ($p in $ports) {
-    if ($p.Name -eq "iClk" -or $p.Name -eq "iRstn" -or $p.Name -eq "clk" -or $p.Name -eq "rst_n") {
-        # Already handled locally or distinct treatment needed
-        continue 
-    }
-    
     $rangeStr = if ($p.Range) { $p.Range + " " } else { "" }
     
     if ($p.Direction -eq "input") {
-        [void]$sb.AppendLine("    reg $rangeStr$($p.Name);")
+        if ($TbExt -eq "sv") {
+            [void]$sb.AppendLine("    logic $rangeStr$($p.Name);")
+        } else {
+            [void]$sb.AppendLine("    reg $rangeStr$($p.Name);")
+        }
     } elseif ($p.Direction -eq "output") {
-        [void]$sb.AppendLine("    wire $rangeStr$($p.Name);")
+        if ($TbExt -eq "sv") {
+            [void]$sb.AppendLine("    logic $rangeStr$($p.Name);")
+        } else {
+            [void]$sb.AppendLine("    wire $rangeStr$($p.Name);")
+        }
     } elseif ($p.Direction -eq "inout") {
-        [void]$sb.AppendLine("    wire $rangeStr$($p.Name);")
+        if ($TbExt -eq "sv") {
+            [void]$sb.AppendLine("    wire $rangeStr$($p.Name);")
+        } else {
+            [void]$sb.AppendLine("    wire $rangeStr$($p.Name);")
+        }
     }
 }
 
-# Add default clock/reset if not in ports (or matching common names)
-$hasClk = $ports | Where-Object { $_.Name -match "i?Clk|clk" }
-$hasRst = $ports | Where-Object { $_.Name -match "i?Rst|rst" }
-
-if (-not $hasClk) { [void]$sb.AppendLine('    reg iClk;') }
-if (-not $hasRst) { [void]$sb.AppendLine('    reg iRstn;') }
+# Add default clock/reset if DUT does not have them
+if (-not $clkPort) {
+    if ($TbExt -eq "sv") { [void]$sb.AppendLine('    logic iClk;') } else { [void]$sb.AppendLine('    reg iClk;') }
+}
+if (-not $rstPort) {
+    if ($TbExt -eq "sv") { [void]$sb.AppendLine('    logic iRstn;') } else { [void]$sb.AppendLine('    reg iRstn;') }
+}
 
 [void]$sb.AppendLine('')
 [void]$sb.AppendLine('    // ========================================================================')
@@ -185,13 +213,7 @@ for ($j=0; $j -lt $len; $j++) {
     $p = $ports[$j]
     $comma = if ($j -eq $len -1) { "" } else { "," }
     
-    if ($p.Name -match "i?Clk|clk") {
-        [void]$sb.AppendLine("        .$($p.Name)(iClk)$comma")
-    } elseif ($p.Name -match "i?Rst|rst") {
-        [void]$sb.AppendLine("        .$($p.Name)(iRstn)$comma")
-    } else {
-        [void]$sb.AppendLine("        .$($p.Name)($($p.Name))$comma")
-    }
+    [void]$sb.AppendLine("        .$($p.Name)($($p.Name))$comma")
 }
 
 [void]$sb.AppendLine('    );')
@@ -200,8 +222,8 @@ for ($j=0; $j -lt $len; $j++) {
 [void]$sb.AppendLine('    // 3. Clock Generation')
 [void]$sb.AppendLine('    // ========================================================================')
 [void]$sb.AppendLine('    initial begin')
-[void]$sb.AppendLine('        iClk = 0;')
-[void]$sb.AppendLine('        forever #(CLK_PERIOD/2) iClk = ~iClk;')
+[void]$sb.AppendLine("        $clockStimName = 0;")
+[void]$sb.AppendLine("        forever #(CLK_PERIOD/2) $clockStimName = ~$clockStimName;")
 [void]$sb.AppendLine('    end')
 [void]$sb.AppendLine('')
 [void]$sb.AppendLine('    // ========================================================================')
@@ -209,11 +231,11 @@ for ($j=0; $j -lt $len; $j++) {
 [void]$sb.AppendLine('    // ========================================================================')
 [void]$sb.AppendLine('    initial begin')
 [void]$sb.AppendLine('        // Initialize')
-[void]$sb.AppendLine('        iRstn = 0;')
+[void]$sb.AppendLine(("        {0} = {1};" -f $resetStimName, ($(if ($resetActiveLow) { '0' } else { '1' }))))
 [void]$sb.AppendLine('')
 [void]$sb.AppendLine('        // Init Inputs')
 foreach ($p in $ports) {
-    if ($p.Direction -eq "input" -and $p.Name -notmatch "i?Clk|i?Rst|clk|rst") {
+    if ($p.Direction -eq "input" -and $p.Name -ne $clockStimName -and $p.Name -ne $resetStimName) {
         [void]$sb.AppendLine("        $($p.Name) = 0;")
     }
 }
@@ -224,15 +246,18 @@ foreach ($p in $ports) {
 [void]$sb.AppendLine('')
 [void]$sb.AppendLine('        // Reset Sequence')
 [void]$sb.AppendLine('        #(CLK_PERIOD * 10);')
-[void]$sb.AppendLine('        iRstn = 1;')
+[void]$sb.AppendLine(("        {0} = {1};" -f $resetStimName, ($(if ($resetActiveLow) { '1' } else { '0' }))))
 [void]$sb.AppendLine('        #(CLK_PERIOD * 10);')
 [void]$sb.AppendLine('')
 [void]$sb.AppendLine('        // --------------------------------------------------------------------')
 [void]$sb.AppendLine('        // CASE N: Initial State Check')
 [void]$sb.AppendLine('        // --------------------------------------------------------------------')
 # Auto-generate @WAVE signals suggestion
-$waveSignals = ($ports | ForEach-Object { $_.Name }) -join ", "
-[void]$sb.AppendLine("        // @WAVE: iClk, iRstn, $waveSignals")
+$waveSignals = @($ports | ForEach-Object { $_.Name })
+if (-not ($waveSignals -contains $clockStimName)) { $waveSignals = @($clockStimName) + $waveSignals } else { $waveSignals = @($clockStimName) + @($waveSignals | Where-Object { $_ -ne $clockStimName }) }
+if (-not ($waveSignals -contains $resetStimName)) { $waveSignals = @($resetStimName) + $waveSignals } else { $waveSignals = @($clockStimName, $resetStimName) + @($waveSignals | Where-Object { $_ -ne $clockStimName -and $_ -ne $resetStimName }) }
+$waveSignals = @($waveSignals | Where-Object { $_ } | Select-Object -Unique)
+[void]$sb.AppendLine("        // @WAVE: $($waveSignals -join ', ')")
 [void]$sb.AppendLine('        // @RUNTIME BEGIN : 20ns')
 [void]$sb.AppendLine('        // @RUNTIME END : 120ns')
 

@@ -6,6 +6,11 @@ set "TB_FILTER="
 set "FORCE_ALL=0"
 set "NO_PAUSE=0"
 set "EXPECT_TB_VALUE=0"
+set "SCRIPT_DIR=%~dp0"
+set "HDL_INDEXER=%SCRIPT_DIR%..\tools\hdl_indexer.js"
+set "HAS_NODE=1"
+where node >nul 2>nul
+if errorlevel 1 set "HAS_NODE=0"
 
 :parse_args
 if "%~1"=="" goto args_done
@@ -78,8 +83,8 @@ if not exist "%TB_DIR%" (
     exit /b 1
 )
 
-if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
-if not exist "%VCD_DIR%" mkdir "%VCD_DIR%"
+if not exist "%OUT_DIR%" mkdir "%OUT_DIR%" >nul 2>nul
+if not exist "%VCD_DIR%" mkdir "%VCD_DIR%" >nul 2>nul
 
 set /a RUN_COUNT=0
 set /a PASS_COUNT=0
@@ -134,8 +139,14 @@ for %%F in ("%TB_DIR%\tb_*.v") do (
         set "TB_!TB_COUNT!=%%~fF"
     )
 )
+for %%F in ("%TB_DIR%\tb_*.sv") do (
+    if exist "%%~fF" (
+        set /a TB_COUNT+=1
+        set "TB_!TB_COUNT!=%%~fF"
+    )
+)
 if !TB_COUNT! EQU 0 (
-    echo [ERROR] No testbench files found in: %TB_DIR%\tb_*.v
+    echo [ERROR] No testbench files found in: %TB_DIR%\tb_*.v or %TB_DIR%\tb_*.sv
     exit /b 1
 )
 for /L %%I in (1,1,!TB_COUNT!) do (
@@ -151,9 +162,15 @@ for %%F in ("%TB_DIR%\tb_*.v") do (
         set "TB_!TB_COUNT!=%%~fF"
     )
 )
+for %%F in ("%TB_DIR%\tb_*.sv") do (
+    if exist "%%~fF" (
+        set /a TB_COUNT+=1
+        set "TB_!TB_COUNT!=%%~fF"
+    )
+)
 
 if !TB_COUNT! EQU 0 (
-    echo [ERROR] No testbench files found in: %TB_DIR%\tb_*.v
+    echo [ERROR] No testbench files found in: %TB_DIR%\tb_*.v or %TB_DIR%\tb_*.sv
     exit /b 1
 )
 
@@ -235,12 +252,17 @@ if exist "%TB_DIR%\%REQ%.v" (
     for %%I in ("%TB_DIR%\%REQ%.v") do set "RESOLVED_TB=%%~fI"
     exit /b 0
 )
+if exist "%TB_DIR%\%REQ%.sv" (
+    for %%I in ("%TB_DIR%\%REQ%.sv") do set "RESOLVED_TB=%%~fI"
+    exit /b 0
+)
 
 echo [ERROR] TB file not found for: %REQ%
 echo [INFO] Try one of:
 echo [INFO]  - tb_top
 echo [INFO]  - tb_top.v
-echo [INFO]  - %TB_DIR%\tb_top.v
+echo [INFO]  - tb_top.sv
+echo [INFO]  - %TB_DIR%\tb_top.v / %TB_DIR%\tb_top.sv
 exit /b 1
 
 :run_one
@@ -248,14 +270,16 @@ set "TB_FILE=%~1"
 for %%I in ("%TB_FILE%") do (
     set "TB_STEM=%%~nI"
 )
+call :detect_tb_top "%TB_FILE%"
+if not defined TB_TOP set "TB_TOP=%TB_STEM%"
 set "VVP_OUT=%OUT_DIR%\%TB_STEM%.out"
 set "FILELIST=%OUT_DIR%\%TB_STEM%_files.f"
 
 call :write_filelist "%FILELIST%" "%TB_FILE%"
 
 echo.
-echo [RUN] %TB_STEM%
-iverilog -g2012 -o "%VVP_OUT%" -s "%TB_STEM%" -I "%SRC_DIR%" -I "%TB_DIR%" -f "%FILELIST%"
+echo [RUN] %TB_STEM% ^(top=%TB_TOP%^)
+iverilog -g2012 -o "%VVP_OUT%" -s "%TB_TOP%" -I "%SRC_DIR%" -I "%TB_DIR%" -f "%FILELIST%"
 if errorlevel 1 (
     echo [FAIL] Compile failed: %TB_STEM%
     set /a RUN_COUNT+=1
@@ -279,12 +303,40 @@ echo [PASS] %TB_STEM%
 set /a PASS_COUNT+=1
 exit /b 0
 
+:detect_tb_top
+set "TB_TOP="
+set "TB_PARSE_FILE=%~1"
+for /f "usebackq delims=" %%M in (`powershell -NoProfile -Command "$p='%TB_PARSE_FILE%'; if (-not (Test-Path $p)) { exit 0 }; $txt=[IO.File]::ReadAllText($p); $txt=[regex]::Replace($txt,'/\*.*?\*/',' ','Singleline'); $txt=[regex]::Replace($txt,'//.*?$',' ','Multiline'); $m=[regex]::Match($txt,'(?im)^\s*(?:module|program)\s+([A-Za-z_][A-Za-z0-9_$]*)\b'); if ($m.Success) { $m.Groups[1].Value }"` ) do (
+    if not defined TB_TOP set "TB_TOP=%%M"
+)
+if defined TB_TOP (
+    exit /b 0
+)
+echo [WARNING] Could not infer TB top from file. Fallback to filename stem.
+exit /b 0
+
 :write_filelist
 set "OUT_F=%~1"
 set "TB_F=%~2"
 (
-    for %%S in ("%SRC_DIR%\*.v") do @if exist "%%~fS" echo %%~fS
-    for %%S in ("%SRC_DIR%\*.sv") do @if exist "%%~fS" echo %%~fS
+    echo +incdir+%SRC_DIR%
+    echo +incdir+%TB_DIR%
+    if "%HAS_NODE%"=="1" (
+        if exist "%HDL_INDEXER%" (
+            for /f "usebackq delims=" %%D in (`node "%HDL_INDEXER%" "%TARGET_PROJECT%" --list-include-dirs 2^>nul`) do (
+                if not "%%D"=="" echo +incdir+%TARGET_PROJECT%\%%D
+            )
+            for /f "usebackq delims=" %%S in (`node "%HDL_INDEXER%" "%TARGET_PROJECT%" --list-rtl 2^>nul`) do (
+                if not "%%S"=="" echo %TARGET_PROJECT%\%%S
+            )
+        ) else (
+            for %%S in ("%SRC_DIR%\*.v") do @if exist "%%~fS" echo %%~fS
+            for %%S in ("%SRC_DIR%\*.sv") do @if exist "%%~fS" echo %%~fS
+        )
+    ) else (
+        for %%S in ("%SRC_DIR%\*.v") do @if exist "%%~fS" echo %%~fS
+        for %%S in ("%SRC_DIR%\*.sv") do @if exist "%%~fS" echo %%~fS
+    )
     echo %TB_F%
 ) > "%OUT_F%"
 exit /b 0

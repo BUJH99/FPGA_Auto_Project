@@ -3,6 +3,7 @@
 # - Auto-create simulation project
 # - Add all src/*.v, src/*.sv
 # - Add all tb/*.v, tb/*.sv
+# - Configure include dirs for headers (*.svh, *.vh)
 # - Set selected TB module as sim top
 # - Launch simulation in GUI
 # =================================================================
@@ -55,8 +56,37 @@ proc collect_hdl_files {root_dir} {
     return [lsort -unique $out]
 }
 
+proc collect_include_dirs {root_dir} {
+    set out {}
+    if {![file exists $root_dir]} {
+        return $out
+    }
+
+    foreach p [glob -nocomplain -directory $root_dir *] {
+        if {[file isdirectory $p]} {
+            set nested [collect_include_dirs $p]
+            if {[llength $nested] > 0} {
+                set out [concat $out $nested]
+            }
+        } elseif {[file isfile $p]} {
+            set ext [string tolower [file extension $p]]
+            if {$ext eq ".svh" || $ext eq ".vh"} {
+                lappend out [file normalize [file dirname $p]]
+            }
+        }
+    }
+
+    if {[llength [glob -nocomplain -directory $root_dir *.svh]] > 0 || [llength [glob -nocomplain -directory $root_dir *.vh]] > 0} {
+        lappend out [file normalize $root_dir]
+    }
+
+    return [lsort -unique $out]
+}
+
 set src_dir [file join $project_root "src"]
 set tb_dir [file join $project_root "tb"]
+set include_dir [file join $project_root "include"]
+set inc_dir [file join $project_root "inc"]
 
 if {![file isdirectory $src_dir]} {
     puts "\[ERROR\] Missing src directory: $src_dir"
@@ -69,6 +99,7 @@ if {![file isdirectory $tb_dir]} {
 
 set src_files [collect_hdl_files $src_dir]
 set tb_files [collect_hdl_files $tb_dir]
+set include_dirs [lsort -unique [concat [list [file normalize $src_dir] [file normalize $tb_dir]] [collect_include_dirs $src_dir] [collect_include_dirs $tb_dir] [collect_include_dirs $include_dir] [collect_include_dirs $inc_dir]]]
 
 if {[llength $src_files] == 0} {
     puts "\[ERROR\] No HDL source files found in $src_dir"
@@ -104,6 +135,12 @@ add_files -norecurse $src_files
 
 puts "\[INFO\] Adding testbench files: [llength $tb_files]"
 add_files -fileset sim_1 -norecurse $tb_files
+
+if {[llength $include_dirs] > 0} {
+    puts "\[INFO\] Setting include dirs: [llength $include_dirs]"
+    catch { set_property include_dirs $include_dirs [get_filesets sources_1] }
+    catch { set_property include_dirs $include_dirs [get_filesets sim_1] }
+}
 
 update_compile_order -fileset sources_1
 

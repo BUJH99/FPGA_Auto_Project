@@ -8,6 +8,7 @@
 !/MAIN.bat
 !/vcd2sgv/
 !/vcd2sgv/**
+!SV_SUPPORT_MID_CHECK_2026-02-24.md
 # Ignore local sync helper script
 /SyncProjectsToSourceProject.bat
 

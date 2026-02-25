@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 :: ============================================================================
-:: Verilog FPGA Automation Pipeline
+:: HDL FPGA Automation Pipeline
 :: Usage: bat\sim_report_auto_run.bat
 :: Description: Scans testbenches and runs simulation.
 :: ============================================================================
@@ -18,9 +18,9 @@ set "WORKSPACE_ROOT=%~f1"
 set "TOOLS_ROOT=%~dp0.."
 
 echo ============================================================================
-echo      Verilog Auto Simulation ^& Report
+echo      HDL Auto Simulation ^& Report
 echo ============================================================================
-echo Scanning for testbench files [tb_*.v] in: %WORKSPACE_ROOT%
+echo Scanning for testbench files [tb_*.v / tb_*.sv] in: %WORKSPACE_ROOT%
 
 :: 1. Scan for Testbench Files
 set count=0
@@ -31,10 +31,16 @@ for /r %%F in (tb_*.v) do (
     set "TB_NAME_!count!=%%~nxF"
     set "TB_REL_!count!=%%~pF"
 )
+for /r %%F in (tb_*.sv) do (
+    set /a count+=1
+    set "TB_FILE_!count!=%%F"
+    set "TB_NAME_!count!=%%~nxF"
+    set "TB_REL_!count!=%%~pF"
+)
 popd
 
 if !count!==0 (
-    echo [ERROR] No testbench files [tb_*.v] found in: %WORKSPACE_ROOT%
+    echo [ERROR] No testbench files [tb_*.v / tb_*.sv] found in: %WORKSPACE_ROOT%
     pause
     exit /b 1
 )

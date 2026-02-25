@@ -126,8 +126,8 @@ echo.
 
 echo %Yellow%[ Code ^& Schematic Generation ]%Reset%
 call :ADD_MENU_ITEM 1 "code_schematic_draw.bat" "Draw Schematic"
-call :ADD_MENU_ITEM 2 "code_verilog_hierarchy_browse.bat" "Browse Verilog Hierarchy"
-call :ADD_MENU_ITEM 3 "code_verilog_hierarchy_print.bat" "Print Verilog Hierarchy"
+call :ADD_MENU_ITEM 2 "code_verilog_hierarchy_browse.bat" "Browse HDL Hierarchy"
+call :ADD_MENU_ITEM 3 "code_verilog_hierarchy_print.bat" "Print HDL Hierarchy"
 call :ADD_MENU_ITEM 4 "code_fsm_draw.bat" "Draw FSM"
 call :ADD_MENU_ITEM 5 "code_presentation_generate.bat" "Generate Presentation"
 echo.

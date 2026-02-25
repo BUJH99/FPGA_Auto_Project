@@ -1,0 +1,276 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-02-24T07:36:52.401Z",
+  "projectRoot": "D:/SV_Auto/FPGA_Auto_Project/templates/examples/sv_regression_project",
+  "parser": {
+    "astProvider": null,
+    "astAvailable": false,
+    "strictRequested": false
+  },
+  "summary": {
+    "hdlLanguage": "systemverilog",
+    "totalFiles": 6,
+    "rtlFiles": 4,
+    "tbFiles": 1,
+    "headerFiles": 1,
+    "modules": 3,
+    "interfaces": 1,
+    "packages": 1,
+    "warnings": 6
+  },
+  "files": [
+    {
+      "path": "src/bus_if.sv",
+      "absPath": "D:/SV_Auto/FPGA_Auto_Project/templates/examples/sv_regression_project/src/bus_if.sv",
+      "ext": ".sv",
+      "language": "systemverilog",
+      "role": "rtl",
+      "includes": [],
+      "declarations": [
+        {
+          "type": "interface",
+          "name": "bus_if"
+        }
+      ],
+      "features": {
+        "always_ff": false,
+        "always_comb": false,
+        "always_latch": false,
+        "typedef_enum": false,
+        "logic": true,
+        "modport": true,
+        "import_pkg": false
+      },
+      "ast": null,
+      "warnings": [
+        {
+          "type": "ast_provider_missing",
+          "message": "Optional AST parser dependencies (tree-sitter, tree-sitter-verilog) are not installed"
+        }
+      ],
+      "instances": []
+    },
+    {
+      "path": "src/fsm_ctrl.sv",
+      "absPath": "D:/SV_Auto/FPGA_Auto_Project/templates/examples/sv_regression_project/src/fsm_ctrl.sv",
+      "ext": ".sv",
+      "language": "systemverilog",
+      "role": "rtl",
+      "includes": [
+        "include/defs.svh"
+      ],
+      "declarations": [
+        {
+          "type": "module",
+          "name": "fsm_ctrl"
+        }
+      ],
+      "features": {
+        "always_ff": true,
+        "always_comb": true,
+        "always_latch": false,
+        "typedef_enum": false,
+        "logic": true,
+        "modport": false,
+        "import_pkg": true
+      },
+      "ast": null,
+      "warnings": [
+        {
+          "type": "ast_provider_missing",
+          "message": "Optional AST parser dependencies (tree-sitter, tree-sitter-verilog) are not installed"
+        }
+      ],
+      "instances": []
+    },
+    {
+      "path": "src/include/defs.svh",
+      "absPath": "D:/SV_Auto/FPGA_Auto_Project/templates/examples/sv_regression_project/src/include/defs.svh",
+      "ext": ".svh",
+      "language": "systemverilog",
+      "role": "header",
+      "includes": [],
+      "declarations": [],
+      "features": {
+        "always_ff": false,
+        "always_comb": false,
+        "always_latch": false,
+        "typedef_enum": false,
+        "logic": false,
+        "modport": false,
+        "import_pkg": false
+      },
+      "ast": null,
+      "warnings": [
+        {
+          "type": "ast_provider_missing",
+          "message": "Optional AST parser dependencies (tree-sitter, tree-sitter-verilog) are not installed"
+        }
+      ],
+      "instances": []
+    },
+    {
+      "path": "src/pkg_defs.sv",
+      "absPath": "D:/SV_Auto/FPGA_Auto_Project/templates/examples/sv_regression_project/src/pkg_defs.sv",
+      "ext": ".sv",
+      "language": "systemverilog",
+      "role": "rtl",
+      "includes": [],
+      "declarations": [
+        {
+          "type": "package",
+          "name": "pkg_defs"
+        }
+      ],
+      "features": {
+        "always_ff": false,
+        "always_comb": false,
+        "always_latch": false,
+        "typedef_enum": true,
+        "logic": true,
+        "modport": false,
+        "import_pkg": false
+      },
+      "ast": null,
+      "warnings": [
+        {
+          "type": "ast_provider_missing",
+          "message": "Optional AST parser dependencies (tree-sitter, tree-sitter-verilog) are not installed"
+        }
+      ],
+      "instances": []
+    },
+    {
+      "path": "src/top.sv",
+      "absPath": "D:/SV_Auto/FPGA_Auto_Project/templates/examples/sv_regression_project/src/top.sv",
+      "ext": ".sv",
+      "language": "systemverilog",
+      "role": "rtl",
+      "includes": [],
+      "declarations": [
+        {
+          "type": "module",
+          "name": "Top"
+        }
+      ],
+      "features": {
+        "always_ff": false,
+        "always_comb": true,
+        "always_latch": false,
+        "typedef_enum": false,
+        "logic": true,
+        "modport": false,
+        "import_pkg": false
+      },
+      "ast": null,
+      "warnings": [
+        {
+          "type": "ast_provider_missing",
+          "message": "Optional AST parser dependencies (tree-sitter, tree-sitter-verilog) are not installed"
+        }
+      ],
+      "instances": [
+        {
+          "moduleName": "fsm_ctrl",
+          "instName": "u_fsm_ctrl"
+        }
+      ]
+    },
+    {
+      "path": "tb/tb_top.sv",
+      "absPath": "D:/SV_Auto/FPGA_Auto_Project/templates/examples/sv_regression_project/tb/tb_top.sv",
+      "ext": ".sv",
+      "language": "systemverilog",
+      "role": "tb",
+      "includes": [],
+      "declarations": [
+        {
+          "type": "module",
+          "name": "tb_top"
+        }
+      ],
+      "features": {
+        "always_ff": false,
+        "always_comb": false,
+        "always_latch": false,
+        "typedef_enum": false,
+        "logic": true,
+        "modport": false,
+        "import_pkg": false
+      },
+      "ast": null,
+      "warnings": [
+        {
+          "type": "ast_provider_missing",
+          "message": "Optional AST parser dependencies (tree-sitter, tree-sitter-verilog) are not installed"
+        }
+      ],
+      "instances": [
+        {
+          "moduleName": "Top",
+          "instName": "dut"
+        }
+      ]
+    }
+  ],
+  "declarations": {
+    "modules": [
+      "fsm_ctrl",
+      "tb_top",
+      "Top"
+    ],
+    "interfaces": [
+      "bus_if"
+    ],
+    "packages": [
+      "pkg_defs"
+    ],
+    "all": [
+      {
+        "type": "interface",
+        "name": "bus_if",
+        "file": "src/bus_if.sv"
+      },
+      {
+        "type": "module",
+        "name": "fsm_ctrl",
+        "file": "src/fsm_ctrl.sv"
+      },
+      {
+        "type": "package",
+        "name": "pkg_defs",
+        "file": "src/pkg_defs.sv"
+      },
+      {
+        "type": "module",
+        "name": "Top",
+        "file": "src/top.sv"
+      },
+      {
+        "type": "module",
+        "name": "tb_top",
+        "file": "tb/tb_top.sv"
+      }
+    ]
+  },
+  "graph": {
+    "moduleInstances": {
+      "fsm_ctrl": [],
+      "tb_top": [
+        "Top"
+      ],
+      "Top": [
+        "fsm_ctrl"
+      ]
+    }
+  },
+  "includeDirs": [
+    "D:/SV_Auto/FPGA_Auto_Project/templates/examples/sv_regression_project/src/include"
+  ],
+  "hdlDirs": [
+    "D:/SV_Auto/FPGA_Auto_Project/templates/examples/sv_regression_project/src",
+    "D:/SV_Auto/FPGA_Auto_Project/templates/examples/sv_regression_project/src/include",
+    "D:/SV_Auto/FPGA_Auto_Project/templates/examples/sv_regression_project/tb"
+  ],
+  "warnings": []
+}

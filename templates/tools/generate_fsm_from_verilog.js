@@ -3,7 +3,7 @@ const path = require("path");
 const cp = require("child_process");
 
 function usage() {
-  console.log("Usage: node tools/generate_fsm_from_verilog.js --verilog <file.v> --out <file.svg> [--module <name>] [--engine auto|native|graphviz] [--direction single|both]");
+  console.log("Usage: node tools/generate_fsm_from_verilog.js --verilog <file.(v|sv)> --out <file.svg> [--module <name>] [--engine auto|native|graphviz] [--direction single|both]");
 }
 
 function argValue(args, key) {
@@ -273,7 +273,7 @@ function parseStatements(blockText, nextVar) {
 
 function extractAlwaysBlocks(src) {
   const blocks = [];
-  const re = /(?:always\s*@\s*(?:\([^)]*\)|\*)|always_comb)\s*begin/gi;
+  const re = /(?:always\s*@\s*(?:\([^)]*\)|\*)|always_comb|always_ff|always_latch)\s*begin/gi;
   let m;
   while ((m = re.exec(src)) !== null) {
     const startBegin = m[0].toLowerCase().lastIndexOf("begin");

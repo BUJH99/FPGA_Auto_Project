@@ -5,12 +5,38 @@ set "PRESENTATION_TEMPLATE_DIR=%~dp0..\Presentation"
 set "NO_PAUSE=0"
 set "SETUP_RC=0"
 set "ProjectName=%~1"
+set "HDL_EXT=v"
 
 if /i "%~2"=="--no-pause" set "NO_PAUSE=1"
+if /i "%~3"=="--no-pause" set "NO_PAUSE=1"
+if /i "%~4"=="--no-pause" set "NO_PAUSE=1"
+if /i "%~5"=="--no-pause" set "NO_PAUSE=1"
 if /i "%~1"=="--no-pause" (
     set "ProjectName="
     set "NO_PAUSE=1"
 )
+set "ARG2=%~2"
+set "ARG3=%~3"
+set "ARG4=%~4"
+if /i "%~2"=="--hdl-ext" (
+    if /i "%~3"=="sv" set "HDL_EXT=sv"
+    if /i "%~3"=="v" set "HDL_EXT=v"
+) else if /i "%ARG2:~0,10%"=="--hdl-ext=" (
+    set "HDL_EXT=%ARG2:~10%"
+)
+if /i "%~3"=="--hdl-ext" (
+    if /i "%~4"=="sv" set "HDL_EXT=sv"
+    if /i "%~4"=="v" set "HDL_EXT=v"
+) else if /i "%ARG3:~0,10%"=="--hdl-ext=" (
+    set "HDL_EXT=%ARG3:~10%"
+)
+if /i "%~4"=="--hdl-ext" (
+    if /i "%~5"=="sv" set "HDL_EXT=sv"
+    if /i "%~5"=="v" set "HDL_EXT=v"
+) else if /i "%ARG4:~0,10%"=="--hdl-ext=" (
+    set "HDL_EXT=%ARG4:~10%"
+)
+if /i not "%HDL_EXT%"=="v" if /i not "%HDL_EXT%"=="sv" set "HDL_EXT=v"
 
 if "%ProjectName%"=="" goto PROMPT
 goto CREATE
@@ -54,7 +80,7 @@ if exist "%PRESENTATION_TEMPLATE_DIR%\" (
     xcopy "%PRESENTATION_TEMPLATE_DIR%" "%ProjectName%\Presentation\" /E /I /Y >nul
 )
 
-echo [INFO] Creating example files: src\ex.v, tb\tb_ex.v
+echo [INFO] Creating example files: src\ex.%HDL_EXT%, tb\tb_ex.%HDL_EXT%
 (
 echo /*
 echo [MODULE_INFO_START]
@@ -65,15 +91,21 @@ echo   - Demonstrates MODULE_INFO comment convention
 echo   - Provides a minimal synthesizable RTL example
 echo [MODULE_INFO_END]
 echo */
-echo `timescale 1ns/1ps
+echo `timescale 1ns / 1ps
 echo module ex ^(
+if /i "%HDL_EXT%"=="sv" (
+echo     input  logic i_a,
+echo     input  logic i_b,
+echo     output logic o_y
+) else (
 echo     input  wire i_a,
 echo     input  wire i_b,
 echo     output wire o_y
+)
 echo ^);
 echo assign o_y = i_a ^& i_b;
 echo endmodule
-) > "%ProjectName%\src\ex.v"
+) > "%ProjectName%\src\ex.%HDL_EXT%"
 
 (
 echo /*
@@ -88,11 +120,17 @@ echo   - Verify o_y equals logical AND of i_a and i_b
 echo   - Confirm waveform dump generation
 echo [TB_INFO_END]
 echo */
-echo `timescale 1ns/1ps
+echo `timescale 1ns / 1ps
 echo module tb_ex;
+if /i "%HDL_EXT%"=="sv" (
+echo logic i_a;
+echo logic i_b;
+echo logic o_y;
+) else (
 echo reg  i_a;
 echo reg  i_b;
 echo wire o_y;
+)
 echo ex dut ^(
 echo     .i_a^(i_a^),
 echo     .i_b^(i_b^),
@@ -111,7 +149,7 @@ echo     // @RUNTIME END : 40ns
 echo     $finish;
 echo end
 echo endmodule
-) > "%ProjectName%\tb\tb_ex.v"
+) > "%ProjectName%\tb\tb_ex.%HDL_EXT%"
 
 echo.
 echo ------------------------------------------------
@@ -137,8 +175,8 @@ if exist "%PRESENTATION_TEMPLATE_DIR%\" (
     echo - Presentation
 )
 echo Created example sources:
-echo - src\ex.v
-echo - tb\tb_ex.v
+echo - src\ex.%HDL_EXT%
+echo - tb\tb_ex.%HDL_EXT%
 echo ------------------------------------------------
 echo.
 
