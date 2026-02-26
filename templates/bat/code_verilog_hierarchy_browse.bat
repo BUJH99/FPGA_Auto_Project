@@ -3,7 +3,7 @@ setlocal
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
-    echo Usage: %~nx0 ^<Project_Directory^> [--once] [--include-tb]
+    echo Usage: %~nx0 ^<Project_Directory^> [--once] [--include-tb ^| --tb-only]
     pause
     exit /b 1
 )
@@ -12,10 +12,20 @@ set "TARGET_PROJECT=%~f1"
 set "HDL_INDEXER=%~dp0..\tools\hdl_indexer.js"
 set "BROWSE_ONCE=0"
 set "INCLUDE_TB=0"
+set "TB_ONLY=0"
+set "SCOPE_SPECIFIED=0"
 
 for %%A in ("%~2" "%~3" "%~4" "%~5" "%~6" "%~7" "%~8" "%~9") do (
     if /i "%%~A"=="--once" set "BROWSE_ONCE=1"
-    if /i "%%~A"=="--include-tb" set "INCLUDE_TB=1"
+    if /i "%%~A"=="--include-tb" (
+        set "INCLUDE_TB=1"
+        set "SCOPE_SPECIFIED=1"
+    )
+    if /i "%%~A"=="--tb-only" (
+        set "INCLUDE_TB=1"
+        set "TB_ONLY=1"
+        set "SCOPE_SPECIFIED=1"
+    )
 )
 
 cd /d "%TARGET_PROJECT%"
@@ -30,7 +40,7 @@ for /f "tokens=1 delims=:" %%a in ('findstr /n "^%MARKER%" "%~f0"') do set "STAR
 more +%START_LINE% "%~f0" > "%PS_FILE%"
 
 :: Run PowerShell
-powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_FILE%" "%TARGET_PROJECT%" "%HDL_INDEXER%" "%BROWSE_ONCE%" "%INCLUDE_TB%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_FILE%" "%TARGET_PROJECT%" "%HDL_INDEXER%" "%BROWSE_ONCE%" "%INCLUDE_TB%" "%TB_ONLY%" "%SCOPE_SPECIFIED%"
 
 del "%PS_FILE%"
 goto :eof
@@ -44,13 +54,68 @@ param(
     [string]$ProjectRoot = (Get-Location).Path,
     [string]$HdlIndexerPath = "",
     [string]$BrowseOnce = "0",
-    [string]$IncludeTb = "0"
+    [string]$IncludeTb = "0",
+    [string]$TbOnly = "0",
+    [string]$ScopeSpecified = "0"
 )
 $Host.UI.RawUI.WindowTitle = "HDL Project Navigator"
 $srcDir = 'src'
 $tbDir = 'tb'
-$global:fileIndexMap = @{} # Index -> FullPath
+$global:fileIndexMap = @{} # Index -> Target metadata
+$global:fileTextCache = @{} # Path -> comment-stripped text
+$global:declLineCache = @{} # type::name::path -> line number
+$global:antigravityCommand = Get-Command antigravity -ErrorAction SilentlyContinue
 $global:counter = 1
+
+if ($BrowseOnce -ne "1" -and $ScopeSpecified -ne "1") {
+    Write-Host ""
+    Write-Host "[Hierarchy Scope]" -ForegroundColor Yellow
+    Write-Host "  [1] src only (tb hidden)"
+    Write-Host "  [2] src + tb"
+    Write-Host "  [3] tb only"
+    $scopeSel = Read-Host " Select scope (1-3, default 1)"
+    $scopeSel = [string]$scopeSel
+    $scopeSel = $scopeSel.Trim().Trim('"', "'")
+    switch ($scopeSel.ToLowerInvariant()) {
+        "2" {
+            $IncludeTb = "1"
+            $TbOnly = "0"
+        }
+        "3" {
+            $IncludeTb = "1"
+            $TbOnly = "1"
+        }
+        "src" {
+            $IncludeTb = "0"
+            $TbOnly = "0"
+        }
+        "all" {
+            $IncludeTb = "1"
+            $TbOnly = "0"
+        }
+        "tb" {
+            $IncludeTb = "1"
+            $TbOnly = "1"
+        }
+        "tb-only" {
+            $IncludeTb = "1"
+            $TbOnly = "1"
+        }
+        "tbonly" {
+            $IncludeTb = "1"
+            $TbOnly = "1"
+        }
+        "" {
+            $IncludeTb = "0"
+            $TbOnly = "0"
+        }
+        default {
+            Write-Host " [WARN] Invalid scope '$scopeSel'. Using default: src only." -ForegroundColor DarkYellow
+            $IncludeTb = "0"
+            $TbOnly = "0"
+        }
+    }
+}
 
 function New-DeclGroups {
     return @{
@@ -94,6 +159,8 @@ function Add-DeclItem {
     $item = [pscustomobject]@{
         Name = $DeclName
         Path = $DeclPath
+        Type = $DeclType
+        Line = (Get-DeclLine -DeclType $DeclType -DeclName $DeclName -DeclPath $DeclPath)
     }
 
     switch ($DeclType) {
@@ -102,6 +169,139 @@ function Add-DeclItem {
         "program"   { $DeclGroups.Programs += $item }
         "class"     { $DeclGroups.Classes += $item }
         "checker"   { $DeclGroups.Checkers += $item }
+    }
+}
+
+function Get-DeclRegex {
+    param([string]$DeclType)
+    switch ($DeclType) {
+        "package"   { return [regex]'(?im)\bpackage\s+([A-Za-z_][A-Za-z0-9_$]*)\b' }
+        "interface" { return [regex]'(?im)\binterface\s+([A-Za-z_][A-Za-z0-9_$]*)\b' }
+        "program"   { return [regex]'(?im)\bprogram\s+(?:automatic\s+|static\s+)?([A-Za-z_][A-Za-z0-9_$]*)\b' }
+        "class"     { return [regex]'(?im)\bclass\s+(?:automatic\s+|static\s+)?([A-Za-z_][A-Za-z0-9_$]*)\b' }
+        "checker"   { return [regex]'(?im)\bchecker\s+([A-Za-z_][A-Za-z0-9_$]*)\b' }
+        default     { return $null }
+    }
+}
+
+function Get-FileTextStrippedCached {
+    param([string]$Path)
+    if ($global:fileTextCache.ContainsKey($Path)) {
+        return [string]$global:fileTextCache[$Path]
+    }
+    if (-not (Test-Path $Path)) { return "" }
+    try {
+        $raw = Get-Content -Path $Path -Raw
+        $clean = [regex]::Replace($raw, "/\*[\s\S]*?\*/", {
+            param($m)
+            return ($m.Value -replace "[^\r\n]", " ")
+        })
+        $clean = [regex]::Replace($clean, "//.*$", "", [System.Text.RegularExpressions.RegexOptions]::Multiline)
+        $global:fileTextCache[$Path] = $clean
+        return $clean
+    } catch {
+        return ""
+    }
+}
+
+function Get-DeclLine {
+    param(
+        [string]$DeclType,
+        [string]$DeclName,
+        [string]$DeclPath
+    )
+
+    $cacheKey = "$DeclType::$DeclName::$DeclPath"
+    if ($global:declLineCache.ContainsKey($cacheKey)) {
+        return [int]$global:declLineCache[$cacheKey]
+    }
+
+    $re = Get-DeclRegex -DeclType $DeclType
+    if (-not $re) {
+        $global:declLineCache[$cacheKey] = 0
+        return 0
+    }
+
+    $text = Get-FileTextStrippedCached -Path $DeclPath
+    if ([string]::IsNullOrEmpty($text)) {
+        $global:declLineCache[$cacheKey] = 0
+        return 0
+    }
+
+    foreach ($m in $re.Matches($text)) {
+        if ([string]$m.Groups[1].Value -ceq $DeclName) {
+            $line = [regex]::Matches($text.Substring(0, $m.Index), "`n").Count + 1
+            $global:declLineCache[$cacheKey] = $line
+            return $line
+        }
+    }
+
+    $global:declLineCache[$cacheKey] = 0
+    return 0
+}
+
+function Open-IndexedTarget {
+    param($Target)
+
+    if (-not $Target) { return }
+
+    $path = ""
+    $line = 0
+
+    if ($Target -is [string]) {
+        $path = $Target
+    } else {
+        $path = [string]$Target.Path
+        if ($Target.PSObject.Properties.Name -contains "Line") {
+            $line = [int]$Target.Line
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($path)) {
+        Write-Host "Error opening file." -ForegroundColor Red
+        return
+    }
+
+    if (-not (Test-Path $path)) {
+        Write-Host "Error opening file: path not found." -ForegroundColor Red
+        return
+    }
+
+    if ($global:antigravityCommand) {
+        if ($line -gt 0) {
+            Write-Host (" >> Opening declaration in Antigravity: {0}:{1}" -f $path, $line) -ForegroundColor Green
+            try {
+                & $global:antigravityCommand.Source -r -g "$path`:$line" | Out-Null
+                return
+            } catch {
+                Write-Host " >> Antigravity goto failed. Using file open fallback." -ForegroundColor DarkYellow
+            }
+        } else {
+            Write-Host (" >> Opening file in Antigravity: {0}" -f $path) -ForegroundColor Green
+            try {
+                & $global:antigravityCommand.Source -r "$path" | Out-Null
+                return
+            } catch {
+                Write-Host " >> Antigravity open failed. Using file open fallback." -ForegroundColor DarkYellow
+            }
+        }
+    } elseif ($line -gt 0) {
+        Write-Host (" >> Antigravity not found. Opening file fallback: {0}" -f $path) -ForegroundColor DarkYellow
+        try {
+            Invoke-Item $path
+            return
+        } catch {}
+    }
+
+    if ($line -gt 0) {
+        Write-Host (" >> Opening declaration (fallback): {0}:{1}" -f $path, $line) -ForegroundColor Green
+    } else {
+        Write-Host (" >> Opening file (fallback): {0}" -f $path) -ForegroundColor Green
+    }
+    try {
+        Invoke-Item $path
+    } catch {
+        Write-Host "Error opening file." -ForegroundColor Red
     }
 }
 
@@ -127,7 +327,8 @@ function Select-TopModules {
 function Convert-IndexToHierarchyData {
     param(
         $IndexObj,
-        [bool]$IncludeTb
+        [bool]$IncludeTb,
+        [bool]$TbOnly
     )
 
     $moduleMap = @{}
@@ -138,7 +339,11 @@ function Convert-IndexToHierarchyData {
 
     foreach ($f in $IndexObj.files) {
         $role = [string]$f.role
-        if (-not $IncludeTb -and $role -eq "tb") { continue }
+        if ($TbOnly) {
+            if ($role -ne "tb") { continue }
+        } elseif (-not $IncludeTb -and $role -eq "tb") {
+            continue
+        }
 
         $fullPath = [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot $f.path))
         foreach ($decl in $f.declarations) {
@@ -197,23 +402,37 @@ function Convert-IndexToHierarchyData {
 function Get-Hierarchy {
     # 1. Reset
     $global:fileIndexMap.Clear()
+    $global:fileTextCache.Clear()
+    $global:declLineCache.Clear()
     $global:counter = 1
 
-    # 2. Source dir check
-    if (-not (Test-Path $srcDir)) {
-        return @{ Error = "Source directory not found" }
-    }
-
     $includeTbEnabled = ($IncludeTb -eq "1")
+    $tbOnlyEnabled = ($TbOnly -eq "1")
+
+    # 2. Scope dir check
+    if ($tbOnlyEnabled) {
+        if (-not (Test-Path $tbDir)) {
+            return @{ Error = "TB directory not found" }
+        }
+    } else {
+        if (-not (Test-Path $srcDir)) {
+            return @{ Error = "Source directory not found" }
+        }
+    }
 
     $idx = Try-LoadHdlIndex -ProjectRoot $ProjectRoot -HdlIndexerPath $HdlIndexerPath
     if ($idx -and $idx.files) {
-        return (Convert-IndexToHierarchyData -IndexObj $idx -IncludeTb:$includeTbEnabled)
+        return (Convert-IndexToHierarchyData -IndexObj $idx -IncludeTb:$includeTbEnabled -TbOnly:$tbOnlyEnabled)
     }
 
-    $searchRoots = @($srcDir)
-    if ($includeTbEnabled -and (Test-Path $tbDir)) {
+    $searchRoots = @()
+    if ($tbOnlyEnabled) {
         $searchRoots += $tbDir
+    } else {
+        $searchRoots += $srcDir
+        if ($includeTbEnabled -and (Test-Path $tbDir)) {
+            $searchRoots += $tbDir
+        }
     }
 
     $files = @(
@@ -315,7 +534,12 @@ function Print-Node {
 
     # Register Index
     $idx = $global:counter
-    $global:fileIndexMap[$idx] = $fPath
+    $global:fileIndexMap[$idx] = [pscustomobject]@{
+        Path  = $fPath
+        Line  = 0
+        Kind  = "module"
+        Label = $mName
+    }
     $global:counter++
 
     # Connector
@@ -350,7 +574,12 @@ function Print-SvDeclGroup {
 
     foreach ($entry in (@($Items) | Sort-Object Name)) {
         $idx = $global:counter
-        $global:fileIndexMap[$idx] = $entry.Path
+        $global:fileIndexMap[$idx] = [pscustomobject]@{
+            Path  = $entry.Path
+            Line  = [int]$entry.Line
+            Kind  = "decl"
+            Label = ($Keyword + " " + $entry.Name)
+        }
         $global:counter++
         Write-Host (" +-- ") -NoNewline -ForegroundColor DarkGray
         Write-Host ("[{0,2}] " -f $idx) -NoNewline -ForegroundColor Yellow
@@ -390,8 +619,10 @@ while ($true) {
     Write-Host "============================================================" -ForegroundColor Green
     Write-Host "   HDL Project Navigator (Verilog/SystemVerilog)" -ForegroundColor Green
     Write-Host "============================================================" -ForegroundColor Green
-    Write-Host " [Numbers] Open File  |  [ENTER] Refresh  |  [Q] Quit" -ForegroundColor White
-    if ($IncludeTb -eq "1") {
+    Write-Host " [Numbers] Open File  |  [S1/S2/S3] Scope  |  [ENTER] Refresh  |  [Q] Quit" -ForegroundColor White
+    if ($TbOnly -eq "1") {
+        Write-Host " [Scope] tb only (--tb-only)" -ForegroundColor DarkGray
+    } elseif ($IncludeTb -eq "1") {
         Write-Host " [Scope] src + tb (--include-tb)" -ForegroundColor DarkGray
     } else {
         Write-Host " [Scope] src only (tb hidden)" -ForegroundColor DarkGray
@@ -420,22 +651,50 @@ while ($true) {
     if ($BrowseOnce -eq "1") { break }
 
     $input = Read-Host " Command"
+    $inputTrimmed = [string]$input
+    $inputTrimmed = $inputTrimmed.Trim()
+    $inputUpper = $inputTrimmed.ToUpperInvariant()
 
-    if ($input -eq 'q' -or $input -eq 'Q') { break }
+    if ($inputUpper -eq 'Q') { break }
 
-    if ($input -match '^\d+$') {
-        $idx = [int]$input
+    if ($inputUpper -eq 'S1') {
+        $IncludeTb = "0"
+        $TbOnly = "0"
+        continue
+    }
+    if ($inputUpper -eq 'S2') {
+        $IncludeTb = "1"
+        $TbOnly = "0"
+        continue
+    }
+    if ($inputUpper -eq 'S3') {
+        $IncludeTb = "1"
+        $TbOnly = "1"
+        continue
+    }
+
+    if ($inputTrimmed -match '^\d+$') {
+        $idx = [int]$inputTrimmed
         if ($global:fileIndexMap.ContainsKey($idx)) {
-            $path = $global:fileIndexMap[$idx]
-            Write-Host " >> Opening: $path" -ForegroundColor Green
-            try {
-                # Open with system-associated editor for this extension.
-                Invoke-Item $path
-            } catch {
-                Write-Host "Error opening file." -ForegroundColor Red
-            }
+            $target = $global:fileIndexMap[$idx]
+            Open-IndexedTarget -Target $target
             Start-Sleep -Milliseconds 200
         } else {
+            if ($idx -eq 1) {
+                $IncludeTb = "0"
+                $TbOnly = "0"
+                continue
+            }
+            if ($idx -eq 2) {
+                $IncludeTb = "1"
+                $TbOnly = "0"
+                continue
+            }
+            if ($idx -eq 3) {
+                $IncludeTb = "1"
+                $TbOnly = "1"
+                continue
+            }
             Write-Host "Invalid Index." -ForegroundColor Red
             Start-Sleep -Milliseconds 500
         }
