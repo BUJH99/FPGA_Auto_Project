@@ -16,6 +16,12 @@ if "%~1"=="" (
 
 set "WORKSPACE_ROOT=%~f1"
 set "TOOLS_ROOT=%~dp0.."
+set "LAUNCH_CWD=%CD%"
+set "LOG_DIR=%WORKSPACE_ROOT%\log"
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
+call :route_vivado_artifacts "%WORKSPACE_ROOT%" "%LAUNCH_CWD%"
+call :route_vivado_artifacts "%WORKSPACE_ROOT%" "%WORKSPACE_ROOT%"
+call :route_vivado_artifacts "%WORKSPACE_ROOT%" "%WORKSPACE_ROOT%\work"
 
 echo ============================================================================
 echo      HDL Auto Simulation ^& Report
@@ -111,6 +117,9 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
+call :route_vivado_artifacts "%WORKSPACE_ROOT%" "%LAUNCH_CWD%"
+call :route_vivado_artifacts "%WORKSPACE_ROOT%" "%WORKSPACE_ROOT%"
+call :route_vivado_artifacts "%WORKSPACE_ROOT%" "%WORKSPACE_ROOT%\work"
 
 echo.
 echo ============================================================================
@@ -118,4 +127,24 @@ echo [SUCCESS] Automation Complete!
 echo Report Directory: %WORKSPACE_ROOT%\output\
 echo ============================================================================
 pause
+exit /b 0
+
+:route_vivado_artifacts
+set "ROUTE_TARGET=%~f1"
+set "ROUTE_SCAN=%~f2"
+if "%ROUTE_TARGET%"=="" exit /b 0
+if "%ROUTE_SCAN%"=="" exit /b 0
+
+set "ROUTE_LOG=%ROUTE_TARGET%\log"
+if not exist "%ROUTE_LOG%" mkdir "%ROUTE_LOG%" >nul 2>&1
+if not exist "%ROUTE_SCAN%" exit /b 0
+
+pushd "%ROUTE_SCAN%" >nul 2>&1
+for %%F in (vivado.log vivado.jou vivado.pb vivado.str) do (
+    if exist "%%F" move /y "%%F" "%ROUTE_LOG%\" >nul 2>&1
+)
+for %%F in (vivado_*.backup.log vivado_*.backup.jou vivado_*.backup.str *.backup.log *.backup.jou *.backup.str) do (
+    if exist "%%F" move /y "%%F" "%ROUTE_LOG%\" >nul 2>&1
+)
+popd >nul 2>&1
 exit /b 0

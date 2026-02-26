@@ -71,7 +71,7 @@ npm install
 - `sim_vivado_run.bat` scans TB files (`.v/.sv`), lets you choose top, then launches Vivado GUI simulation.
 - Artifacts stay inside project:
   - `<ProjectDir>/vivado_project/`
-  - `<ProjectDir>/vivado_project/vivado_sim_log/`
+  - `<ProjectDir>/log/vivado_sim/`
 
 #### C. Build & Program
 - Step-by-step: `vivado_build_flow_run.bat` -> `vivado_fpga_program.bat`
@@ -80,8 +80,8 @@ npm install
 ### SystemVerilog Compatibility (Updated: February 26, 2026)
 - Reference matrix: `templates/docs/systemverilog_support_matrix.md`
 - Compatibility levels: `Supported`, `Partial`, `Unsupported`, `SV-agnostic/N/A`
-- Current snapshot (22 menu scripts):
-  - `Supported`: 4
+- Current snapshot (21 menu scripts):
+  - `Supported`: 3
   - `Partial`: 12
   - `Unsupported`: 0
   - `SV-agnostic/N/A`: 6
@@ -89,7 +89,7 @@ npm install
 ### Recent SV Upgrades
 - Hierarchy tools:
   - `code_verilog_hierarchy_browse.bat <Project_Directory> [--once] [--include-tb]`
-  - `code_verilog_hierarchy_print.bat <Project_Directory> [--include-tb]`
+  - `code_verilog_hierarchy_print.bat` was removed (its role is covered by browse mode)
   - Default scope hides TB; `--include-tb` shows TB modules and TB-side SV declarations
   - Declaration groups include `package`, `interface`, `program`, `class`, `checker`
 - Parser consistency:
@@ -137,9 +137,10 @@ node tools/hdl_indexer.js examples/sv_regression_project --strict --write
 |   |-- docs/                     # report.md / html / docx
 |   |-- Diagram/                  # Simple/Detailed diagrams
 |   `-- FINALReport/              # Vivado report assets
+|-- log/                          # Vivado logs/journals/backups
+|   `-- vivado_sim/               # sim_vivado_run logs
 |-- vivado_project/               # Vivado simulation workspace
 |   |-- project/                  # Generated Vivado sim project(s)
-|   `-- vivado_sim_log/           # vivado log/journal/backup files
 `-- Presentation/                 # Presentation assets
 ```
 
@@ -161,4 +162,3 @@ Korean users can treat this README as the latest SV operation guide:
 - Recommended simulation route for broad SV compatibility is:
   1. `sim_vivado_run.bat`
   2. `sim_report_auto_run.bat`
-

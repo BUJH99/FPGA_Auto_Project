@@ -10,8 +10,8 @@
 Source of truth:
 - `templates/docs/systemverilog_support_matrix.md`
 
-Current 22-script snapshot:
-- `Supported`: 4 (`2,3,6,16`)
+Current 21-script snapshot:
+- `Supported`: 3 (`2,6,16`)
 - `Partial`: 12 (`1,4,5,7,8,10,11,12,14,15,17,21`)
 - `Unsupported`: 0
 - `SV-agnostic/N/A`: 6 (`9,13,18,19,20,22`)
@@ -19,6 +19,7 @@ Current 22-script snapshot:
 Key delta vs previous baseline:
 - `legacy_docs_generate.bat` moved from effectively unsupported (`.v` only scan) to `Partial` (`.v/.sv` scan).
 - Hierarchy and declaration handling improved for broader SV declarations and TB filtering policy.
+- `code_verilog_hierarchy_print.bat` removed; hierarchy output is now consolidated to browse mode.
 
 ## 3. Implemented Changes (This Round)
 
@@ -66,7 +67,7 @@ Updated file:
 - `templates/tools/generate_report.js`
 
 ### 3.5 Hierarchy Enhancements
-Hierarchy tools aligned on:
+Hierarchy browse tool aligned on:
 - `--include-tb` policy
 - TB-hidden default behavior
 - declaration groups for `package/interface/program/class/checker`
@@ -74,15 +75,12 @@ Hierarchy tools aligned on:
 
 Updated files:
 - `templates/bat/code_verilog_hierarchy_browse.bat`
-- `templates/bat/code_verilog_hierarchy_print.bat`
 - `templates/tools/hdl_indexer.js`
 
 ## 4. Verification Summary
 
 ## 4.1 Hierarchy Tools
 Commands:
-- `templates\bat\code_verilog_hierarchy_print.bat templates\examples\sv_regression_project`
-- `templates\bat\code_verilog_hierarchy_print.bat templates\examples\sv_regression_project --include-tb`
 - `templates\bat\code_verilog_hierarchy_browse.bat templates\examples\sv_regression_project --once`
 - `templates\bat\code_verilog_hierarchy_browse.bat templates\examples\sv_regression_project --once --include-tb`
 
@@ -165,10 +163,10 @@ Impact:
 
 ```batch
 :: Hierarchy (default TB hidden)
-templates\bat\code_verilog_hierarchy_print.bat templates\examples\sv_regression_project
+templates\bat\code_verilog_hierarchy_browse.bat templates\examples\sv_regression_project --once
 
 :: Hierarchy (include TB)
-templates\bat\code_verilog_hierarchy_print.bat templates\examples\sv_regression_project --include-tb
+templates\bat\code_verilog_hierarchy_browse.bat templates\examples\sv_regression_project --once --include-tb
 
 :: Vivado sim/report path
 templates\bat\sim_report_auto_run.bat templates\examples\sv_regression_project
@@ -181,4 +179,3 @@ cd templates
 npm ls tree-sitter tree-sitter-verilog --depth=0
 node tools/hdl_indexer.js examples/sv_regression_project --strict --write
 ```
-

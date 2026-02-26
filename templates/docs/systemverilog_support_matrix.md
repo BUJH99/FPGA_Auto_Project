@@ -14,13 +14,19 @@ This document tracks SystemVerilog compatibility for the batch entry points in `
 - `Unsupported`: 1 (`15`)
 - `SV-agnostic/N/A`: 6 (`9,13,18,19,20,22`)
 
+## Current Snapshot
+- `Supported`: 3 (`2,6,16`)
+- `Partial`: 12 (`1,4,5,7,8,10,11,12,14,15,17,21`)
+- `Unsupported`: 0
+- `SV-agnostic/N/A`: 6 (`9,13,18,19,20,22`)
+- `Removed`: 1 (`3`, merged into `2`)
+
 ## Current Matrix
 
 | No. | Script | Status | SV Handling Summary | Main Constraints / Notes |
 |---|---|---|---|---|
 | 1 | `code_schematic_draw.bat` | Partial | Module selection now uses real `module` declarations (indexer-first, regex fallback) | Yosys frontend limitations can fail advanced SV (`import`, etc.) |
 | 2 | `code_verilog_hierarchy_browse.bat` | Supported | `.sv/.svh` scanned, SV declarations shown, `--include-tb` supported | Graph is module-instance centric; `program/class/checker` are declaration-only |
-| 3 | `code_verilog_hierarchy_print.bat` | Supported | Same policy as browse; `.sv/.svh` + `--include-tb` | Same as #2 |
 | 4 | `code_fsm_draw.bat` | Partial | Accepts `.v/.sv` and extracts FSM from source | Heuristic parser may miss atypical coding styles |
 | 5 | `code_presentation_generate.bat` | Partial | Reads `.v/.sv`; uses internal parser + HDL index cache | Interactive prompts required unless explicitly automated |
 | 6 | `sim_vivado_run.bat` | Supported | TB/source `.sv` supported end-to-end via Vivado Tcl | Vivado GUI/runtime dependency |

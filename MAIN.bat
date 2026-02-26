@@ -127,7 +127,6 @@ echo.
 echo %Yellow%[ Code ^& Schematic Generation ]%Reset%
 call :ADD_MENU_ITEM 1 "code_schematic_draw.bat" "Draw Schematic"
 call :ADD_MENU_ITEM 2 "code_verilog_hierarchy_browse.bat" "Browse HDL Hierarchy"
-call :ADD_MENU_ITEM 3 "code_verilog_hierarchy_print.bat" "Print HDL Hierarchy"
 call :ADD_MENU_ITEM 4 "code_fsm_draw.bat" "Draw FSM"
 call :ADD_MENU_ITEM 5 "code_presentation_generate.bat" "Generate Presentation"
 echo.
@@ -192,6 +191,7 @@ if "!TARGET_NAME!"=="" (
 )
 
 set "TARGET_BAT=%CD%\templates\bat\!TARGET_NAME!"
+set "TARGET_PROJECT_ABS=%CD%\!TARGET_PROJECT!"
 
 if not exist "!TARGET_BAT!" (
     echo.
@@ -203,12 +203,35 @@ if not exist "!TARGET_BAT!" (
 echo.
 echo %Green%[RUN] !TARGET_NAME! (Target: !TARGET_PROJECT!)%Reset%
 echo %Cyan%===============================================================================%Reset%
-cmd /c ""!TARGET_BAT!" "%CD%\!TARGET_PROJECT!""
+cmd /c ""!TARGET_BAT!" "!TARGET_PROJECT_ABS!""
+call :ROUTE_VIVADO_ARTIFACTS "!TARGET_PROJECT_ABS!" "%CD%"
+call :ROUTE_VIVADO_ARTIFACTS "!TARGET_PROJECT_ABS!" "!TARGET_PROJECT_ABS!"
+call :ROUTE_VIVADO_ARTIFACTS "!TARGET_PROJECT_ABS!" "!TARGET_PROJECT_ABS!\work"
 echo %Cyan%===============================================================================%Reset%
 echo %Green%[DONE] !TARGET_NAME!%Reset%
 echo.
 pause
 goto :PROJECT_MENU
+
+:ROUTE_VIVADO_ARTIFACTS
+set "ROUTE_PROJECT=%~f1"
+set "ROUTE_SCAN_ROOT=%~f2"
+if "%ROUTE_PROJECT%"=="" exit /b 0
+if "%ROUTE_SCAN_ROOT%"=="" exit /b 0
+if not exist "%ROUTE_SCAN_ROOT%" exit /b 0
+
+set "ROUTE_LOG_DIR=%ROUTE_PROJECT%\log"
+if not exist "%ROUTE_LOG_DIR%" mkdir "%ROUTE_LOG_DIR%" >nul 2>&1
+
+pushd "%ROUTE_SCAN_ROOT%" >nul 2>&1
+for %%F in (vivado.log vivado.jou vivado.pb vivado.str) do (
+    if exist "%%F" move /y "%%F" "%ROUTE_LOG_DIR%\" >nul 2>&1
+)
+for %%F in (vivado_*.backup.log vivado_*.backup.jou vivado_*.backup.str *.backup.log *.backup.jou *.backup.str) do (
+    if exist "%%F" move /y "%%F" "%ROUTE_LOG_DIR%\" >nul 2>&1
+)
+popd >nul 2>&1
+exit /b 0
 
 :ADD_MENU_ITEM
 set "IDX=%~1"

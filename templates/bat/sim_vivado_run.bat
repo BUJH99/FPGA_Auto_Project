@@ -12,7 +12,9 @@ set "TARGET_PROJECT=%~f1"
 set "TEMPLATES_DIR=%~dp0.."
 set "TCL_SCRIPT=%TEMPLATES_DIR%\tcl\run_vivado_simulation.tcl"
 set "VIVADO_ROOT=%TARGET_PROJECT%\vivado_project"
-set "SIM_LOG_DIR=%VIVADO_ROOT%\vivado_sim_log"
+set "PROJECT_LOG_DIR=%TARGET_PROJECT%\log"
+set "SIM_LOG_DIR=%PROJECT_LOG_DIR%\vivado_sim"
+set "CALLER_CWD=%CD%"
 
 if not exist "%TARGET_PROJECT%\src" (
     echo [ERROR] src directory not found: %TARGET_PROJECT%\src
@@ -33,6 +35,7 @@ if not exist "%TCL_SCRIPT%" (
 )
 
 if not exist "%VIVADO_ROOT%" mkdir "%VIVADO_ROOT%"
+if not exist "%PROJECT_LOG_DIR%" mkdir "%PROJECT_LOG_DIR%"
 if not exist "%SIM_LOG_DIR%" mkdir "%SIM_LOG_DIR%"
 
 where vivado >nul 2>nul
@@ -47,7 +50,7 @@ set "MARKER=:POWERSHELL_SCRIPT_START"
 for /f "tokens=1 delims=:" %%A in ('findstr /n "^%MARKER%" "%~f0"') do set "START_LINE=%%A"
 more +%START_LINE% "%~f0" > "%PS_FILE%"
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_FILE%" "%TARGET_PROJECT%" "%TCL_SCRIPT%" "%VIVADO_ROOT%" "%SIM_LOG_DIR%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_FILE%" "%TARGET_PROJECT%" "%TCL_SCRIPT%" "%VIVADO_ROOT%" "%SIM_LOG_DIR%" "%CALLER_CWD%"
 set "PS_RC=%errorlevel%"
 
 del "%PS_FILE%" >nul 2>nul
@@ -69,7 +72,8 @@ param(
     [Parameter(Mandatory = $true)][string]$ProjectRoot,
     [Parameter(Mandatory = $true)][string]$TclScript,
     [Parameter(Mandatory = $true)][string]$VivadoRoot,
-    [Parameter(Mandatory = $true)][string]$SimLogDir
+    [Parameter(Mandatory = $true)][string]$SimLogDir,
+    [Parameter(Mandatory = $false)][string]$CallerCwd = ""
 )
 
 if (-not (Test-Path $VivadoRoot)) {
@@ -132,6 +136,9 @@ function Get-RelativePathSafe {
 
 Move-VivadoArtifacts -RootDir $VivadoRoot -DstDir $SimLogDir
 Move-VivadoArtifacts -RootDir $ProjectRoot -DstDir $SimLogDir
+if (-not [string]::IsNullOrWhiteSpace($CallerCwd)) {
+    Move-VivadoArtifacts -RootDir $CallerCwd -DstDir $SimLogDir
+}
 
 $tbRoot = Join-Path $ProjectRoot "tb"
 $tbFiles = Get-ChildItem -Path $tbRoot -Recurse -File |
@@ -211,4 +218,7 @@ $vivadoArgs = @(
 $rc = $LASTEXITCODE
 Move-VivadoArtifacts -RootDir $VivadoRoot -DstDir $SimLogDir
 Move-VivadoArtifacts -RootDir $ProjectRoot -DstDir $SimLogDir
+if (-not [string]::IsNullOrWhiteSpace($CallerCwd)) {
+    Move-VivadoArtifacts -RootDir $CallerCwd -DstDir $SimLogDir
+}
 exit $rc
