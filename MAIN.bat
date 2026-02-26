@@ -117,52 +117,57 @@ if !PROJ_INPUT! gtr !PROJ_COUNT! goto :MASTER_MENU
 set "TARGET_PROJECT=!PROJ_%PROJ_INPUT%!"
 
 :PROJECT_MENU
+mode con: cols=120 lines=40 >nul 2>&1
 cls
-echo.
-echo %Cyan%===============================================================================%Reset%
-echo  %Green%Project: !TARGET_PROJECT!%Reset%
-echo %Cyan%===============================================================================%Reset%
-echo.
+echo %Green%Project: !TARGET_PROJECT!%Reset%
+
+set "CMD_1=code_schematic_draw.bat"
+set "CMD_2=code_verilog_hierarchy_browse.bat"
+set "CMD_3=code_fsm_draw.bat"
+set "CMD_4=code_presentation_generate.bat"
+set "CMD_5=sim_vivado_run.bat"
+set "CMD_6=sim_report_auto_run.bat"
+set "CMD_7=sim_iverilog_vcd_run.bat"
+set "CMD_8=sim_vcd_svg_run.bat"
+set "CMD_9=sim_vcd_wavedrom_run.bat"
+set "CMD_10=legacy_report_generate.bat"
+set "CMD_11=legacy_docs_generate.bat"
+set "CMD_12=vivado_ipi_gui_launch.bat"
+set "CMD_13=vivado_build_flow_run.bat"
+set "CMD_14=vivado_block_design_finalize.bat"
+set "CMD_15=vivado_ip_retarget_part.bat"
+set "CMD_16=vivado_fpga_program.bat"
+set "CMD_17=vivado_build_and_program_auto.bat"
 
 echo %Yellow%[ Code ^& Schematic Generation ]%Reset%
-call :ADD_MENU_ITEM 1 "code_schematic_draw.bat" "Draw Schematic"
-call :ADD_MENU_ITEM 2 "code_verilog_hierarchy_browse.bat" "Browse HDL Hierarchy"
-call :ADD_MENU_ITEM 4 "code_fsm_draw.bat" "Draw FSM"
-call :ADD_MENU_ITEM 5 "code_presentation_generate.bat" "Generate Presentation"
+echo   1. Draw Schematic [!CMD_1!]
+echo   2. Browse HDL Hierarchy [!CMD_2!]
+echo   3. Draw FSM [!CMD_3!]
+echo   4. Generate Presentation [!CMD_4!]
 echo.
 
 echo %Yellow%[ Simulation ]%Reset%
-call :ADD_MENU_ITEM 6 "sim_vivado_run.bat" "Run Vivado Simulation"
-call :ADD_MENU_ITEM 7 "sim_report_auto_run.bat" "Auto Sim + Report"
-call :ADD_MENU_ITEM 8 "sim_iverilog_vcd_run.bat" "Run Iverilog VCD (Select TB)"
-call :ADD_MENU_ITEM 9 "sim_vcd_svg_run.bat" "Generate SVG from VCD (Select)"
-call :ADD_MENU_ITEM 22 "sim_vcd_wavedrom_run.bat" "Generate WaveDrom from VCD (Select)"
+echo   5. Run Vivado Simulation [!CMD_5!]
+echo   6. Auto Sim + Report [!CMD_6!]
+echo   7. Run Iverilog VCD (Select TB) [!CMD_7!]
+echo   8. Generate SVG from VCD (Select) [!CMD_8!]
+echo   9. Generate WaveDrom from VCD (Select) [!CMD_9!]
 echo.
 
-echo %Yellow%[ Report Automation ^(One Source^) ]%Reset%
-call :ADD_MENU_ITEM 10 "report_hdl_info_annotate.bat" "Annotate HDL Info"
-call :ADD_MENU_ITEM 11 "report_waveform_folders_prepare.bat" "Prepare Waveform Folders"
-call :ADD_MENU_ITEM 12 "report_markdown_generate.bat" "Generate Report Markdown"
-call :ADD_MENU_ITEM 13 "report_markdown_to_docx.bat" "Build Report from Markdown"
-echo.
-
-echo %Yellow%[ Legacy Report ^(Vivado HTML / Old Docs^) ]%Reset%
-call :ADD_MENU_ITEM 14 "legacy_report_generate.bat" "Legacy Report Generator"
-call :ADD_MENU_ITEM 15 "legacy_docs_generate.bat" "Legacy Docs Generator"
+echo %Yellow%[Report ^(Vivado HTML / Docs^) ]%Reset%
+echo  10. Report Generator [!CMD_10!]
+echo  11. Legacy Docs Generator [!CMD_11!]
 echo.
 
 echo %Yellow%[ Vivado Flow ^& FPGA ]%Reset%
-call :ADD_MENU_ITEM 16 "vivado_ipi_gui_launch.bat" "Launch Vivado IPI GUI"
-call :ADD_MENU_ITEM 17 "vivado_build_flow_run.bat" "Run Vivado Build Flow"
-call :ADD_MENU_ITEM 18 "vivado_block_design_finalize.bat" "Finalize Block Design"
-call :ADD_MENU_ITEM 19 "vivado_ip_retarget_part.bat" "Retarget IP to Part"
-call :ADD_MENU_ITEM 20 "vivado_fpga_program.bat" "Program FPGA Device"
-call :ADD_MENU_ITEM 21 "vivado_build_and_program_auto.bat" "Auto Build + Program"
+echo  12. Launch Vivado IPI GUI [!CMD_12!]
+echo  13. Run Vivado Build Flow [!CMD_13!]
+echo  14. Finalize Block Design [!CMD_14!]
+echo  15. Retarget IP to Part [!CMD_15!]
+echo  16. Program FPGA Device [!CMD_16!]
+echo  17. Auto Build + Program [!CMD_17!]
 echo.
-
-echo   %Blue%[B] Back to Project Selection%Reset%
-echo   %Red%[Q] Quit%Reset%
-echo.
+echo %Blue%[B] Back to Project Selection%Reset%   %Red%[Q] Quit%Reset%
 
 set "USER_INPUT="
 set /p "USER_INPUT=%Cyan%Select number to run (or B/Q): %Reset%"
@@ -232,21 +237,6 @@ for %%F in (vivado_*.backup.log vivado_*.backup.jou vivado_*.backup.str *.backup
 )
 popd >nul 2>&1
 exit /b 0
-
-:ADD_MENU_ITEM
-set "IDX=%~1"
-set "FILE=%~2"
-set "LABEL=%~3"
-set "CMD_!IDX!=!FILE!"
-if not defined LABEL set "LABEL=!FILE!"
-if !IDX! lss 10 ( set "PAD= " ) else ( set "PAD=" )
-
-if exist "templates\bat\!FILE!" (
-    echo   %Gray%!PAD!%Reset%%White%!IDX!. !LABEL!%Reset% %Gray%[!FILE!]%Reset%
-) else (
-    echo   %Red%!PAD!!IDX!. !LABEL! ^(Missing: !FILE!^)%Reset%
-)
-exit /b
 
 :EXIT
 echo.

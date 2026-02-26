@@ -324,6 +324,33 @@ function Select-TopModules {
     return $topModules
 }
 
+function Get-DisplayRelativePath {
+    param(
+        [string]$BasePath,
+        [string]$TargetPath
+    )
+
+    try {
+        if ([string]::IsNullOrWhiteSpace($TargetPath)) { return $TargetPath }
+        $baseFull = [System.IO.Path]::GetFullPath($BasePath)
+        $targetFull = [System.IO.Path]::GetFullPath($TargetPath)
+
+        if ($targetFull.StartsWith($baseFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $rel = $targetFull.Substring($baseFull.Length).TrimStart('\', '/')
+            if (-not [string]::IsNullOrWhiteSpace($rel)) {
+                return $rel.Replace('\', '/')
+            }
+        }
+
+        $baseUri = New-Object System.Uri(($baseFull.TrimEnd('\', '/') + '\'))
+        $targetUri = New-Object System.Uri($targetFull)
+        $relativeUri = $baseUri.MakeRelativeUri($targetUri)
+        return [System.Uri]::UnescapeDataString($relativeUri.ToString()).Replace('\', '/')
+    } catch {
+        return $TargetPath
+    }
+}
+
 function Convert-IndexToHierarchyData {
     param(
         $IndexObj,
@@ -352,7 +379,9 @@ function Convert-IndexToHierarchyData {
 
             if ($dType -eq "module") {
                 if (-not $moduleMap.ContainsKey($dName)) { $moduleMap[$dName] = "" }
-                if (-not $moduleFileMap.ContainsKey($dName)) { $moduleFileMap[$dName] = [System.IO.Path]::GetFileName($f.path) }
+                if (-not $moduleFileMap.ContainsKey($dName)) {
+                    $moduleFileMap[$dName] = ([string]$f.path).Replace('\', '/')
+                }
                 if (-not $modulePathMap.ContainsKey($dName)) { $modulePathMap[$dName] = $fullPath }
                 continue
             }
@@ -463,7 +492,9 @@ function Get-Hierarchy {
         foreach ($match in $moduleDeclRegex.Matches($clean)) {
             $mName = [string]$match.Groups[1].Value
             if (-not $moduleMap.ContainsKey($mName)) { $moduleMap[$mName] = $clean }
-            if (-not $moduleFileMap.ContainsKey($mName)) { $moduleFileMap[$mName] = $f.Name }
+            if (-not $moduleFileMap.ContainsKey($mName)) {
+                $moduleFileMap[$mName] = Get-DisplayRelativePath -BasePath $ProjectRoot -TargetPath $f.FullName
+            }
             if (-not $modulePathMap.ContainsKey($mName)) { $modulePathMap[$mName] = $f.FullName }
         }
 

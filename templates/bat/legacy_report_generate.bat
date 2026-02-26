@@ -19,9 +19,8 @@ set "REPORT_JOU=%LOG_DIR%\report_gen_standalone.jou"
 call :route_vivado_artifacts
 
 echo [LEGACY] This script is for Vivado build-report HTML parsing flow.
-echo [LEGACY] One Source report flow:
-echo [LEGACY]  1^) report_markdown_generate.bat
-echo [LEGACY]  2^) report_markdown_to_docx.bat
+echo [LEGACY] One Source report automation scripts (10~13) were removed.
+echo [LEGACY] Use this legacy script for Vivado report HTML generation.
 echo.
 
 echo ===============================================================================

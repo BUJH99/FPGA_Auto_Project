@@ -11,9 +11,8 @@ if "%~1"=="" (
 set "TARGET_PROJECT=%~f1"
 
 echo [LEGACY] legacy_docs_generate.bat uses the old documentation generator.
-echo [LEGACY] For current report automation, use:
-echo [LEGACY]  1^) report_markdown_generate.bat
-echo [LEGACY]  2^) report_markdown_to_docx.bat
+echo [LEGACY] One Source report automation scripts (10~13) were removed.
+echo [LEGACY] This script remains available as standalone legacy docs flow.
 echo.
 
 echo ============================================================================

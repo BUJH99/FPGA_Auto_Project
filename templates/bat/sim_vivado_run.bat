@@ -150,39 +150,19 @@ if ($tbFiles.Count -eq 0) {
     exit 1
 }
 
-Write-Host "-----------------------------------------------------------" -ForegroundColor Cyan
-Write-Host "      Vivado GUI Simulation Launcher" -ForegroundColor Cyan
-Write-Host "-----------------------------------------------------------" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Select Testbench Top Source:" -ForegroundColor Yellow
-
-for ($i = 0; $i -lt $tbFiles.Count; $i++) {
-    $rel = Get-RelativePathSafe -BasePath $ProjectRoot -TargetPath $tbFiles[$i].FullName
-    Write-Host ("[{0}] {1}" -f ($i + 1), $rel)
-}
-
-$selectionRaw = Read-Host " >"
-if (-not ($selectionRaw -match "^\d+$")) {
-    Write-Host "[ERROR] Invalid selection." -ForegroundColor Red
-    exit 1
-}
-
-$selection = [int]$selectionRaw
-if ($selection -lt 1 -or $selection -gt $tbFiles.Count) {
-    Write-Host "[ERROR] Selection out of range." -ForegroundColor Red
-    exit 1
-}
-
-$selectedTb = $tbFiles[$selection - 1]
-
-function Get-TbTopModuleName {
+function Get-TbTopCandidate {
     param([string]$TbFilePath)
 
-    $raw = Get-Content -Path $TbFilePath -Raw
+    try {
+        $raw = Get-Content -Path $TbFilePath -Raw
+    } catch {
+        return ""
+    }
+
     $clean = [regex]::Replace($raw, "/\*[\s\S]*?\*/", "")
     $clean = [regex]::Replace($clean, "//.*$", "", [System.Text.RegularExpressions.RegexOptions]::Multiline)
 
-    # Support SystemVerilog lifetime qualifiers and program testbench tops.
+    # Support module/program declarations with optional automatic/static lifetime.
     $m = [regex]::Match(
         $clean,
         "\b(?:module|program)\s+(?:(?:automatic|static)\s+)?([A-Za-z_][A-Za-z0-9_$]*)\b",
@@ -192,11 +172,114 @@ function Get-TbTopModuleName {
         return $m.Groups[1].Value
     }
 
-    return [System.IO.Path]::GetFileNameWithoutExtension($TbFilePath)
+    return ""
 }
 
-$tbTop = Get-TbTopModuleName -TbFilePath $selectedTb.FullName
-$selectedRel = Get-RelativePathSafe -BasePath $ProjectRoot -TargetPath $selectedTb.FullName
+$tbEntries = @(
+    foreach ($tbFile in $tbFiles) {
+        $folderFull = Split-Path -Path $tbFile.FullName -Parent
+        $folderRel = Get-RelativePathSafe -BasePath $ProjectRoot -TargetPath $folderFull
+        if ([string]::IsNullOrWhiteSpace($folderRel)) { $folderRel = "tb" }
+
+        $fileRel = Get-RelativePathSafe -BasePath $ProjectRoot -TargetPath $tbFile.FullName
+        $topCandidate = Get-TbTopCandidate -TbFilePath $tbFile.FullName
+
+        [pscustomobject]@{
+            File          = $tbFile
+            FolderDisplay = $folderRel.Replace('\', '/')
+            FileDisplay   = $fileRel.Replace('\', '/')
+            TopCandidate  = $topCandidate
+            HasTop        = -not [string]::IsNullOrWhiteSpace($topCandidate)
+        }
+    }
+)
+
+$folderEntries = @(
+    $tbEntries |
+        Group-Object FolderDisplay |
+        Sort-Object Name |
+        ForEach-Object {
+            [pscustomobject]@{
+                Name    = $_.Name
+                Entries = @($_.Group | Sort-Object FileDisplay)
+            }
+        }
+)
+
+Write-Host "-----------------------------------------------------------" -ForegroundColor Cyan
+Write-Host "      Vivado GUI Simulation Launcher" -ForegroundColor Cyan
+Write-Host "-----------------------------------------------------------" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Select TB Folder:" -ForegroundColor Yellow
+
+for ($i = 0; $i -lt $folderEntries.Count; $i++) {
+    $folder = $folderEntries[$i]
+    Write-Host ("[{0}] {1} ({2} files)" -f ($i + 1), $folder.Name, $folder.Entries.Count)
+}
+
+$folderSelection = 0
+while ($true) {
+    $folderRaw = Read-Host " Folder >"
+    if ($folderRaw -notmatch "^\d+$") {
+        Write-Host "[WARN] Enter a valid folder number." -ForegroundColor DarkYellow
+        continue
+    }
+    $folderSelection = [int]$folderRaw
+    if ($folderSelection -lt 1 -or $folderSelection -gt $folderEntries.Count) {
+        Write-Host "[WARN] Folder selection out of range." -ForegroundColor DarkYellow
+        continue
+    }
+    break
+}
+
+$selectedFolder = $folderEntries[$folderSelection - 1]
+$selectedFolderFiles = @($selectedFolder.Entries)
+$topFolderFiles = @($selectedFolderFiles | Where-Object { $_.HasTop })
+$tbSelectList = $topFolderFiles
+
+if ($tbSelectList.Count -eq 0) {
+    Write-Host ""
+    Write-Host ("[WARN] No module/program top candidate found in folder '{0}'. Showing HDL files as fallback." -f $selectedFolder.Name) -ForegroundColor DarkYellow
+    $tbSelectList = $selectedFolderFiles
+}
+
+Write-Host ""
+Write-Host ("Selected folder: {0}" -f $selectedFolder.Name) -ForegroundColor Green
+Write-Host "Select Testbench Top Source:" -ForegroundColor Yellow
+
+for ($i = 0; $i -lt $tbSelectList.Count; $i++) {
+    $entry = $tbSelectList[$i]
+    if ($entry.HasTop) {
+        Write-Host ("[{0}] {1}  (top: {2})" -f ($i + 1), $entry.FileDisplay, $entry.TopCandidate)
+    } else {
+        $fallbackTop = [System.IO.Path]::GetFileNameWithoutExtension($entry.File.Name)
+        Write-Host ("[{0}] {1}  (top fallback: {2})" -f ($i + 1), $entry.FileDisplay, $fallbackTop)
+    }
+}
+
+$tbSelection = 0
+while ($true) {
+    $tbRaw = Read-Host " TB file >"
+    if ($tbRaw -notmatch "^\d+$") {
+        Write-Host "[WARN] Enter a valid TB file number." -ForegroundColor DarkYellow
+        continue
+    }
+    $tbSelection = [int]$tbRaw
+    if ($tbSelection -lt 1 -or $tbSelection -gt $tbSelectList.Count) {
+        Write-Host "[WARN] TB file selection out of range." -ForegroundColor DarkYellow
+        continue
+    }
+    break
+}
+
+$selectedEntry = $tbSelectList[$tbSelection - 1]
+$selectedTb = $selectedEntry.File
+$tbTop = [string]$selectedEntry.TopCandidate
+if ([string]::IsNullOrWhiteSpace($tbTop)) {
+    $tbTop = [System.IO.Path]::GetFileNameWithoutExtension($selectedTb.Name)
+    Write-Host ("[WARN] Using filename-based top fallback: {0}" -f $tbTop) -ForegroundColor DarkYellow
+}
+$selectedRel = $selectedEntry.FileDisplay
 
 Write-Host ""
 Write-Host ("[INFO] Selected TB file : {0}" -f $selectedRel) -ForegroundColor Green

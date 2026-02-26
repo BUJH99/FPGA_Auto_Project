@@ -38,7 +38,6 @@ Required tools in `PATH`:
 - Python 3
 
 Optional (recommended for full flow):
-- Pandoc (`md -> html/docx`)
 - Yosys or `yowasp-yosys` (schematic generation)
 - Visual Studio Build Tools C++ workload (for native AST parser dependencies)
 
@@ -57,41 +56,37 @@ npm install
 
 ### Core Workflows
 
-#### A. One Source Reporting (Recommended)
-1. `report_hdl_info_annotate.bat`
-2. `report_markdown_generate.bat`
-3. `report_markdown_to_docx.bat`
-
-`report_markdown_generate.bat` behavior:
-- Supports `--modules=` or interactive selection
-- Selection applies only to `1.3 Sub block`
-- `Top` is always included first in sub-block section
-
-#### B. Interactive Simulation (Vivado GUI)
-- `sim_vivado_run.bat` scans TB files (`.v/.sv`), lets you choose top, then launches Vivado GUI simulation.
+#### A. Interactive Simulation (Vivado GUI)
+- `sim_vivado_run.bat` scans TB files (`.v/.sv`) recursively and uses a 2-step picker:
+  1. Select TB folder (`tb/...`)
+  2. Select TB file in that folder (with parsed top candidate)
+- Vivado compile scope remains full project HDL (`src/**` + `tb/**`) for compatibility.
 - Artifacts stay inside project:
   - `<ProjectDir>/vivado_project/`
   - `<ProjectDir>/log/vivado_sim/`
 
-#### C. Build & Program
+#### B. Build & Program
 - Step-by-step: `vivado_build_flow_run.bat` -> `vivado_fpga_program.bat`
 - One-click: `vivado_build_and_program_auto.bat`
 
 ### SystemVerilog Compatibility (Updated: February 26, 2026)
 - Reference matrix: `templates/docs/systemverilog_support_matrix.md`
 - Compatibility levels: `Supported`, `Partial`, `Unsupported`, `SV-agnostic/N/A`
-- Current snapshot (21 menu scripts):
+- Current snapshot (17 menu scripts):
   - `Supported`: 3
-  - `Partial`: 12
+  - `Partial`: 9
   - `Unsupported`: 0
-  - `SV-agnostic/N/A`: 6
+  - `SV-agnostic/N/A`: 5
 
 ### Recent SV Upgrades
 - Hierarchy tools:
-  - `code_verilog_hierarchy_browse.bat <Project_Directory> [--once] [--include-tb]`
+  - `code_verilog_hierarchy_browse.bat <Project_Directory> [--once] [--include-tb | --tb-only]`
   - `code_verilog_hierarchy_print.bat` was removed (its role is covered by browse mode)
   - Default scope hides TB; `--include-tb` shows TB modules and TB-side SV declarations
+  - Module tree now shows project-relative source paths (`src/...`, `tb/...`) instead of basename-only files
   - Declaration groups include `package`, `interface`, `program`, `class`, `checker`
+- Report automation:
+  - One Source report scripts (menu 10~13) were removed
 - Parser consistency:
   - Fixed `module/program automatic|static` name mis-detection across hierarchy/report/sim helper paths
 - Schematic flow:
@@ -146,7 +141,6 @@ node tools/hdl_indexer.js examples/sv_regression_project --strict --write
 
 ### Troubleshooting
 - `netlistsvg not found`: run `npm install` in `templates`
-- DOCX generation failed: close `report.docx` if open in Word
 - `vivado` not found: confirm Vivado `bin` is in system `PATH`
 
 ---

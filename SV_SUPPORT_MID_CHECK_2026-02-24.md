@@ -10,16 +10,17 @@
 Source of truth:
 - `templates/docs/systemverilog_support_matrix.md`
 
-Current 21-script snapshot:
+Current 17-script snapshot:
 - `Supported`: 3 (`2,6,16`)
-- `Partial`: 12 (`1,4,5,7,8,10,11,12,14,15,17,21`)
+- `Partial`: 9 (`1,4,5,7,8,14,15,17,21`)
 - `Unsupported`: 0
-- `SV-agnostic/N/A`: 6 (`9,13,18,19,20,22`)
+- `SV-agnostic/N/A`: 5 (`9,18,19,20,22`)
 
 Key delta vs previous baseline:
 - `legacy_docs_generate.bat` moved from effectively unsupported (`.v` only scan) to `Partial` (`.v/.sv` scan).
 - Hierarchy and declaration handling improved for broader SV declarations and TB filtering policy.
 - `code_verilog_hierarchy_print.bat` removed; hierarchy output is now consolidated to browse mode.
+- One Source report automation scripts (`10~13`) were removed from menu/batch set.
 
 ## 3. Implemented Changes (This Round)
 
