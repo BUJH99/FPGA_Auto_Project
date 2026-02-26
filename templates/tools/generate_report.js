@@ -94,6 +94,44 @@ function toTclList(paths) {
     return paths.map((p) => `{${toTclPath(p)}}`).join(' ');
 }
 
+function findLatestFileRecursive(rootDir, ext) {
+    if (!fs.existsSync(rootDir)) return null;
+    let latest = null;
+    const stack = [rootDir];
+    while (stack.length > 0) {
+        const cur = stack.pop();
+        const entries = fs.readdirSync(cur, { withFileTypes: true });
+        for (const entry of entries) {
+            const abs = path.join(cur, entry.name);
+            if (entry.isDirectory()) {
+                stack.push(abs);
+                continue;
+            }
+            if (!entry.isFile()) continue;
+            if (path.extname(entry.name).toLowerCase() !== ext) continue;
+            const mtimeMs = fs.statSync(abs).mtimeMs;
+            if (!latest || mtimeMs > latest.mtimeMs) {
+                latest = { path: abs, mtimeMs };
+            }
+        }
+    }
+    return latest ? latest.path : null;
+}
+
+function findFallbackVcd(projectRootDir) {
+    const roots = [
+        path.join(projectRootDir, 'output'),
+        path.join(projectRootDir, 'work'),
+        path.join(projectRootDir, 'vivado_project'),
+        projectRootDir
+    ];
+    for (const root of roots) {
+        const hit = findLatestFileRecursive(root, '.vcd');
+        if (hit) return hit;
+    }
+    return null;
+}
+
 function collectIncludeDirs(projectRootDir) {
     const roots = [path.join(projectRootDir, 'src'), path.join(projectRootDir, 'tb'), path.join(projectRootDir, 'include'), path.join(projectRootDir, 'inc')];
     const dirs = new Set();
@@ -166,17 +204,21 @@ update_compile_order -fileset sim_1
 
 # Run Simulation
 launch_simulation
-if {[catch {
-    open_vcd "$out_dir/mcp_sim_wave.vcd"
-    log_vcd [get_objects -r /${topModule}/*]
-    
-    run ${simTime}
-    
-    close_vcd
-    close_sim
-} err]} {
-    puts "Error during simulation: $err"
+set custom_vcd "$out_dir/mcp_sim_wave.vcd"
+set custom_vcd_opened 0
+if {[catch {open_vcd $custom_vcd} open_err]} {
+    puts "WARNING: open_vcd skipped: $open_err"
+} else {
+    set custom_vcd_opened 1
+    catch {log_vcd [get_objects -r /${topModule}/*]}
 }
+if {[catch {run ${simTime}} run_err]} {
+    puts "Error during simulation run: $run_err"
+}
+if {$custom_vcd_opened} {
+    catch {close_vcd}
+}
+catch {close_sim}
 
 close_project
 exit
@@ -209,7 +251,7 @@ try {
 const toolsDir = __dirname; // Assuming this script is in /tools
 const vcd2wavedromScript = path.join(toolsDir, 'vcd2wavedrom.js');
 
-const vcdFile = path.resolve(projectRoot, vcdRelPath);
+let vcdFile = path.resolve(projectRoot, vcdRelPath);
 const htmlFile = path.resolve(projectRoot, htmlRelPath);
 const outputDir = path.dirname(htmlFile);
 
@@ -223,8 +265,21 @@ if (!fs.existsSync(outputDir)) {
 
 // 4. Check VCD Existence
 if (!fs.existsSync(vcdFile)) {
+    const fallbackVcd = findFallbackVcd(projectRoot);
+    if (fallbackVcd) {
+        fs.mkdirSync(path.dirname(vcdFile), { recursive: true });
+        try {
+            fs.copyFileSync(fallbackVcd, vcdFile);
+            console.warn(`[WARN] Primary VCD not found. Copied fallback VCD: ${fallbackVcd}`);
+        } catch {
+            vcdFile = fallbackVcd;
+            console.warn(`[WARN] Primary VCD not found. Using fallback VCD directly: ${fallbackVcd}`);
+        }
+    }
+}
+if (!fs.existsSync(vcdFile)) {
     console.error(`Error: VCD file not found at ${vcdFile}`);
-    console.error("Please run the simulation first.");
+    console.error("Simulation may have completed without VCD output. Check testbench dump settings.");
     process.exit(1);
 }
 

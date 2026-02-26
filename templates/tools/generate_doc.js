@@ -69,8 +69,12 @@ function appendSectionToc(mdContent, tocItems) {
 }
 
 function getSubmoduleSourceLink(moduleName) {
-    const sourcePath = path.join(SRC_DIR, `${moduleName}.v`);
-    if (!fs.existsSync(sourcePath)) return null;
+    const sourceCandidates = [
+        path.join(SRC_DIR, `${moduleName}.v`),
+        path.join(SRC_DIR, `${moduleName}.sv`)
+    ];
+    const sourcePath = sourceCandidates.find(p => fs.existsSync(p));
+    if (!sourcePath) return null;
     return path.relative(DOC_DIR, sourcePath).replace(/\\/g, '/');
 }
 
@@ -548,7 +552,7 @@ function generateFsmIndex(docItems) {
     console.log(`Generated: ${outPath}`);
 }
 
-// Run for all .v files in src
+// Run for all .v/.sv files in src
 const readline = require('readline');
 
 const rl = readline.createInterface({
@@ -556,15 +560,15 @@ const rl = readline.createInterface({
     output: process.stdout
 });
 
-console.log("Searching for Verilog files in: " + SRC_DIR);
+console.log("Searching for HDL source files (.v/.sv) in: " + SRC_DIR);
 if (fs.existsSync(SRC_DIR)) {
-    const files = fs.readdirSync(SRC_DIR).filter(f => f.endsWith('.v'));
+    const files = fs.readdirSync(SRC_DIR).filter(f => /\.(v|sv)$/i.test(f));
     
     if (files.length === 0) {
-        console.log("No Verilog files found.");
+        console.log("No HDL source files found.");
         rl.close();
     } else {
-        console.log("\nFound the following Verilog files:");
+        console.log("\nFound the following HDL files:");
         files.forEach((f, index) => {
             console.log(`[${index + 1}] ${f}`);
         });

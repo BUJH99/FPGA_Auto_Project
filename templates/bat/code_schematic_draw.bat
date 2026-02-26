@@ -30,48 +30,59 @@ if %errorlevel% equ 0 (
 )
 
 set "NETLISTSVG_CMD=%~dp0..\node_modules\netlistsvg\bin\netlistsvg.js"
+set "HDL_INDEXER=%~dp0..\tools\hdl_indexer.js"
+set "RUN_SCHEMATIC_PS=%~dp0..\tools\run_schematic_jobs.ps1"
 if not exist "%NETLISTSVG_CMD%" (
     echo [ERROR] netlistsvg not found at templates\node_modules
     echo [INFO] Run: cd templates ^&^& npm install
     pause
     exit /b 1
 )
+if not exist "%RUN_SCHEMATIC_PS%" (
+    echo [ERROR] Missing worker script: "%RUN_SCHEMATIC_PS%"
+    exit /b 1
+)
 
-REM Dynamically find all HDL files in src folder (.v/.sv)
-set "VERILOG_FILES="
+REM Discover module declarations (prefer hdl_indexer, fallback regex parser in worker script)
 set "ALL_MODULES="
 set "MODULE_COUNT=0"
 set "HAS_TOP=0"
-for %%f in (src\*.v) do (
-    set /a MODULE_COUNT+=1
-    set "MODULE_NAME=%%~nf"
-    set "VERILOG_FILES=!VERILOG_FILES! src/%%~nxf"
-    set "ALL_MODULES=!ALL_MODULES! !MODULE_NAME!"
-    set "MODULE_!MODULE_COUNT!=!MODULE_NAME!"
-    if /i "!MODULE_NAME!"=="Top" (
-        set "HAS_TOP=1"
-        set "TOP_MODULE_NAME=!MODULE_NAME!"
-    )
-)
-for %%f in (src\*.sv) do (
-    set /a MODULE_COUNT+=1
-    set "MODULE_NAME=%%~nf"
-    set "VERILOG_FILES=!VERILOG_FILES! src/%%~nxf"
-    set "ALL_MODULES=!ALL_MODULES! !MODULE_NAME!"
-    set "MODULE_!MODULE_COUNT!=!MODULE_NAME!"
-    if /i "!MODULE_NAME!"=="Top" (
-        set "HAS_TOP=1"
-        set "TOP_MODULE_NAME=!MODULE_NAME!"
-    )
-)
+set "MODULE_LIST_FILE=%TEMP%\schematic_modules_%RANDOM%_%RANDOM%.txt"
+if exist "%MODULE_LIST_FILE%" del /q "%MODULE_LIST_FILE%" >nul 2>nul
 
-if !MODULE_COUNT! equ 0 (
-    echo [ERROR] No .v/.sv files found in src/ folder.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%RUN_SCHEMATIC_PS%" ^
+    -ProjectPath "%TARGET_PROJECT%" ^
+    -ListModulesOnly ^
+    -HdlIndexerPath "%HDL_INDEXER%" > "%MODULE_LIST_FILE%"
+
+if errorlevel 1 (
+    echo [ERROR] Failed to discover module declarations from src/.
+    if exist "%MODULE_LIST_FILE%" del /q "%MODULE_LIST_FILE%" >nul 2>nul
     pause
     exit /b 1
 )
 
-echo [INFO] Detected source files: %VERILOG_FILES%
+for /f "usebackq delims=" %%M in ("%MODULE_LIST_FILE%") do (
+    if not "%%~M"=="" (
+        set /a MODULE_COUNT+=1
+        set "MODULE_NAME=%%~M"
+        set "ALL_MODULES=!ALL_MODULES! !MODULE_NAME!"
+        set "MODULE_!MODULE_COUNT!=!MODULE_NAME!"
+        if /i "!MODULE_NAME!"=="Top" (
+            set "HAS_TOP=1"
+            set "TOP_MODULE_NAME=!MODULE_NAME!"
+        )
+    )
+)
+if exist "%MODULE_LIST_FILE%" del /q "%MODULE_LIST_FILE%" >nul 2>nul
+
+if !MODULE_COUNT! equ 0 (
+    echo [ERROR] No module declarations found in src/ folder.
+    pause
+    exit /b 1
+)
+
+echo [INFO] Detected module declarations: !MODULE_COUNT!
 echo.
 echo ========================================================
 echo  Module Selection
@@ -175,12 +186,6 @@ echo   - output\Diagram\Detailed\  (Detailed internal diagrams)
 echo   - output\Diagram\JSON\      (Intermediate JSON files)
 echo.
 
-set "RUN_SCHEMATIC_PS=%~dp0..\tools\run_schematic_jobs.ps1"
-if not exist "%RUN_SCHEMATIC_PS%" (
-    echo [ERROR] Missing worker script: "%RUN_SCHEMATIC_PS%"
-    exit /b 1
-)
-
 for %%I in ("%NETLISTSVG_CMD%") do set "NETLISTSVG_CMD=%%~fI"
 
 set "MODULES_CSV="
@@ -228,7 +233,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%RUN_SCHEMATIC_PS%" ^
     -ModulesCsv "!MODULES_CSV!" ^
     -YosysCmd "%YOSYS_CMD%" ^
     -NetlistSvgCmd "%NETLISTSVG_CMD%" ^
-    -MaxParallel "!MAX_PARALLEL!"
+    -MaxParallel "!MAX_PARALLEL!" ^
+    -HdlIndexerPath "%HDL_INDEXER%"
 
 if errorlevel 1 (
     echo [ERROR] Schematic generation completed with errors.

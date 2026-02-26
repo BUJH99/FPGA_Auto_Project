@@ -2,16 +2,17 @@ Param(
   [Parameter(Mandatory = $true)]
   [string]$ProjectPath,
 
-  [Parameter(Mandatory = $true)]
-  [string]$ModulesCsv,
+  [string]$ModulesCsv = "",
 
-  [Parameter(Mandatory = $true)]
-  [string]$YosysCmd,
+  [string]$YosysCmd = "",
 
-  [Parameter(Mandatory = $true)]
-  [string]$NetlistSvgCmd,
+  [string]$NetlistSvgCmd = "",
 
-  [int]$MaxParallel = 0
+  [int]$MaxParallel = 0,
+
+  [switch]$ListModulesOnly,
+
+  [string]$HdlIndexerPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,10 +23,18 @@ $generateSimpleSvgScript = Join-Path $toolsDir "generate_simple_svg.ps1"
 $svg2drawioScript = Join-Path $toolsDir "svg2drawio.js"
 $skinPath = Join-Path $toolsDir "skin.svg"
 
-$modules = $ModulesCsv -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
-if ($modules.Count -eq 0) {
-  Write-Host "[ERROR] No module selected."
-  exit 1
+$modules = @()
+if (-not $ListModulesOnly) {
+  $modules = $ModulesCsv -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
+  if ($modules.Count -eq 0) {
+    Write-Host "[ERROR] No module selected."
+    exit 1
+  }
+
+  if ([string]::IsNullOrWhiteSpace($YosysCmd) -or [string]::IsNullOrWhiteSpace($NetlistSvgCmd)) {
+    Write-Host "[ERROR] Missing required tool command(s): YosysCmd/NetlistSvgCmd"
+    exit 1
+  }
 }
 
 Set-Location $ProjectPath
@@ -47,6 +56,90 @@ function Get-ProjectRelativePath {
     }
     return $TargetPath.Replace('\','/')
   }
+}
+
+function Strip-HdlComments {
+  param([string]$Text)
+  if ($null -eq $Text) { return "" }
+  $clean = [regex]::Replace($Text, "/\*[\s\S]*?\*/", "")
+  $clean = [regex]::Replace($clean, "//.*$", "", [System.Text.RegularExpressions.RegexOptions]::Multiline)
+  return $clean
+}
+
+function Try-LoadModuleEntriesFromIndexer {
+  param(
+    [string]$ProjectPath,
+    [string]$HdlIndexerPath
+  )
+
+  $entries = @()
+  if ([string]::IsNullOrWhiteSpace($HdlIndexerPath)) { return $entries }
+  if (-not (Test-Path $HdlIndexerPath)) { return $entries }
+  if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return $entries }
+
+  try {
+    $json = & node $HdlIndexerPath $ProjectPath --pretty 2>$null
+    if (-not $json) { return $entries }
+    $idx = ($json -join "`n") | ConvertFrom-Json
+    if (-not $idx.files) { return $entries }
+
+    $seen = @{}
+    foreach ($f in $idx.files) {
+      $role = [string]$f.role
+      if ($role -eq "tb") { continue }
+
+      $fileRel = [string]$f.path
+      if ([string]::IsNullOrWhiteSpace($fileRel)) { continue }
+      $fileRel = $fileRel.Replace('\', '/')
+
+      foreach ($decl in $f.declarations) {
+        if ([string]$decl.type -ne "module") { continue }
+        $name = [string]$decl.name
+        if ([string]::IsNullOrWhiteSpace($name)) { continue }
+        $key = $name.ToLowerInvariant()
+        if ($seen.ContainsKey($key)) { continue }
+        $seen[$key] = $true
+        $entries += [pscustomobject]@{
+          Name = $name
+          SourceFile = $fileRel
+        }
+      }
+    }
+  }
+  catch {
+    return @()
+  }
+
+  return @($entries)
+}
+
+function Get-ModuleEntriesFromSource {
+  param(
+    [array]$SourceFiles,
+    [string]$ProjectPath
+  )
+
+  $entries = @()
+  $seen = @{}
+  $moduleDeclRegex = [regex]'(?im)\bmodule\s+(?:automatic\s+|static\s+)?([A-Za-z_][A-Za-z0-9_$]*)\b'
+
+  foreach ($src in $SourceFiles) {
+    $raw = Get-Content -Path $src.FullName -Raw
+    $clean = Strip-HdlComments -Text $raw
+    foreach ($m in $moduleDeclRegex.Matches($clean)) {
+      $name = [string]$m.Groups[1].Value
+      if ([string]::IsNullOrWhiteSpace($name)) { continue }
+      $key = $name.ToLowerInvariant()
+      if ($seen.ContainsKey($key)) { continue }
+      $seen[$key] = $true
+      $entries += [pscustomobject]@{
+        Name = $name
+        SourceFile = (Get-ProjectRelativePath -BasePath $ProjectPath -TargetPath $src.FullName)
+      }
+    }
+  }
+
+  return @($entries)
 }
 
 $srcDir = Join-Path $ProjectPath "src"
@@ -73,29 +166,57 @@ foreach ($root in $headerRoots) {
 $includeDirs = @($includeDirs | Select-Object -Unique)
 if ($includeDirs.Count -eq 0) { $includeDirs = @() }
 
-$moduleToSource = @{}
-foreach ($src in $srcFiles) {
-  $content = Get-Content -Path $src.FullName -Raw
-  $moduleMatches = [regex]::Matches($content, "(?im)^\s*module\s+([a-zA-Z_]\w*)\b")
-  foreach ($m in $moduleMatches) {
-    $name = $m.Groups[1].Value
-    if (-not $moduleToSource.ContainsKey($name)) {
-      $moduleToSource[$name] = Get-ProjectRelativePath -BasePath $ProjectPath -TargetPath $src.FullName
-    }
+$moduleEntries = Try-LoadModuleEntriesFromIndexer -ProjectPath $ProjectPath -HdlIndexerPath $HdlIndexerPath
+if ($moduleEntries.Count -eq 0) {
+  $moduleEntries = Get-ModuleEntriesFromSource -SourceFiles $srcFiles -ProjectPath $ProjectPath
+}
+
+if ($moduleEntries.Count -eq 0) {
+  Write-Host "[ERROR] No module declarations found in src/."
+  exit 1
+}
+
+$moduleNameByKey = @{}
+$moduleSourceByKey = @{}
+foreach ($entry in $moduleEntries) {
+  $name = [string]$entry.Name
+  $srcRel = [string]$entry.SourceFile
+  if ([string]::IsNullOrWhiteSpace($name) -or [string]::IsNullOrWhiteSpace($srcRel)) { continue }
+  $key = $name.ToLowerInvariant()
+  if (-not $moduleNameByKey.ContainsKey($key)) {
+    $moduleNameByKey[$key] = $name
+    $moduleSourceByKey[$key] = $srcRel
   }
+}
+
+$availableModuleNames = @($moduleNameByKey.Values | Sort-Object { $_.ToLowerInvariant() }, { $_ })
+if ($availableModuleNames.Count -eq 0) {
+  Write-Host "[ERROR] No module declarations found in src/."
+  exit 1
+}
+
+if ($ListModulesOnly) {
+  foreach ($name in $availableModuleNames) {
+    Write-Output $name
+  }
+  exit 0
 }
 
 $missingModules = @()
 $moduleInfoList = @()
+$selectedKeys = @{}
 foreach ($module in $modules) {
-  if ($moduleToSource.ContainsKey($module)) {
+  $key = $module.ToLowerInvariant()
+  if ($moduleNameByKey.ContainsKey($key)) {
+    if ($selectedKeys.ContainsKey($key)) { continue }
+    $selectedKeys[$key] = $true
     $moduleInfoList += [pscustomobject]@{
-      Module = $module
-      SourceFile = $moduleToSource[$module]
+      Module = $moduleNameByKey[$key]
+      SourceFile = $moduleSourceByKey[$key]
     }
   }
   else {
-    Write-Host "[ERROR] Could not find source file for module $module"
+    Write-Host "[ERROR] Could not find source file for module $module (available: $($availableModuleNames -join ', '))"
     $missingModules += $module
   }
 }

@@ -692,7 +692,7 @@ def parse_instances(module_text: str, module_names: Sequence[str], current_modul
         )
         for m in pattern.finditer(module_text):
             prefix = module_text[max(0, m.start() - 20) : m.start()]
-            if re.search(r"\bmodule\s+$", prefix):
+            if re.search(r"\bmodule(?:\s+(?:automatic|static))?\s+$", prefix, flags=re.IGNORECASE):
                 continue
             instance_name = m.group(1)
             out.append(InstanceInfo(child_module=child, instance_name=instance_name, text_index=m.start()))
@@ -708,7 +708,7 @@ def parse_modules_from_source_file(file_path: Path) -> List[ModuleInfo]:
     clean_text = strip_comments_keep_shape(raw_text)
     modules: List[ModuleInfo] = []
     for m in re.finditer(
-        r"\bmodule\s+([A-Za-z_][A-Za-z0-9_$]*)\b([\s\S]*?)\bendmodule\b",
+        r"\bmodule\s+(?:automatic\s+|static\s+)?([A-Za-z_][A-Za-z0-9_$]*)\b([\s\S]*?)\bendmodule\b",
         clean_text,
         flags=re.MULTILINE,
     ):

@@ -17,7 +17,7 @@ echo [LEGACY]  2^) report_markdown_to_docx.bat
 echo.
 
 echo ============================================================================
-echo      Verilog Documentation Generator (Centralized)
+echo      HDL Documentation Generator (Verilog/SystemVerilog)
 echo ============================================================================
 echo Target: %TARGET_PROJECT%
 echo.

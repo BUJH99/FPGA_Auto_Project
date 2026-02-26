@@ -384,7 +384,7 @@ function readVerilogModules() {
         const absPath = path.join(srcDir, fileName);
         const raw = fs.readFileSync(absPath, 'utf8');
         const clean = stripComments(raw);
-        const moduleMatch = clean.match(/\bmodule\s+([A-Za-z_]\w*)\b/);
+        const moduleMatch = clean.match(/\bmodule\s+(?:(?:automatic|static)\s+)?([A-Za-z_]\w*)\b/i);
         const moduleName = moduleMatch ? moduleMatch[1] : path.basename(fileName, path.extname(fileName));
 
         return {
@@ -871,7 +871,7 @@ function buildModuleDescriptionKR(mod, wave, hasFsm, isTopModule, tbInfo) {
             description.push(`검증 관점에서는 \`${wave.tbSource}\` 테스트벤치를 기준으로 파형 및 로그를 함께 확인하는 것을 권장합니다.`);
         }
     } else {
-        description.push(`현재 \`tb/tb_${mod.moduleName}.v\` 규칙의 테스트벤치가 자동 매칭되지 않아, 수동 테스트벤치 연결 여부를 확인해야 합니다.`);
+        description.push(`현재 \`tb/tb_${mod.moduleName}.(v|sv)\` 규칙의 테스트벤치가 자동 매칭되지 않아, 수동 테스트벤치 연결 여부를 확인해야 합니다.`);
     }
 
     if (isTopModule) {
@@ -1168,7 +1168,7 @@ function buildMarkdown(allModules, subBlockModules, hierarchy) {
         }
         lines.push('| 항목 | 내용 |');
         lines.push('| :--- | :--- |');
-        lines.push(`| 테스트벤치 | ${wave.tbSource ? `\`${wave.tbSource}\`` : `\`tb/tb_${mod.moduleName}.v\` 자동 매칭 실패`} |`);
+        lines.push(`| 테스트벤치 | ${wave.tbSource ? `\`${wave.tbSource}\`` : `\`tb/tb_${mod.moduleName}.(v|sv)\` 자동 매칭 실패`} |`);
         if (tbInfo && tbInfo.role) lines.push(`| TB 역할 | ${tbInfo.role} |`);
         lines.push(`| 파형 산출물 | ${wave.existing.length + wave.imagePaths.length}개 |`);
         lines.push('');

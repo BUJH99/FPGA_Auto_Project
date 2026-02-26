@@ -60,7 +60,7 @@ function stripComments(content) {
 
 function detectModuleName(content, fallbackName) {
     const clean = stripComments(content);
-    const moduleMatch = clean.match(/\bmodule\s+([A-Za-z_]\w*)\b/);
+    const moduleMatch = clean.match(/\bmodule\s+(?:(?:automatic|static)\s+)?([A-Za-z_]\w*)\b/i);
     return moduleMatch ? moduleMatch[1] : fallbackName;
 }
 
@@ -178,7 +178,7 @@ function parseSrcModuleNames(srcFiles) {
 
 function detectTbName(content, fallbackName) {
     const clean = stripComments(content);
-    const match = clean.match(/\bmodule\s+([A-Za-z_]\w*)\b/);
+    const match = clean.match(/\b(?:module|program)\s+(?:(?:automatic|static)\s+)?([A-Za-z_]\w*)\b/i);
     return match ? match[1] : fallbackName;
 }
 

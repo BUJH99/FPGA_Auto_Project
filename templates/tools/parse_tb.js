@@ -134,8 +134,8 @@ function parseParamMap(lineList) {
 }
 
 function extractTopModuleName(content, fallback) {
-    const m = content.match(/\bmodule\s+([a-zA-Z_][a-zA-Z0-9_$]*)\s*(?:#\s*\(|\()/);
-    return m ? m[1] : fallback;
+    const m = content.match(/(^|\n)\s*(?:module|program)\s+(?:(?:automatic|static)\s+)?([a-zA-Z_][a-zA-Z0-9_$]*)\b/m);
+    return m ? m[2] : fallback;
 }
 
 function slugify(text) {

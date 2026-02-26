@@ -348,7 +348,7 @@ foreach f $src_files {
     
     # Try to find module name
     set module_name ""
-    if {[regexp {(?n)^\s*module\s+(\w+)} $file_content -> mname]} {
+    if {[regexp {(?n)^\s*module\s+(?:automatic\s+|static\s+)?(\w+)} $file_content -> mname]} {
         set module_name $mname
     } else {
         # Skip if not a module (e.g. package or header)

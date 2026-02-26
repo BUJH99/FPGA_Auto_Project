@@ -306,7 +306,7 @@ exit /b 0
 :detect_tb_top
 set "TB_TOP="
 set "TB_PARSE_FILE=%~1"
-for /f "usebackq delims=" %%M in (`powershell -NoProfile -Command "$p='%TB_PARSE_FILE%'; if (-not (Test-Path $p)) { exit 0 }; $txt=[IO.File]::ReadAllText($p); $txt=[regex]::Replace($txt,'/\*.*?\*/',' ','Singleline'); $txt=[regex]::Replace($txt,'//.*?$',' ','Multiline'); $m=[regex]::Match($txt,'(?im)^\s*(?:module|program)\s+([A-Za-z_][A-Za-z0-9_$]*)\b'); if ($m.Success) { $m.Groups[1].Value }"` ) do (
+for /f "usebackq delims=" %%M in (`powershell -NoProfile -Command "$p='%TB_PARSE_FILE%'; if (-not (Test-Path $p)) { exit 0 }; $txt=[IO.File]::ReadAllText($p); $txt=[regex]::Replace($txt,'/\*.*?\*/',' ','Singleline'); $txt=[regex]::Replace($txt,'//.*?$',' ','Multiline'); $m=[regex]::Match($txt,'(?im)^\s*(?:module|program)\s+(?:(?:automatic|static)\s+)?([A-Za-z_][A-Za-z0-9_$]*)\b'); if ($m.Success) { $m.Groups[1].Value }"` ) do (
     if not defined TB_TOP set "TB_TOP=%%M"
 )
 if defined TB_TOP (

@@ -175,7 +175,12 @@ function Get-TbTopModuleName {
     $clean = [regex]::Replace($raw, "/\*[\s\S]*?\*/", "")
     $clean = [regex]::Replace($clean, "//.*$", "", [System.Text.RegularExpressions.RegexOptions]::Multiline)
 
-    $m = [regex]::Match($clean, "\bmodule\s+([A-Za-z_][A-Za-z0-9_$]*)\b")
+    # Support SystemVerilog lifetime qualifiers and program testbench tops.
+    $m = [regex]::Match(
+        $clean,
+        "\b(?:module|program)\s+(?:(?:automatic|static)\s+)?([A-Za-z_][A-Za-z0-9_$]*)\b",
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
     if ($m.Success) {
         return $m.Groups[1].Value
     }
