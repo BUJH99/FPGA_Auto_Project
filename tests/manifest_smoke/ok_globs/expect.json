@@ -1,0 +1,24 @@
+{
+  "exit_code": 0,
+  "error_codes": [],
+  "warning_codes": [
+    "glob_no_match"
+  ],
+  "resolved": {
+    "src_files": [
+      "rtl/a.sv",
+      "rtl/z.v",
+      "shared/mid.sv"
+    ],
+    "tb_files": [
+      "verification/tb_a.v",
+      "verification/tb_b.sv"
+    ],
+    "inc_dirs": [
+      "headers"
+    ],
+    "xdc_files": [
+      "constraints/top.xdc"
+    ]
+  }
+}

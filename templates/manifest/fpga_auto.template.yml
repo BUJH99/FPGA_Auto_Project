@@ -1,0 +1,19 @@
+version: "0"
+project:
+  name: "__PROJECT_NAME__"
+hdl:
+  top: "Top"
+  src_globs:
+    - "src/**/*.v"
+    - "src/**/*.sv"
+  tb_globs:
+    - "tb/**/*.v"
+    - "tb/**/*.sv"
+  inc_globs:
+    - "include/**/*.vh"
+    - "include/**/*.svh"
+    - "inc/**/*.vh"
+    - "inc/**/*.svh"
+  xdc_globs:
+    - "constrs/**/*.xdc"
+  exclude_globs: []

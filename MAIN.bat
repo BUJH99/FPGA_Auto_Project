@@ -2,7 +2,8 @@
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 title FPGA Automation - MAIN
-set "SETUP_BAT=%CD%\templates\bat\setup_project.bat"
+set "SETUP_BAT=%CD%\templates\contexts\project_bootstrap\adapters\bat\project_create.bat"
+set "PROJECT_ROOT=%CD%\Project"
 
 :: Define ESC character for ANSI colors
 for /F %%a in ('echo prompt $E ^| cmd') do set "ESC=%%a"
@@ -25,22 +26,17 @@ echo  %Green%FPGA Automation MASTER Menu%Reset%
 echo %Cyan%===============================================================================%Reset%
 echo.
 
-:: Scan for project directories (exclude system ones, templates, etc)
+:: Scan only Project/* directories (manifest-only policy)
 set "PROJ_COUNT=0"
 echo Available Projects:
-for /d %%D in (*) do (
-    set "DIR_NAME=%%D"
-    REM Skip non-project directories
-    if /i not "!DIR_NAME!"=="templates" (
-        if /i not "!DIR_NAME!"==".git" (
-            if /i not "!DIR_NAME!"==".agent" (
-                if /i not "!DIR_NAME!"=="tools" (
-                    if exist "%%D\src" (
-                        set /a PROJ_COUNT+=1
-                        set "PROJ_!PROJ_COUNT!=%%D"
-                        echo   %White%[!PROJ_COUNT!] %%D%Reset%
-                    )
-                )
+if exist "%PROJECT_ROOT%\" (
+    for /d %%D in ("%PROJECT_ROOT%\*") do (
+        if exist "%%~fD\src" (
+            if exist "%%~fD\fpga_auto.yml" (
+                set /a PROJ_COUNT+=1
+                set "PROJ_PATH_!PROJ_COUNT!=%%~fD"
+                set "PROJ_LABEL_!PROJ_COUNT!=Project\%%~nxD"
+                echo   %White%[!PROJ_COUNT!] Project\%%~nxD%Reset%
             )
         )
     )
@@ -103,10 +99,13 @@ if "!PROJ_INPUT!"=="" goto :MASTER_MENU
 
 echo(!PROJ_INPUT!| findstr /r "^[0-9][0-9]*$" >nul
 if errorlevel 1 (
-    if exist "!PROJ_INPUT!" (
-        :: Direct name input matches folder?
-         set "TARGET_PROJECT=!PROJ_INPUT!"
-         goto :PROJECT_MENU
+    set "TARGET_PROJECT_ABS="
+    if exist "%PROJECT_ROOT%\!PROJ_INPUT!\fpga_auto.yml" (
+        for %%I in ("%PROJECT_ROOT%\!PROJ_INPUT!") do set "TARGET_PROJECT_ABS=%%~fI"
+    )
+    if defined TARGET_PROJECT_ABS if exist "!TARGET_PROJECT_ABS!\src" if exist "!TARGET_PROJECT_ABS!\fpga_auto.yml" (
+        call :SET_PROJECT_LABEL "!TARGET_PROJECT_ABS!"
+        goto :PROJECT_MENU
     )
     goto :MASTER_MENU
 )
@@ -114,30 +113,31 @@ if errorlevel 1 (
 if !PROJ_INPUT! lss 1 goto :MASTER_MENU
 if !PROJ_INPUT! gtr !PROJ_COUNT! goto :MASTER_MENU
 
-set "TARGET_PROJECT=!PROJ_%PROJ_INPUT%!"
+set "TARGET_PROJECT_ABS=!PROJ_PATH_%PROJ_INPUT%!"
+set "TARGET_PROJECT=!PROJ_LABEL_%PROJ_INPUT%!"
 
 :PROJECT_MENU
 mode con: cols=120 lines=40 >nul 2>&1
 cls
 echo %Green%Project: !TARGET_PROJECT!%Reset%
 
-set "CMD_1=code_schematic_draw.bat"
-set "CMD_2=code_verilog_hierarchy_browse.bat"
-set "CMD_3=code_fsm_draw.bat"
-set "CMD_4=code_presentation_generate.bat"
-set "CMD_5=sim_vivado_run.bat"
-set "CMD_6=sim_report_auto_run.bat"
-set "CMD_7=sim_iverilog_vcd_run.bat"
-set "CMD_8=sim_vcd_svg_run.bat"
-set "CMD_9=sim_vcd_wavedrom_run.bat"
-set "CMD_10=legacy_report_generate.bat"
-set "CMD_11=legacy_docs_generate.bat"
-set "CMD_12=vivado_ipi_gui_launch.bat"
-set "CMD_13=vivado_build_flow_run.bat"
-set "CMD_14=vivado_block_design_finalize.bat"
-set "CMD_15=vivado_ip_retarget_part.bat"
-set "CMD_16=vivado_fpga_program.bat"
-set "CMD_17=vivado_build_and_program_auto.bat"
+set "CMD_1=contexts\code_intel\adapters\bat\code_draw_schematic.bat"
+set "CMD_2=contexts\code_intel\adapters\bat\code_browse_hierarchy.bat"
+set "CMD_3=contexts\code_intel\adapters\bat\code_draw_fsm.bat"
+set "CMD_4=contexts\reporting\adapters\bat\report_generate_presentation.bat"
+set "CMD_5=contexts\simulation\adapters\bat\sim_run_vivado.bat"
+set "CMD_6=contexts\simulation\adapters\bat\sim_run_auto_report.bat"
+set "CMD_7=contexts\simulation\adapters\bat\sim_run_iverilog_vcd.bat"
+set "CMD_8=contexts\simulation\adapters\bat\sim_convert_vcd_svg.bat"
+set "CMD_9=contexts\simulation\adapters\bat\sim_convert_vcd_wavedrom.bat"
+set "CMD_10=contexts\reporting\adapters\bat\report_generate_legacy_html.bat"
+set "CMD_11=contexts\reporting\adapters\bat\report_generate_legacy_docs.bat"
+set "CMD_12=contexts\vivado\adapters\bat\vivado_launch_ipi_gui.bat"
+set "CMD_13=contexts\vivado\adapters\bat\vivado_run_build_flow.bat"
+set "CMD_14=contexts\vivado\adapters\bat\vivado_finalize_block_design.bat"
+set "CMD_15=contexts\vivado\adapters\bat\vivado_retarget_ip_part.bat"
+set "CMD_16=contexts\vivado\adapters\bat\vivado_program_fpga.bat"
+set "CMD_17=contexts\vivado\adapters\bat\vivado_run_build_and_program.bat"
 
 echo %Yellow%[ Code ^& Schematic Generation ]%Reset%
 echo   1. Draw Schematic [!CMD_1!]
@@ -195,8 +195,7 @@ if "!TARGET_NAME!"=="" (
     goto :PROJECT_MENU
 )
 
-set "TARGET_BAT=%CD%\templates\bat\!TARGET_NAME!"
-set "TARGET_PROJECT_ABS=%CD%\!TARGET_PROJECT!"
+set "TARGET_BAT=%CD%\templates\!TARGET_NAME!"
 
 if not exist "!TARGET_BAT!" (
     echo.
@@ -236,6 +235,16 @@ for %%F in (vivado_*.backup.log vivado_*.backup.jou vivado_*.backup.str *.backup
     if exist "%%F" move /y "%%F" "%ROUTE_LOG_DIR%\" >nul 2>&1
 )
 popd >nul 2>&1
+exit /b 0
+
+:SET_PROJECT_LABEL
+set "TARGET_PROJECT_ABS=%~f1"
+set "TARGET_PROJECT=%TARGET_PROJECT_ABS%"
+set "TMP_REL=!TARGET_PROJECT_ABS:%CD%\=!"
+if not "!TMP_REL!"=="!TARGET_PROJECT_ABS!" (
+    if "!TMP_REL:~0,1!"=="\" set "TMP_REL=!TMP_REL:~1!"
+    if not "!TMP_REL!"=="" set "TARGET_PROJECT=!TMP_REL!"
+)
 exit /b 0
 
 :EXIT

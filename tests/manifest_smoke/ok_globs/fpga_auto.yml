@@ -1,0 +1,21 @@
+version: "0"
+project:
+  name: "ok_globs"
+hdl:
+  top: "TOP"
+  src_globs:
+    - "rtl/**/*.sv"
+    - "shared/**/*.sv"
+    - "rtl/**/*.v"
+    - "rtl/**/*.sv"
+  tb_globs:
+    - "verification/**/*.sv"
+    - "verification/**/*.v"
+  inc_globs:
+    - "headers/**/*.svh"
+    - "headers/**/*.vh"
+    - "missing_inc/**/*.svh"
+  xdc_globs:
+    - "constraints/**/*.xdc"
+  exclude_globs:
+    - "**/ignore_*.*"

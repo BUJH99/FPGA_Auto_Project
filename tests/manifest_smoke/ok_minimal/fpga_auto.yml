@@ -1,0 +1,9 @@
+version: "0"
+project:
+  name: "ok_minimal"
+hdl:
+  top: "TOP"
+  src_globs:
+    - "src/**/*.sv"
+  tb_globs:
+    - "tb/**/*.sv"

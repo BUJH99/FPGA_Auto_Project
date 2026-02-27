@@ -1,0 +1,10 @@
+version: "0"
+project:
+  name: "fail_yaml"
+hdl:
+  top: "TOP"
+  src_globs:
+    - "src/**/*.sv"
+  tb_globs:
+    - "tb/**/*.sv"
+  broken: [

@@ -1,0 +1,9 @@
+version: "0"
+project:
+  name: "minimal_iverilog_smoke"
+hdl:
+  top: "top"
+  src_globs:
+    - "src/**/*.v"
+  tb_globs:
+    - "tb/tb_*.v"

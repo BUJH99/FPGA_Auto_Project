@@ -3,11 +3,13 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
+    "fast-glob": "^3.3.3",
     "netlistsvg": "^1.0.2",
     "tree-sitter": "^0.20.5",
     "tree-sitter-verilog": "^1.0.0",
     "web-tree-sitter": "^0.26.5",
-    "xml2js": "^0.6.2"
+    "xml2js": "^0.6.2",
+    "yaml": "^2.8.2"
   },
   "devDependencies": {
     "patch-package": "^8.0.1"

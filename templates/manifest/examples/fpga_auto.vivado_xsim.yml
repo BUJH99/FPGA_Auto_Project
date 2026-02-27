@@ -1,0 +1,27 @@
+version: "0"
+project:
+  name: "vivado_xsim_example"
+hdl:
+  top: "top"
+  src_globs:
+    - "src/**/*.sv"
+    - "src/**/*.v"
+  tb_globs:
+    - "tb/**/*.sv"
+    - "tb/**/*.v"
+  inc_globs:
+    - "include/**/*.svh"
+    - "include/**/*.vh"
+  xdc_globs:
+    - "constrs/**/*.xdc"
+  exclude_globs:
+    - "src/legacy/**"
+sim:
+  tool: "xsim"
+  timescale: "1ns/1ps"
+vivado:
+  part: "xc7z020clg400-1"
+  strategy: "Default"
+report:
+  enable: true
+  format: "html"

@@ -1,0 +1,7 @@
+version: "0"
+project:
+  name: "fail_missing"
+hdl:
+  top: "TOP"
+  src_globs:
+    - "src/**/*.sv"
