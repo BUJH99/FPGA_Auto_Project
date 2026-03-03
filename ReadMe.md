@@ -174,8 +174,9 @@ flowchart LR
    - **Usage**: Run the script and select the module containing your FSM logic.
 
 5. **Generate Presentation** (`contexts\reporting\adapters\bat\report_generate_presentation.bat`)
-   - Compiles module documentation blocks and SVGs into a structured presentation deck.
-   - **Usage**: Executes automatically using the pre-configured project context to output a PDF/PPTX or HTML deck.
+   - Converts module documentation blocks and SVG assets into a Slidev deck source (`slides.md`) plus static HTML build output.
+   - **Usage**: Runs with project context and emits `Presentation\slidev_<project>_<timestamp>.md`, `.json`, and `\index.html` build output directory.
+   - **Preview**: Open decks through `MAIN.bat -> 18. Open Slidev Viewer` (`contexts\reporting\adapters\bat\report_open_slidev_viewer.bat`) to ensure editor/source mapping works reliably.
 
 #### 🕹️ [ Simulation ]
 
@@ -267,6 +268,8 @@ Project/
 
 ### ❓ Troubleshooting
 - **`netlistsvg not found`**: Ensure you have successfully run `npm install` inside the `templates/` folder.
+- **`Slidev CLI not found`** during presentation generation: run `cd templates && npm install` to install `@slidev/cli`.
+- **Slidev `Show editor` pane is blank**: Use `MAIN.bat -> 18. Open Slidev Viewer` instead of running `npx slidev <Project\...\Presentation\*.md>` directly.
 - **`vivado not found`** or **`yosys not found`**: Make sure the binary paths for these applications are explicitly added to your system's Environment Variables (`PATH`).
 - **Missing File errors during sim**: Verify that the project correctly contains the `fpga_auto.yml` structure.
 - **Setup script failed**: Check setup logs under `templates\output\setup\toolkit_setup_*.log`.
@@ -434,8 +437,9 @@ flowchart LR
    - **사용 방법**: 스크립트를 실행하고 FSM 로직이 포함되어있는 구조 모듈을 선택합니다.
 
 5. **Generate Presentation** (`contexts\reporting\adapters\bat\report_generate_presentation.bat`)
-   - 코드에 작성된 주석 블록(`MODULE_INFO`)과 SVG 회로도를 발표(프레젠테이션)용 포맷 문서로 취합 생성합니다.
-   - **사용 방법**: 별도 과정 없이 실행하면 내부 프로젝트 문맥을 파악해 발표용 문서를 추출해냅니다.
+   - 코드 주석(`MODULE_INFO`)과 SVG 자산을 Slidev 발표 소스(`.md`)와 정적 HTML 산출물로 변환합니다.
+   - **사용 방법**: 실행 시 `Presentation\\slidev_<project>_<timestamp>.md`, `.json`, 그리고 `index.html`이 포함된 빌드 폴더를 생성합니다.
+   - **미리보기**: `MAIN.bat -> 18. Open Slidev Viewer` (`contexts\reporting\adapters\bat\report_open_slidev_viewer.bat`)로 열어야 편집기/소스 매핑이 안정적으로 동작합니다.
 
 #### 🕹️ [ Simulation (시뮬레이션 구동 및 파형 분석) ]
 
@@ -527,6 +531,8 @@ Project/
 
 ### ❓ 문제 해결 (Troubleshooting)
 - **`netlistsvg not found` 오류**: 초기 설정 단계인 `templates` 디렉토리 속에서 `npm install` 과정을 실행했는지 확인합니다.
+- **발표 생성 시 `Slidev CLI not found` 오류**: `cd templates && npm install`을 실행해 `@slidev/cli`를 설치하세요.
+- **Slidev `Show editor` 패널이 비어 보이는 경우**: `npx slidev <Project\...\Presentation\*.md>` 직접 실행 대신 `MAIN.bat -> 18. Open Slidev Viewer`를 사용하세요.
 - **`vivado is not recognized...` 혹은 `yosys` 오류**: 해당 소프트웨어들의 실행 경로(`.exe` 나 `bin` 폴더)가 Windows 시스템 환경 변수인 `PATH`에 명시적으로 연결되어 있는지 점검합니다.
 - **시뮬레이션에서 파일이 없다는 오류 발생 시**: 대상 프로젝트 폴더 내부에 올바른 모델링 파일 구조와 기준점인 `fpga_auto.yml` 이 존재하는지 확인하세요.
 - **초기 설정 BAT 실패 시**: `templates\output\setup\toolkit_setup_*.log` 로그를 확인하세요.

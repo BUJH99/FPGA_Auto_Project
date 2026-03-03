@@ -130,8 +130,10 @@ set "CMD_6=contexts\simulation\adapters\bat\sim_run_auto_report.bat"
 set "CMD_7=contexts\simulation\adapters\bat\sim_run_iverilog_vcd.bat"
 set "CMD_8=contexts\simulation\adapters\bat\sim_convert_vcd_svg.bat"
 set "CMD_9=contexts\simulation\adapters\bat\sim_convert_vcd_wavedrom.bat"
+set "CMD_19=contexts\simulation\adapters\bat\sim_create_dut_tb_scaffold.bat"
 set "CMD_10=contexts\reporting\adapters\bat\report_generate_legacy_html.bat"
 set "CMD_11=contexts\reporting\adapters\bat\report_generate_legacy_docs.bat"
+set "CMD_18=contexts\reporting\adapters\bat\report_open_slidev_viewer.bat"
 set "CMD_12=contexts\vivado\adapters\bat\vivado_launch_ipi_gui.bat"
 set "CMD_13=contexts\vivado\adapters\bat\vivado_run_build_flow.bat"
 set "CMD_14=contexts\vivado\adapters\bat\vivado_finalize_block_design.bat"
@@ -152,11 +154,13 @@ echo   6. Auto Sim + Report [!CMD_6!]
 echo   7. Run Iverilog VCD (Select TB) [!CMD_7!]
 echo   8. Generate SVG from VCD (Select) [!CMD_8!]
 echo   9. Generate WaveDrom from VCD (Select) [!CMD_9!]
+echo  19. Create DUT TB Scaffold [!CMD_19!]
 echo.
 
 echo %Yellow%[Report ^(Vivado HTML / Docs^) ]%Reset%
 echo  10. Report Generator [!CMD_10!]
 echo  11. Legacy Docs Generator [!CMD_11!]
+echo  18. Open Slidev Viewer [!CMD_18!]
 echo.
 
 echo %Yellow%[ Vivado Flow ^& FPGA ]%Reset%

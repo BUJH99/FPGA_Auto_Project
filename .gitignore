@@ -22,6 +22,9 @@
 /templates/output/**
 !/templates/output/.gitkeep
 
+# Do not keep Slidev runtime bridge entries
+/templates/node_modules/.cache/fpga_auto_slidev_runtime/**
+
 # Ignore common OS files (just in case they end up in templates)
 thumbs.db
 desktop.ini

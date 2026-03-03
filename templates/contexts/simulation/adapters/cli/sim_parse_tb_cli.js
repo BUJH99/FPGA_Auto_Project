@@ -185,6 +185,22 @@ function slugify(text) {
         .slice(0, 40) || 'case';
 }
 
+function parseTestNames(content) {
+    const names = [];
+    const seen = new Set();
+    const re = /\btest_name\s*==\s*"([^"]+)"/g;
+    let m;
+
+    while ((m = re.exec(content)) !== null) {
+        const name = String(m[1] || '').trim();
+        if (!name || seen.has(name)) continue;
+        seen.add(name);
+        names.push(name);
+    }
+
+    return names;
+}
+
 function parseRuntimeToNs(runtimeExpr, paramMap, defaultUnitNs) {
     if (!runtimeExpr) return NaN;
 
@@ -310,6 +326,7 @@ function estimateTimeAdvanceNs(codeLine, context) {
 const timescale = parseTimescale(tbContent);
 const paramMap = parseParamMap(lines);
 const extractedSignals = parseSignals(lines);
+const parsedTestNames = parseTestNames(tbContent);
 const preferredSignals = extractedSignals.filter((s) => /^([iow]|tb_)/i.test(s));
 const baseSignals = preferredSignals.length > 0 ? unique(preferredSignals) : extractedSignals;
 const clockPeriodRaw = Number.isFinite(paramMap.CLK_PERIOD) ? paramMap.CLK_PERIOD : 10;
@@ -601,6 +618,7 @@ const config = {
         tb_file: tbRelPath,
         tb_file_ext: tbExt,
         hdl_lang: hdlLang,
+        test_names: parsedTestNames,
         vcd_file: 'output/mcp_sim_wave.vcd',
         html_file: `output/view_wave_${path.basename(tbFile, path.extname(tbFile))}.html`
     },

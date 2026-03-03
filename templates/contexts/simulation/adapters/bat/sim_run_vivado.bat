@@ -291,10 +291,13 @@ if ([string]::IsNullOrWhiteSpace($tbTop)) {
     Write-Host ("[WARN] Using filename-based top fallback: {0}" -f $tbTop) -ForegroundColor DarkYellow
 }
 $selectedRel = $selectedEntry.FileDisplay
+$simMoreOptions = "-testplusarg TESTNAME=all"
 
 Write-Host ""
 Write-Host ("[INFO] Selected TB file : {0}" -f $selectedRel) -ForegroundColor Green
 Write-Host ("[INFO] Simulation top   : {0}" -f $tbTop) -ForegroundColor Green
+Write-Host ("[INFO] TB compile scope : {0}" -f $selectedTb.DirectoryName) -ForegroundColor Green
+Write-Host ("[INFO] xsim.more_options: {0}" -f $simMoreOptions) -ForegroundColor Green
 Write-Host "[INFO] Launching Vivado GUI and simulation..." -ForegroundColor Green
 Write-Host ("[INFO] Vivado workspace : {0}" -f $VivadoRoot) -ForegroundColor Green
 Write-Host ("[INFO] Vivado logs      : {0}" -f $SimLogDir) -ForegroundColor Green
@@ -302,7 +305,7 @@ Write-Host ("[INFO] Vivado logs      : {0}" -f $SimLogDir) -ForegroundColor Gree
 $vivadoArgs = @(
     "-mode", "gui",
     "-source", $TclScript,
-    "-tclargs", $ProjectRoot, $tbTop, $VivadoRoot, $ManifestSrcList, $ManifestTbList, $ManifestIncList,
+    "-tclargs", $ProjectRoot, $tbTop, $VivadoRoot, $ManifestSrcList, $ManifestTbList, $ManifestIncList, $selectedTb.FullName, $simMoreOptions,
     "-log", (Join-Path $SimLogDir "vivado_sim.log"),
     "-journal", (Join-Path $SimLogDir "vivado_sim.jou"),
     "-notrace"

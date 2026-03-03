@@ -1,0 +1,560 @@
+---
+title: FPGA Project Presentation
+theme: none
+transition: slide-left
+layout: default
+defaults:
+  layout: default
+aspectRatio: 16/9
+canvasWidth: 1280
+class: slidev-root
+---
+
+<style>
+@import "./theme_design1.css";
+</style>
+
+{% set cfg = presentation_config if presentation_config is mapping else {} %}
+{% set meta = cfg.get('meta', {}) if cfg.get('meta') is mapping else {} %}
+{% set cover = meta.get('cover', {}) if meta.get('cover') is mapping else {} %}
+{% set assets = cfg.get('assets', {}) if cfg.get('assets') is mapping else {} %}
+{% set modules = cfg.get('modules', []) if cfg.get('modules') is sequence else [] %}
+{% set datapath_slides = cfg.get('datapathSlides', []) if cfg.get('datapathSlides') is sequence else [] %}
+{% set constraints = cfg.get('constraints', []) if cfg.get('constraints') is sequence else [] %}
+{% set feature_items = cfg.get('featurePlaceholders', []) if cfg.get('featurePlaceholders') is sequence else [] %}
+{% set timing_notes = cfg.get('timingNotes', []) if cfg.get('timingNotes') is sequence else [] %}
+{% set conclusion_points = cfg.get('conclusionPoints', []) if cfg.get('conclusionPoints') is sequence else [] %}
+{% set conclusion_next = cfg.get('conclusionNextSteps', []) if cfg.get('conclusionNextSteps') is sequence else [] %}
+{% set report_data = cfg.get('reportData', {}) if cfg.get('reportData') is mapping else {} %}
+{% set power = report_data.get('power', {}) if report_data.get('power') is mapping else {} %}
+{% set timing = report_data.get('timing', {}) if report_data.get('timing') is mapping else {} %}
+{% set util = report_data.get('util', {}) if report_data.get('util') is mapping else {} %}
+{% set util_rows = util.get('utilResources', []) if util.get('utilResources') is sequence else [] %}
+{% set report_layout = cfg.get('reportLayout', {}) if cfg.get('reportLayout') is mapping else {} %}
+{% set util_rows_display = report_layout.get('utilRowsDisplay', util_rows[:8]) if report_layout.get('utilRowsDisplay') is sequence else util_rows[:8] %}
+{% set util_rows_omitted = report_layout.get('utilRowsOmitted', 0) if report_layout.get('utilRowsOmitted') is number else ((util_rows|length) - (util_rows_display|length)) %}
+{% set ns_count = namespace(module_count=0, tb_count=0) %}
+{% for item in modules %}
+{% if item is mapping and (item.get('slideKind', 'module')|string|lower) == 'testbench' %}
+{% set ns_count.tb_count = ns_count.tb_count + 1 %}
+{% elif item is mapping %}
+{% set ns_count.module_count = ns_count.module_count + 1 %}
+{% endif %}
+{% endfor %}
+{% set dp_count = datapath_slides|length %}
+{% set top_title = cover.get('titleLine1', 'FPGA Project') %}
+{% set top_title2 = cover.get('titleLine2', meta.get('projectTitle', 'Presentation')) %}
+{% set subtitle = cover.get('subtitle', meta.get('projectSubtitle', '')) %}
+{% set total_power = power.get('totalOnChipPowerW') if power.get('totalOnChipPowerW') is number else ((power.get('dynamicPowerW') if power.get('dynamicPowerW') is number else 0) + (power.get('staticPowerW') if power.get('staticPowerW') is number else 0)) %}
+{% set dyn_power = power.get('dynamicPowerW') if power.get('dynamicPowerW') is number else 0 %}
+{% set stc_power = power.get('staticPowerW') if power.get('staticPowerW') is number else 0 %}
+{% set dyn_pct = ((dyn_power * 100 / total_power) if total_power else 0) %}
+{% set stc_pct = ((stc_power * 100 / total_power) if total_power else 0) %}
+
+<div class="slide-frame cover-slide">
+  <div class="cover-container">
+    <div class="cover-top">
+      <div class="cover-logo-text">{{ meta.get('team', 'FPGA Team') | e }}</div>
+      <div class="cover-logo-circle"></div>
+    </div>
+    <div>
+      <h1 class="cover-title">{{ top_title | e }}<br />{{ top_title2 | e }}</h1>
+      <div class="cover-divider"></div>
+      <p class="cover-subtitle">{{ subtitle | e }}</p>
+    </div>
+    <div class="cover-footer">
+      <span>{{ cover.get('dateLabel', 'Date') | e }}: {{ meta.get('date', '-') | e }}</span>
+      <span>{{ cover.get('authorLabel', 'Author') | e }}: {{ meta.get('author', '-') | e }}</span>
+    </div>
+  </div>
+</div>
+
+---
+
+<div class="slide-frame">
+  <div class="chapter-number">02</div>
+  <header class="slide-header">
+    <span class="chapter-tag">목차</span>
+    <h1 class="slide-title">2. 발표자료 구조</h1>
+  </header>
+  <div class="slide-body">
+    <div class="col-flex">
+      <div class="card">
+        <ol>
+          <li>1. 표지</li>
+          <li>2. 목차</li>
+          <li>3. 개발환경 및 제약조건</li>
+          <li>4. 구현 요약</li>
+          <li>5. Top 블록 다이어그램</li>
+          <li>6. DataPath ({{ dp_count }}페이지)</li>
+          <li>7. CLK / RESET Tree</li>
+          <li>8. 모듈 상세 ({{ ns_count.module_count }}페이지)</li>
+          <li>9. 테스트벤치 ({{ ns_count.tb_count }}페이지)</li>
+          <li>10. 타이밍 다이어그램</li>
+          <li>11. 전력/타이밍/자원 리포트</li>
+          <li>12. 트러블 슈팅</li>
+          <li>13. 결론</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+---
+
+{% set env = cfg.get('developmentEnvironment', {}) if cfg.get('developmentEnvironment') is mapping else {} %}
+<div class="slide-frame">
+  <div class="chapter-number">03</div>
+  <header class="slide-header">
+    <span class="chapter-tag">Development &amp; Constraints</span>
+    <h1 class="slide-title">3. 개발환경 및 제약조건</h1>
+  </header>
+  <div class="slide-body">
+    <div class="col-flex">
+      <div class="grid-2">
+        <div class="card">
+          <h3>개발환경</h3>
+          <p>OS: {{ env.get('os', '-') | e }}</p>
+          <p>Tools: {{ (env.get('tools', [])|join(', ')) | e }}</p>
+          <p>Language: {{ (env.get('language', [])|join(', ')) | e }}</p>
+        </div>
+        <div class="card">
+          <h3>환경 메모</h3>
+          <p>보드/시뮬레이터/합성 옵션/제약파일 정책을 기록합니다.</p>
+        </div>
+      </div>
+      <div class="card accent">
+        <h3>제약조건</h3>
+        <p>주요 제약조건은 프로젝트 JSON(`constraints`)에 포함되어 있습니다.</p>
+        <p>{{ (constraints | join(' | ')) | e }}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+---
+
+<div class="slide-frame">
+  <div class="chapter-number">04</div>
+  <header class="slide-header">
+    <span class="chapter-tag">Implementation</span>
+    <h1 class="slide-title">4. 구현기능</h1>
+  </header>
+  <div class="slide-body">
+    <div class="col-flex">
+      <div class="card">
+        <h3>기능 작성 영역</h3>
+        {% for item in feature_items %}
+        {% if item is string %}
+        <p>{{ loop.index }}. {{ item | e }}</p>
+        {% else %}
+        <p>{{ loop.index }}. {{ item.get('title', 'Feature') | e }} - {{ item.get('description', '') | e }}</p>
+        {% endif %}
+        {% else %}
+        <p>1. [Input Needed] 기능 요약을 입력하세요.</p>
+        {% endfor %}
+      </div>
+      <div class="card accent">
+        <h3>메모</h3>
+        <p>핵심 설계 의도와 구현 포인트를 간단히 정리합니다.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+---
+
+<div class="slide-frame">
+  <div class="chapter-number">05</div>
+  <header class="slide-header">
+    <span class="chapter-tag">Architecture</span>
+    <h1 class="slide-title">5. Top Block Diagram</h1>
+  </header>
+  <div class="slide-body">
+    <div class="card media-card">
+      <div class="media-box media-box-fill">
+        {% if assets.get('topBlockSvg') %}
+        <img src="{{ assets.get('topBlockSvg') | e }}" alt="Top block diagram" />
+        {% else %}
+        <p class="empty-label">[Input Needed] assets.topBlockSvg</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% for dp in datapath_slides %}
+---
+
+<div class="slide-frame">
+  <div class="chapter-number">05</div>
+  <header class="slide-header">
+    <span class="chapter-tag">DataPath</span>
+    <h1 class="slide-title">5.{{ loop.index }} {{ dp.get('title', 'DataPath') | e }}</h1>
+  </header>
+  <div class="slide-body">
+    <div class="grid-2">
+      <div class="card">
+        <h3>Datapath Flow</h3>
+        <div class="flow-chain">
+          {% for step in (dp.get('flowSteps', []) if dp.get('flowSteps') is sequence else []) %}
+          <div class="flow-step-box">{{ step | e }}</div>
+          {% else %}
+          <div class="flow-step-box">[Input Needed] Datapath step</div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card media-card">
+        <h3>Topology Overlay</h3>
+        <div class="media-box media-box-fill">
+          {% if assets.get('topBlockSvg') %}
+          <img src="{{ assets.get('topBlockSvg') | e }}" alt="Datapath topology" />
+          {% else %}
+          <p class="empty-label">[Input Needed] assets.topBlockSvg</p>
+          {% endif %}
+        </div>
+        <p class="small-note">상단 SVG 위에 datapath 경로를 주석으로 표기합니다.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+---
+
+<div class="slide-frame">
+  <div class="chapter-number">05</div>
+  <header class="slide-header">
+    <span class="chapter-tag">Clock &amp; Reset</span>
+    <h1 class="slide-title">5.{{ dp_count + 1 }} CLK / RESET Tree</h1>
+  </header>
+  <div class="slide-body">
+    <div class="grid-2">
+      <div class="card">
+        <h3>CLK / RESET Flow</h3>
+        <div class="flow-split-grid">
+          <div>
+            <p class="flow-split-title">CLK</p>
+            <div class="flow-chain">
+              {% for step in (cfg.get('clockFlowSteps', []) if cfg.get('clockFlowSteps') is sequence else []) %}
+              <div class="flow-step-box">{{ step | e }}</div>
+              {% else %}
+              <div class="flow-step-box">[Input Needed] CLK step</div>
+              {% endfor %}
+            </div>
+          </div>
+          <div>
+            <p class="flow-split-title">RESET</p>
+            <div class="flow-chain">
+              {% for step in (cfg.get('resetFlowSteps', []) if cfg.get('resetFlowSteps') is sequence else []) %}
+              <div class="flow-step-box">{{ step | e }}</div>
+              {% else %}
+              <div class="flow-step-box">[Input Needed] RESET step</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card media-card">
+        <h3>Topology Overlay</h3>
+        <div class="media-box media-box-fill">
+          {% if assets.get('topBlockSvg') %}
+          <img src="{{ assets.get('topBlockSvg') | e }}" alt="Clock reset topology" />
+          {% else %}
+          <p class="empty-label">[Input Needed] assets.topBlockSvg</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% set ns = namespace(module_idx=0, tb_idx=0) %}
+{% for item in modules %}
+{% if item is mapping and (item.get('slideKind', 'module')|string|lower) == 'testbench' %}
+{% set ns.tb_idx = ns.tb_idx + 1 %}
+---
+
+<div class="slide-frame">
+  <div class="chapter-number">07</div>
+  <header class="slide-header">
+    <span class="chapter-tag">테스트벤치</span>
+    <h1 class="slide-title">9-{{ ns.tb_idx }} {{ item.get('testbenchSubtitle', item.get('linkedModule', 'TESTBENCH')) | e }}</h1>
+  </header>
+  <div class="slide-body">
+    <div class="col-flex">
+      <div class="card media-card">
+        <h3>Waveform</h3>
+        <div class="media-box media-box-fill">
+          {% if item.get('testbenchWaveform') %}
+          <img src="{{ item.get('testbenchWaveform') | e }}" alt="testbench waveform" />
+          {% else %}
+          <p class="empty-label">[Input Needed] testbench waveform</p>
+          {% endif %}
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Linked Module / Files</h3>
+          <p><strong>{{ item.get('linkedModule', '-') | e }}</strong></p>
+          <ul>
+            {% for tbf in (item.get('testbenchFiles', []) if item.get('testbenchFiles') is sequence else []) %}
+            <li>{{ tbf | e }}</li>
+            {% else %}
+            <li>[Input Needed] TB file</li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div class="card accent">
+          <h3>Verification Checklist</h3>
+          <ul>
+            {% for ck in (item.get('testbenchChecks', []) if item.get('testbenchChecks') is sequence else []) %}
+            <li>{{ ck | e }}</li>
+            {% else %}
+            <li>[Input Needed] Verification check</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% elif item is mapping %}
+{% set ns.module_idx = ns.module_idx + 1 %}
+---
+
+<div class="slide-frame">
+  <div class="chapter-number">06</div>
+  <header class="slide-header">
+    <span class="chapter-tag">Module Detail</span>
+    <h1 class="slide-title">8-{{ ns.module_idx }} {{ item.get('name', 'MODULE') | e }}</h1>
+  </header>
+  <div class="slide-body">
+    <div class="grid-2">
+      <div class="card">
+        <h3>Role / Summary</h3>
+        <p><strong>Role:</strong> {{ item.get('role', '-') | e }}</p>
+        <ul>
+          {% for line in (item.get('summary', []) if item.get('summary') is sequence else []) %}
+          <li>{{ line | e }}</li>
+          {% else %}
+          <li>[Input Needed] module summary</li>
+          {% endfor %}
+        </ul>
+        {% set child_modules = item.get('childModules', []) if item.get('childModules') is sequence else [] %}
+        {% if child_modules %}
+        <h3 style="margin-top:10px;">Child Modules</h3>
+        <div class="module-chip-grid">
+          {% for child in child_modules %}
+          <div class="module-chip">
+            {{ child.get('name', '-') | e }}
+            {% if child.get('role') %}
+            <br /><span class="small-note">{{ child.get('role') | e }}</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      <div class="card media-card">
+        <h3>Diagram</h3>
+        <div class="media-box media-box-fill">
+          {% if item.get('detailLayout', '')|string|lower == 'fsm-module' and item.get('fsmImage') %}
+          <img src="{{ item.get('fsmImage') | e }}" alt="fsm image" />
+          {% elif item.get('simpleDiagramSvg') %}
+          <img src="{{ item.get('simpleDiagramSvg') | e }}" alt="module diagram" />
+          {% else %}
+          <p class="empty-label">[Input Needed] module diagram asset</p>
+          {% endif %}
+        </div>
+        {% if item.get('stateDescription') %}
+        <h3 style="margin-top:10px;">FSM Notes</h3>
+        <ul>
+          {% for line in (item.get('stateDescription', []) if item.get('stateDescription') is sequence else []) %}
+          <li>{{ line | e }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+
+---
+
+<div class="slide-frame">
+  <div class="chapter-number">08</div>
+  <header class="slide-header">
+    <span class="chapter-tag">타이밍</span>
+    <h1 class="slide-title">10. 타이밍 다이어그램</h1>
+  </header>
+  <div class="slide-body">
+    <div class="grid-2">
+      <div class="card media-card">
+        <h3>Timing Diagram</h3>
+        <div class="media-box media-box-fill">
+          {% if assets.get('timingDiagramSvg') %}
+          <img src="{{ assets.get('timingDiagramSvg') | e }}" alt="timing diagram" />
+          {% else %}
+          <p class="empty-label">[Input Needed] assets.timingDiagramSvg</p>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card">
+        <h3>설명</h3>
+        <ul>
+          {% for note in timing_notes %}
+          <li>{{ note | e }}</li>
+          {% else %}
+          <li>[Input Needed] timing note</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+---
+
+<div class="slide-frame">
+  <div class="chapter-number">09</div>
+  <header class="slide-header">
+    <span class="chapter-tag">Report</span>
+    <h1 class="slide-title">11. Power / Timing / Utilization Report</h1>
+  </header>
+  <div class="slide-body report-slide">
+    <div class="card report-top">
+      <h3>Power Summary</h3>
+      <div class="report-kpi-grid">
+        <div class="report-kpi"><div class="label">Total Power</div><div class="value">{{ '%.3f' % (total_power if total_power else 0) }} W</div></div>
+        <div class="report-kpi"><div class="label">Dynamic</div><div class="value">{{ '%.3f' % dyn_power }} W</div></div>
+        <div class="report-kpi"><div class="label">Static</div><div class="value">{{ '%.3f' % stc_power }} W</div></div>
+        <div class="report-kpi"><div class="label">Confidence</div><div class="value">{{ power.get('confidenceLevel', '-') | e }}</div></div>
+      </div>
+      <div class="power-bars">
+        <div class="power-bar-row"><span>Dynamic</span><div class="power-bar-track"><div class="power-bar-fill" style="width: {{ '%.2f' % dyn_pct }}%;"></div></div><span>{{ '%.1f' % dyn_pct }}%</span></div>
+        <div class="power-bar-row"><span>Static</span><div class="power-bar-track"><div class="power-bar-fill" style="width: {{ '%.2f' % stc_pct }}%;"></div></div><span>{{ '%.1f' % stc_pct }}%</span></div>
+      </div>
+    </div>
+    <div class="report-bottom">
+      <div class="card">
+        <h3>Timing Summary</h3>
+        <table class="util-table">
+          <tbody>
+            <tr><th>WNS</th><td class="{{ 'status-ok' if (timing.get('wnsNs') is number and timing.get('wnsNs') >= 0) else 'status-bad' }}">{{ timing.get('wnsNs', '-') }}</td></tr>
+            <tr><th>TNS</th><td>{{ timing.get('tnsNs', '-') }}</td></tr>
+            <tr><th>WHS</th><td class="{{ 'status-ok' if (timing.get('whsNs') is number and timing.get('whsNs') >= 0) else 'status-bad' }}">{{ timing.get('whsNs', '-') }}</td></tr>
+            <tr><th>THS</th><td>{{ timing.get('thsNs', '-') }}</td></tr>
+            <tr><th>Fail EP</th><td class="{{ 'status-ok' if (timing.get('failingEndpoints') is number and timing.get('failingEndpoints') == 0) else 'status-bad' }}">{{ timing.get('failingEndpoints', '-') }}</td></tr>
+            <tr><th>Total EP</th><td>{{ timing.get('totalEndpoints', '-') }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h3>Utilization Summary</h3>
+        <table class="util-table">
+          <thead>
+            <tr><th>Resource</th><th>Used</th><th>Avail</th><th>%</th></tr>
+          </thead>
+          <tbody>
+            {% for row in util_rows_display %}
+            <tr>
+              <td>{{ row.get('label', '-') | e }}</td>
+              <td>{{ row.get('used', '-') }}</td>
+              <td>{{ row.get('available', '-') }}</td>
+              <td>{{ row.get('percent', '-') }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4">No utilization rows</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% if util_rows_omitted is number and util_rows_omitted > 0 %}
+        <p class="small-note">+{{ util_rows_omitted }} rows omitted for single-page fit</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+---
+
+{% set trouble_list = cfg.get('troubleShootings', []) if cfg.get('troubleShootings') is sequence else [] %}
+<div class="slide-frame">
+  <div class="chapter-number">10</div>
+  <header class="slide-header">
+    <span class="chapter-tag">트러블 슈팅</span>
+    <h1 class="slide-title">12. 트러블 슈팅</h1>
+  </header>
+  <div class="slide-body">
+    <div class="col-flex">
+      {% if trouble_list %}
+        {% for item in trouble_list %}
+        <div class="trouble-grid">
+          <div class="card">
+            <h3>{{ item.get('title', 'Trouble') | e }} - 문제 현상 / 원인</h3>
+            <ul>
+              {% for line in (item.get('issueItems', []) if item.get('issueItems') is sequence else []) %}
+              <li>{{ line | e }}</li>
+              {% else %}
+              <li>[Input Needed] issue</li>
+              {% endfor %}
+            </ul>
+          </div>
+          <div class="card accent">
+            <h3>{{ item.get('title', 'Trouble') | e }} - 조치 사항 / 개선 결과</h3>
+            <ul>
+              {% for line in (item.get('solutionItems', []) if item.get('solutionItems') is sequence else []) %}
+              <li>{{ line | e }}</li>
+              {% else %}
+              <li>[Input Needed] solution</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+      <div class="trouble-grid">
+        <div class="card"><h3>Trouble #1 - 문제 현상 / 원인</h3><ul><li>[Input Needed] 문제 현상/원인</li></ul></div>
+        <div class="card accent"><h3>Trouble #1 - 조치 사항 / 개선 결과</h3><ul><li>[Input Needed] 조치 사항/개선 결과</li></ul></div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+---
+
+<div class="slide-frame">
+  <div class="chapter-number">11</div>
+  <header class="slide-header">
+    <span class="chapter-tag">결론</span>
+    <h1 class="slide-title">13. 결론</h1>
+  </header>
+  <div class="slide-body">
+    <div class="grid-2">
+      <div class="card">
+        <h3>핵심 결론</h3>
+        <ul>
+          {% for line in conclusion_points %}
+          <li>{{ line | e }}</li>
+          {% else %}
+          <li>[Input Needed] conclusion point</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="card accent">
+        <h3>향후 계획</h3>
+        <ul>
+          {% for line in conclusion_next %}
+          <li>{{ line | e }}</li>
+          {% else %}
+          <li>[Input Needed] next step</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>

@@ -4,7 +4,6 @@ set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
 
 set "SYNC_BAT=%TEMPLATES_ROOT%\..\SyncProjectsToSourceProject.bat"
-set "PRESENTATION_TEMPLATE_DIR=%TEMPLATES_ROOT%\contexts\reporting\presentation"
 set "MANIFEST_TEMPLATE=%TEMPLATES_ROOT%\manifest\fpga_auto.template.yml"
 set "NO_PAUSE=0"
 set "SETUP_RC=0"
@@ -87,9 +86,7 @@ if not exist "%TARGET_PROJECT%\report_assets" mkdir "%TARGET_PROJECT%\report_ass
 if not exist "%TARGET_PROJECT%\src" mkdir "%TARGET_PROJECT%\src"
 if not exist "%TARGET_PROJECT%\skills" mkdir "%TARGET_PROJECT%\skills"
 if not exist "%TARGET_PROJECT%\tb" mkdir "%TARGET_PROJECT%\tb"
-if exist "%PRESENTATION_TEMPLATE_DIR%\" (
-    xcopy "%PRESENTATION_TEMPLATE_DIR%" "%TARGET_PROJECT%\Presentation\" /E /I /Y >nul
-)
+if not exist "%TARGET_PROJECT%\Presentation" mkdir "%TARGET_PROJECT%\Presentation"
 
 if not exist "%MANIFEST_TEMPLATE%" (
     echo [ERROR] Manifest template missing: %MANIFEST_TEMPLATE%
@@ -130,9 +127,7 @@ echo - report_assets
 echo - src
 echo - skills
 echo - tb
-if exist "%PRESENTATION_TEMPLATE_DIR%\" (
-    echo - Presentation
-)
+echo - Presentation
 echo - fpga_auto.yml
 echo ------------------------------------------------
 echo.

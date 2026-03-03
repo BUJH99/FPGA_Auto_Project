@@ -12,7 +12,7 @@ set script_dir [file dirname [info script]]
 set templates_root [file normalize [file join $script_dir ".." ".." ".." ".."]]
 
 if {[llength $argv] < 2} {
-    puts "\[ERROR\] Usage: vivado -mode gui -source run_vivado_simulation.tcl -tclargs <project_root> <tb_top> ?<vivado_root>? ?<src_list>? ?<tb_list>? ?<inc_list>?"
+    puts "\[ERROR\] Usage: vivado -mode gui -source run_vivado_simulation.tcl -tclargs <project_root> <tb_top> ?<vivado_root>? ?<src_list>? ?<tb_list>? ?<inc_list>? ?<selected_tb_file>? ?<sim_more_options>?"
     return -code error
 }
 
@@ -26,6 +26,8 @@ if {[llength $argv] >= 3} {
 set src_list_file ""
 set tb_list_file ""
 set inc_list_file ""
+set selected_tb_file ""
+set sim_more_options ""
 if {[llength $argv] >= 4} {
     set a3 [string trim [lindex $argv 3]]
     if {$a3 ne ""} { set src_list_file [file normalize $a3] }
@@ -37,6 +39,14 @@ if {[llength $argv] >= 5} {
 if {[llength $argv] >= 6} {
     set a5 [string trim [lindex $argv 5]]
     if {$a5 ne ""} { set inc_list_file [file normalize $a5] }
+}
+if {[llength $argv] >= 7} {
+    set a6 [string trim [lindex $argv 6]]
+    if {$a6 ne ""} { set selected_tb_file [file normalize $a6] }
+}
+if {[llength $argv] >= 8} {
+    set a7 [string trim [lindex $argv 7]]
+    if {$a7 ne ""} { set sim_more_options $a7 }
 }
 file mkdir $vivado_root
 
@@ -73,6 +83,16 @@ proc read_manifest_list {list_file project_root} {
     return [lsort -unique $out]
 }
 
+proc is_subpath {parent child} {
+    set p [string map {"\\" "/"} [file normalize $parent]]
+    set c [string map {"\\" "/"} [file normalize $child]]
+    set p [string trimright $p "/"]
+    if {[string equal -nocase $p $c]} {
+        return 1
+    }
+    return [string match -nocase "${p}/*" $c]
+}
+
 set src_files [read_manifest_list $src_list_file $project_root]
 set tb_files [read_manifest_list $tb_list_file $project_root]
 if {$src_list_file eq "" || [llength $src_files] == 0} {
@@ -82,6 +102,23 @@ if {$src_list_file eq "" || [llength $src_files] == 0} {
 if {$tb_list_file eq "" || [llength $tb_files] == 0} {
     puts "\[ERROR\] Manifest testbench list is required and cannot be empty."
     return -code error
+}
+
+set selected_tb_dir ""
+if {$selected_tb_file ne "" && [file exists $selected_tb_file]} {
+    set selected_tb_dir [file normalize [file dirname $selected_tb_file]]
+    set scoped_tb_files {}
+    foreach tbf $tb_files {
+        if {[is_subpath $selected_tb_dir $tbf]} {
+            lappend scoped_tb_files $tbf
+        }
+    }
+    if {[llength $scoped_tb_files] > 0} {
+        puts "\[INFO\] Applying TB scope filter by selected file folder: $selected_tb_dir"
+        set tb_files [lsort -unique $scoped_tb_files]
+    } else {
+        puts "\[WARNING\] TB scope filter produced empty set; using full TB manifest list."
+    }
 }
 
 set include_dirs {}
@@ -95,6 +132,18 @@ if {$inc_list_file ne "" && [file exists $inc_list_file] && [file size $inc_list
     }
 }
 set include_dirs [lsort -unique $include_dirs]
+
+if {$selected_tb_dir ne ""} {
+    set tb_root [file normalize [file join $project_root "tb"]]
+    set scoped_inc_dirs {}
+    foreach idir $include_dirs {
+        if {![is_subpath $tb_root $idir] || [is_subpath $selected_tb_dir $idir]} {
+            lappend scoped_inc_dirs $idir
+        }
+    }
+    lappend scoped_inc_dirs $selected_tb_dir
+    set include_dirs [lsort -unique $scoped_inc_dirs]
+}
 
 if {[llength $src_files] == 0} {
     puts "\[ERROR\] No HDL source files resolved from manifest."
@@ -143,6 +192,14 @@ puts "\[INFO\] Setting simulation top: $sim_top"
 if {[catch {set_property top $sim_top [get_filesets sim_1]} set_top_err]} {
     puts "\[ERROR\] Failed to set simulation top '$sim_top': $set_top_err"
     return -code error
+}
+
+if {$sim_more_options ne ""} {
+    puts "\[INFO\] Setting xsim.more_options: $sim_more_options"
+    if {[catch {set_property -name XSIM.SIMULATE.XSIM.MORE_OPTIONS -value $sim_more_options -objects [get_filesets sim_1]} sim_opt_err]} {
+        puts "\[ERROR\] Failed to set xsim.more_options: $sim_opt_err"
+        return -code error
+    }
 }
 
 update_compile_order -fileset sim_1

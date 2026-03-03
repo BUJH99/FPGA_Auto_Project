@@ -1,9 +1,9 @@
 ﻿#!/usr/bin/env python3
 """
-Generate presentation HTML/JSON from Verilog sources using Jinja2.
+Generate Slidev presentation Markdown/JSON from Verilog sources using Jinja2.
 
 This tool scans src/*.v, src/*.sv and builds a presentation_config object
-for templates/Presentation/Presentation_templates.html.
+for templates/contexts/reporting/slidedev/presentation_design1.md.j2.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import platform
 import re
 import shutil
 import sys
+from copy import deepcopy
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -91,6 +92,69 @@ IDENTIFIER_KEYWORDS: Set[str] = {
 TEXT_DECODINGS: Tuple[str, ...] = ("utf-8-sig", "utf-8", "cp949", "euc-kr")
 IMAGE_EXTENSIONS: Tuple[str, ...] = (".svg", ".png", ".jpg", ".jpeg")
 
+DEFAULT_POWER_REPORT: Dict[str, object] = {
+    "totalOnChipPowerW": 0.421,
+    "dynamicPowerW": 0.176,
+    "staticPowerW": 0.245,
+    "clocksW": 0.013,
+    "signalsW": 0.004,
+    "logicW": 0.003,
+    "bramW": 0.001,
+    "pllW": 0.150,
+    "ioW": 0.005,
+    "junctionTempC": 25.5,
+    "effectiveTjaCPerW": None,
+    "maxAmbientC": None,
+    "thermalMarginC": 59.5,
+    "confidenceLevel": "Medium",
+}
+
+DEFAULT_TIMING_REPORT: Dict[str, object] = {
+    "wnsNs": 3.028,
+    "tnsNs": 0.0,
+    "whsNs": 0.066,
+    "thsNs": 0.0,
+    "wpwsNs": 0.820,
+    "tpwsNs": 0.0,
+    "failingEndpoints": 0,
+    "totalEndpoints": 128,
+}
+
+DEFAULT_UTIL_REPORT: Dict[str, object] = {
+    "lutUsed": 2514,
+    "lutAvailable": 364200,
+    "lutPct": 0.69,
+    "ffUsed": 1188,
+    "ffAvailable": 728400,
+    "ffPct": 0.16,
+    "ioUsed": 37,
+    "ioAvailable": 850,
+    "ioPct": 4.35,
+    "bufgUsed": 1,
+    "bufgAvailable": 32,
+    "bufgPct": 3.13,
+    "utilResources": [
+        {"label": "Slice LUTs", "used": 757, "available": 20800, "percent": 3.64},
+        {"label": "LUT as Logic", "used": 757, "available": 20800, "percent": 3.64},
+        {"label": "LUT as Memory", "used": 0, "available": 9600, "percent": 0.0},
+        {"label": "Slice Registers", "used": 749, "available": 41600, "percent": 1.8},
+        {"label": "Register as Flip Flop", "used": 743, "available": 41600, "percent": 1.79},
+        {"label": "Register as Latch", "used": 6, "available": 41600, "percent": 0.01},
+        {"label": "F7 Muxes", "used": 38, "available": 16300, "percent": 0.23},
+        {"label": "F8 Muxes", "used": 5, "available": 8150, "percent": 0.06},
+        {"label": "Block RAM Tile", "used": 0, "available": 50, "percent": 0.0},
+        {"label": "DSPs", "used": 0, "available": 90, "percent": 0.0},
+        {"label": "Bonded IOB", "used": 23, "available": 106, "percent": 21.7},
+        {"label": "BUFGCTRL", "used": 1, "available": 32, "percent": 3.13},
+        {"label": "MMCME2_ADV", "used": 0, "available": 5, "percent": 0.0},
+        {"label": "PLLE2_ADV", "used": 0, "available": 5, "percent": 0.0},
+    ],
+    "sliceLuts": 2514,
+    "sliceRegisters": 1188,
+    "bondedIob": 37,
+    "bufg": 1,
+}
+
 
 @dataclass
 class InstanceInfo:
@@ -124,6 +188,247 @@ class ModuleInfo:
             seen.add(child)
             out.append(child)
         return out
+
+
+@dataclass(frozen=True)
+class SlideCanvasPolicy:
+    layout: str = "default"
+    defaults_layout: str = "default"
+    full_bleed: bool = True
+    aspect_ratio: str = "16/9"
+    canvas_width: int = 1280
+
+
+class SlidevDeckNormalizer:
+    _TOP_KEY_PATTERN = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*)\s*:")
+    _NESTED_LAYOUT_PATTERN = re.compile(r"^[ \t]+layout\s*:")
+    _NESTED_KEY_PATTERN = re.compile(r"^([ \t]+)[A-Za-z_][A-Za-z0-9_-]*\s*:")
+
+    def __init__(self, policy: SlideCanvasPolicy) -> None:
+        self._policy = policy
+
+    def normalize_frontmatter(self, markdown_text: str) -> str:
+        split = self._split_frontmatter(markdown_text)
+        if split is None:
+            return markdown_text
+
+        bom, frontmatter_lines, body_lines, newline = split
+        if not self._policy.full_bleed:
+            return markdown_text
+
+        normalized_frontmatter_lines = self._normalize_frontmatter_lines(frontmatter_lines, newline)
+        if normalized_frontmatter_lines == frontmatter_lines:
+            return markdown_text
+
+        return (
+            f"{bom}---{newline}"
+            f"{''.join(normalized_frontmatter_lines)}"
+            f"---{newline}"
+            f"{''.join(body_lines)}"
+        )
+
+    def normalize_file(self, md_path: Path) -> bool:
+        updated, _skipped = self._normalize_file_with_status(md_path)
+        return updated
+
+    def normalize_directory(self, presentation_dir: Path, pattern: str = "slidev_*.md") -> Tuple[int, int]:
+        if not presentation_dir.exists() or not presentation_dir.is_dir():
+            return 0, 0
+
+        updated_count = 0
+        skipped_count = 0
+        for md_path in sorted(presentation_dir.glob(pattern)):
+            if not md_path.is_file():
+                continue
+            updated, skipped = self._normalize_file_with_status(md_path)
+            if updated:
+                updated_count += 1
+            if skipped:
+                skipped_count += 1
+        return updated_count, skipped_count
+
+    def _normalize_file_with_status(self, md_path: Path) -> Tuple[bool, bool]:
+        try:
+            original = read_text_autodetect(md_path)
+        except Exception as exc:
+            print(f"[WARN] Skipped markdown normalize (read fail): {md_path} ({exc})")
+            return False, True
+
+        if self._split_frontmatter(original) is None:
+            print(f"[WARN] Skipped markdown normalize (invalid frontmatter): {md_path}")
+            return False, True
+
+        normalized = self.normalize_frontmatter(original)
+        if normalized == original:
+            return False, False
+
+        try:
+            md_path.write_text(normalized, encoding="utf-8")
+        except Exception as exc:
+            print(f"[WARN] Skipped markdown normalize (write fail): {md_path} ({exc})")
+            return False, True
+        return True, False
+
+    def _split_frontmatter(
+        self,
+        markdown_text: str,
+    ) -> Optional[Tuple[str, List[str], List[str], str]]:
+        lines = markdown_text.splitlines(keepends=True)
+        if not lines:
+            return None
+
+        newline = "\r\n" if "\r\n" in markdown_text else "\n"
+        bom = ""
+        first_line = lines[0]
+        if first_line.startswith("\ufeff"):
+            bom = "\ufeff"
+            first_line = first_line[1:]
+            lines[0] = first_line
+
+        if first_line.strip() != "---":
+            return None
+
+        end_index = -1
+        for idx in range(1, len(lines)):
+            if lines[idx].strip() == "---":
+                end_index = idx
+                break
+        if end_index < 0:
+            return None
+
+        return bom, lines[1:end_index], lines[end_index + 1 :], newline
+
+    def _normalize_frontmatter_lines(self, lines: List[str], newline: str) -> List[str]:
+        entries = self._split_top_level_entries(lines)
+        normalized_entries: List[Tuple[Optional[str], List[str]]] = []
+        has_layout = False
+        has_defaults = False
+        has_aspect_ratio = False
+        has_canvas_width = False
+
+        for key, block in entries:
+            if key == "layout":
+                has_layout = True
+                normalized_entries.append(("layout", [f"layout: {self._policy.layout}{newline}"]))
+                continue
+
+            if key == "defaults":
+                has_defaults = True
+                normalized_entries.append(("defaults", self._normalize_defaults_block(block, newline)))
+                continue
+
+            if key == "aspectRatio":
+                has_aspect_ratio = True
+                normalized_entries.append(("aspectRatio", [f"aspectRatio: {self._policy.aspect_ratio}{newline}"]))
+                continue
+
+            if key == "canvasWidth":
+                has_canvas_width = True
+                normalized_entries.append(("canvasWidth", [f"canvasWidth: {self._policy.canvas_width}{newline}"]))
+                continue
+
+            normalized_entries.append((key, block))
+
+        if not has_layout:
+            insert_index = self._find_layout_insert_index(normalized_entries)
+            normalized_entries.insert(insert_index, ("layout", [f"layout: {self._policy.layout}{newline}"]))
+
+        if not has_defaults:
+            layout_index = self._find_key_index(normalized_entries, "layout")
+            defaults_insert_index = (layout_index + 1) if layout_index >= 0 else 0
+            defaults_block = [
+                f"defaults:{newline}",
+                f"  layout: {self._policy.defaults_layout}{newline}",
+            ]
+            normalized_entries.insert(defaults_insert_index, ("defaults", defaults_block))
+
+        if not has_aspect_ratio:
+            defaults_index = self._find_key_index(normalized_entries, "defaults")
+            aspect_insert_index = (defaults_index + 1) if defaults_index >= 0 else len(normalized_entries)
+            normalized_entries.insert(
+                aspect_insert_index,
+                ("aspectRatio", [f"aspectRatio: {self._policy.aspect_ratio}{newline}"]),
+            )
+
+        if not has_canvas_width:
+            aspect_index = self._find_key_index(normalized_entries, "aspectRatio")
+            canvas_insert_index = (aspect_index + 1) if aspect_index >= 0 else len(normalized_entries)
+            normalized_entries.insert(
+                canvas_insert_index,
+                ("canvasWidth", [f"canvasWidth: {self._policy.canvas_width}{newline}"]),
+            )
+
+        flattened: List[str] = []
+        for _key, block in normalized_entries:
+            flattened.extend(block)
+        return flattened
+
+    def _split_top_level_entries(self, lines: Sequence[str]) -> List[Tuple[Optional[str], List[str]]]:
+        entries: List[Tuple[Optional[str], List[str]]] = []
+        idx = 0
+        while idx < len(lines):
+            line = lines[idx]
+            if line.startswith((" ", "\t")):
+                entries.append((None, [line]))
+                idx += 1
+                continue
+
+            key_match = self._TOP_KEY_PATTERN.match(line)
+            if key_match is None:
+                entries.append((None, [line]))
+                idx += 1
+                continue
+
+            key = key_match.group(1)
+            block = [line]
+            idx += 1
+            while idx < len(lines):
+                nested_line = lines[idx]
+                if nested_line.startswith((" ", "\t")):
+                    block.append(nested_line)
+                    idx += 1
+                    continue
+
+                next_key_match = self._TOP_KEY_PATTERN.match(nested_line)
+                if next_key_match is not None:
+                    break
+
+                block.append(nested_line)
+                idx += 1
+            entries.append((key, block))
+        return entries
+
+    def _normalize_defaults_block(self, block: Sequence[str], newline: str) -> List[str]:
+        remaining_lines = [
+            line
+            for line in block[1:]
+            if self._NESTED_LAYOUT_PATTERN.match(line) is None
+        ]
+        indent = "  "
+        for line in remaining_lines:
+            indent_match = self._NESTED_KEY_PATTERN.match(line)
+            if indent_match is not None:
+                indent = indent_match.group(1)
+                break
+
+        normalized = [f"defaults:{newline}", f"{indent}layout: {self._policy.defaults_layout}{newline}"]
+        normalized.extend(remaining_lines)
+        return normalized
+
+    @staticmethod
+    def _find_key_index(entries: Sequence[Tuple[Optional[str], List[str]]], key_name: str) -> int:
+        for idx, (key, _block) in enumerate(entries):
+            if key == key_name:
+                return idx
+        return -1
+
+    @staticmethod
+    def _find_layout_insert_index(entries: Sequence[Tuple[Optional[str], List[str]]]) -> int:
+        for idx, (key, _block) in enumerate(entries):
+            if key in {"title", "theme", "transition"}:
+                continue
+            return idx
+        return len(entries)
 
 
 def replace_non_newline_with_space(text: str) -> str:
@@ -2166,6 +2471,17 @@ def parse_report_file(path: Optional[Path], parser) -> Dict[str, object]:
         return {}
 
 
+def with_default_report_data(parsed: Dict[str, object], defaults: Dict[str, object]) -> Dict[str, object]:
+    if not isinstance(parsed, dict) or not parsed:
+        return deepcopy(defaults)
+    merged = deepcopy(defaults)
+    for key, value in parsed.items():
+        if value is None:
+            continue
+        merged[key] = value
+    return merged
+
+
 def load_hdl_index(project_root: Path) -> Dict[str, object]:
     candidates = [
         project_root / "output" / "cache" / "hdl_index.json",
@@ -2253,9 +2569,23 @@ def build_presentation_config(
         if util_report_path
         else ""
     )
-    parsed_power_report = parse_report_file(power_report_path, parse_power_report_text)
-    parsed_timing_report = parse_report_file(timing_report_path, parse_timing_report_text)
-    parsed_util_report = parse_report_file(util_report_path, parse_util_report_text)
+    parsed_power_report = with_default_report_data(
+        parse_report_file(power_report_path, parse_power_report_text),
+        DEFAULT_POWER_REPORT,
+    )
+    parsed_timing_report = with_default_report_data(
+        parse_report_file(timing_report_path, parse_timing_report_text),
+        DEFAULT_TIMING_REPORT,
+    )
+    parsed_util_report = with_default_report_data(
+        parse_report_file(util_report_path, parse_util_report_text),
+        DEFAULT_UTIL_REPORT,
+    )
+    util_rows_raw = parsed_util_report.get("utilResources")
+    util_rows = util_rows_raw if isinstance(util_rows_raw, list) else []
+    util_rows_max = 8
+    util_rows_display = [deepcopy(row) for row in util_rows[:util_rows_max] if isinstance(row, dict)]
+    util_rows_omitted = max(0, len(util_rows) - len(util_rows_display))
     hdl_index = hdl_index or {}
     hdl_summary = hdl_index.get("summary") if isinstance(hdl_index.get("summary"), dict) else {}
     hdl_decls = hdl_index.get("declarations") if isinstance(hdl_index.get("declarations"), dict) else {}
@@ -2413,6 +2743,11 @@ def build_presentation_config(
             "timing": parsed_timing_report,
             "util": parsed_util_report,
         },
+        "reportLayout": {
+            "utilRowsMax": util_rows_max,
+            "utilRowsDisplay": util_rows_display,
+            "utilRowsOmitted": util_rows_omitted,
+        },
         "reportPreview": {
             "enableOnLoadFail": True,
             "power": parsed_power_report,
@@ -2423,21 +2758,26 @@ def build_presentation_config(
     }
 
 
-def resolve_paths(args: argparse.Namespace) -> Tuple[Path, Path, Path, Path]:
+def resolve_paths(args: argparse.Namespace) -> Tuple[Path, Path, Path, Path, Path]:
     script_dir = Path(__file__).resolve().parent
     project_root = Path(args.project).resolve()
-    default_template = (script_dir.parent / "Presentation" / "Presentation_templates.html").resolve()
+    default_template = (script_dir.parent.parent / "slidedev" / "presentation_design1.md.j2").resolve()
     template_path = Path(args.template).resolve() if args.template else default_template
 
     presentation_dir = project_root / "Presentation"
     presentation_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    default_prefix = f"presentation_{project_root.name}_{timestamp}"
-    output_html = Path(args.output_html).resolve() if args.output_html else (presentation_dir / f"{default_prefix}.html")
+    default_prefix = f"slidev_{project_root.name}_{timestamp}"
+    output_md = (
+        Path(args.output_md).resolve()
+        if args.output_md
+        else (Path(args.output_html).resolve() if args.output_html else (presentation_dir / f"{default_prefix}.md"))
+    )
     output_json = Path(args.output_json).resolve() if args.output_json else (presentation_dir / f"{default_prefix}.json")
+    output_dir = Path(args.output_dir).resolve() if args.output_dir else (presentation_dir / default_prefix)
 
-    return project_root, template_path, output_html, output_json
+    return project_root, template_path, output_md, output_json, output_dir
 
 
 def clean_presentation_assets(presentation_dir: Path) -> None:
@@ -2458,26 +2798,51 @@ def validate_environment(project_root: Path, template_path: Path) -> Path:
     return project_root
 
 
-def render_html(template_path: Path, output_html: Path, presentation_config: dict) -> None:
-    env = Environment(loader=FileSystemLoader(str(template_path.parent)), autoescape=False)
+def render_markdown(template_path: Path, output_md: Path, presentation_config: dict) -> None:
+    # Slidev markdown with raw HTML blocks is sensitive to blank lines produced by
+    # Jinja control statements. Trim/lstrip keeps generated slides parse-stable.
+    env = Environment(
+        loader=FileSystemLoader(str(template_path.parent)),
+        autoescape=False,
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
     template = env.get_template(template_path.name)
-    html = template.render(presentation_config=presentation_config)
-    output_html.parent.mkdir(parents=True, exist_ok=True)
-    output_html.write_text(html, encoding="utf-8")
+    markdown_text = template.render(presentation_config=presentation_config)
+    output_md.parent.mkdir(parents=True, exist_ok=True)
+    output_md.write_text(markdown_text, encoding="utf-8")
+
+
+def copy_slidev_theme_assets(template_path: Path, output_md: Path) -> None:
+    theme_css_src = template_path.parent / "theme_design1.css"
+    if not theme_css_src.exists():
+        raise RuntimeError(f"Slidev theme CSS not found: {theme_css_src}")
+    theme_css_dst = output_md.parent / "theme_design1.css"
+    shutil.copyfile(theme_css_src, theme_css_dst)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate presentation HTML/JSON from Verilog source",
+        description="Generate Slidev presentation Markdown/JSON from Verilog source",
     )
     parser.add_argument("--project", required=True, help="Target project directory")
     parser.add_argument("--manifest-json", required=True, help="Resolved manifest JSON path from _manifest_context")
     parser.add_argument("--top", default="", help="Top module name (optional)")
     parser.add_argument("--project-title", default="", help="Cover project title (optional)")
     parser.add_argument("--author", default="", help="Cover author name (optional)")
-    parser.add_argument("--template", default="", help="Template HTML path (optional)")
-    parser.add_argument("--output-html", default="", help="Output HTML path (optional)")
+    parser.add_argument("--template", default="", help="Template Markdown(Jinja2) path (optional)")
+    parser.add_argument(
+        "--output-md",
+        default="",
+        help="Output Slidev Markdown path (optional)",
+    )
+    parser.add_argument(
+        "--output-html",
+        default="",
+        help="Deprecated alias of --output-md (for compatibility)",
+    )
     parser.add_argument("--output-json", default="", help="Output JSON path (optional)")
+    parser.add_argument("--output-dir", default="", help="Slidev build output directory (optional)")
     parser.add_argument(
         "--clean-assets",
         action="store_true",
@@ -2505,15 +2870,15 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
-        project_root, template_path, output_html, output_json = resolve_paths(args)
+        project_root, template_path, output_md, output_json, output_dir = resolve_paths(args)
         validate_environment(project_root, template_path)
         manifest_json = Path(args.manifest_json).expanduser().resolve()
         manifest_ctx = load_manifest_snapshot(manifest_json, project_root)
         if args.clean_assets:
-            clean_presentation_assets(output_html.parent)
+            clean_presentation_assets(output_md.parent)
 
         print("==============================================================================")
-        print(" Presentation Generator (Python + Jinja2)")
+        print(" Slidev Presentation Source Generator (Python + Jinja2)")
         print("==============================================================================")
         print(f"[INFO] Project: {project_root}")
         print(f"[INFO] Template: {template_path}")
@@ -2616,25 +2981,30 @@ def main() -> int:
             tb_map=tb_map,
             manual_tb_map=manual_tb_map,
             top_testbench_pages=top_testbench_pages,
-            presentation_dir=output_html.parent,
+            presentation_dir=output_md.parent,
             image_index=image_index,
             project_display_name=project_display_name,
             author_name=author_name,
             hdl_index=hdl_index,
         )
-        materialize_presentation_assets(presentation_config, project_root, output_html.parent)
+        materialize_presentation_assets(presentation_config, project_root, output_md.parent)
 
         output_json.parent.mkdir(parents=True, exist_ok=True)
         output_json.write_text(
             json.dumps(presentation_config, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        render_html(template_path, output_html, presentation_config)
+        render_markdown(template_path, output_md, presentation_config)
+        copy_slidev_theme_assets(template_path, output_md)
+        deck_normalizer = SlidevDeckNormalizer(policy=SlideCanvasPolicy())
+        normalized_updated, normalized_skipped = deck_normalizer.normalize_directory(output_md.parent)
+        print(f"[INFO] Normalized slidev markdowns: updated={normalized_updated} skipped={normalized_skipped}")
 
         print("------------------------------------------------------------------------------")
-        print("[SUCCESS] Presentation generated.")
-        print(f"[INFO] HTML: {output_html}")
+        print("[SUCCESS] Slidev source generated.")
+        print(f"[INFO] Markdown: {output_md}")
         print(f"[INFO] JSON: {output_json}")
+        print(f"[INFO] Build output dir (for slidev build): {output_dir}")
         return 0
     except KeyboardInterrupt:
         print("\n[ERROR] Interrupted by user.")

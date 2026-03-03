@@ -3,6 +3,8 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
+    "@slidev/cli": "52.13.0",
+    "@slidev/theme-default": "0.25.0",
     "fast-glob": "^3.3.3",
     "netlistsvg": "^1.0.2",
     "tree-sitter": "^0.20.5",
