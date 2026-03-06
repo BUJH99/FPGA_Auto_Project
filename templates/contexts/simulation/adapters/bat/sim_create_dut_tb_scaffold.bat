@@ -4,6 +4,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 set "SELF_PATH=%~f0"
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "USER_CANCEL_RC=99"
 
 set "TARGET_PROJECT="
 set "DUT_NAME="
@@ -94,6 +95,7 @@ set "SCRIPT_RC=%ERRORLEVEL%"
 
 del "%PS_FILE%" >nul 2>nul
 
+if "%SCRIPT_RC%"=="%USER_CANCEL_RC%" exit /b %USER_CANCEL_RC%
 if "%NO_PAUSE%"=="0" pause
 exit /b %SCRIPT_RC%
 
@@ -995,7 +997,7 @@ if ($applyAllMode) {
         }
 
         if ($raw -match '^(?i)q$') {
-            exit 1
+            exit 99
         }
 
         $tokens = @($raw -split '[,\s]+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })

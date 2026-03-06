@@ -2,6 +2,7 @@
 setlocal EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
@@ -22,9 +23,9 @@ if exist "%MANIFEST_CTX%" (
     )
 )
 
-echo [LEGACY] legacy_docs_generate.bat uses the old documentation generator.
-echo [LEGACY] One Source report automation scripts (10~13) were removed.
-echo [LEGACY] This script remains available as standalone legacy docs flow.
+echo [INFO] report_generate_docs.bat runs the standalone documentation generator.
+echo [INFO] One Source report automation scripts (10~13) were removed.
+echo [INFO] This docs flow uses the heuristic documentation parser.
 echo.
 
 echo ============================================================================
@@ -39,6 +40,9 @@ if not exist "%TEMPLATES_ROOT%\contexts\reporting\adapters\cli\report_generate_d
     exit /b 1
 )
 
+call :prompt_run_or_cancel
+if errorlevel %USER_CANCEL_RC% exit /b %USER_CANCEL_RC%
+
 :: Run Documentation Tool with strict manifest context
 node "%TEMPLATES_ROOT%\contexts\reporting\adapters\cli\report_generate_doc_cli.js" "%TARGET_PROJECT%" --manifest-json "%MANIFEST_JSON%"
 
@@ -51,3 +55,11 @@ if errorlevel 1 (
 echo.
 echo [SUCCESS] Documentation generated for %TARGET_PROJECT%
 pause
+exit /b 0
+
+:prompt_run_or_cancel
+echo.
+set "RUN_INPUT="
+set /p "RUN_INPUT=Press Enter to continue, or Q to return to menu: "
+if /i "%RUN_INPUT%"=="Q" exit /b %USER_CANCEL_RC%
+exit /b 0

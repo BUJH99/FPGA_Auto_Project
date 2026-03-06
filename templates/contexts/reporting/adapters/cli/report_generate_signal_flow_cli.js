@@ -1,5 +1,9 @@
 const fs = require("fs");
 const path = require("path");
+const {
+  resolveSignalFlowOutputPaths,
+  writeSignalFlowResultArtifacts,
+} = require("../../application/signal_flow_result_service");
 
 const DEFAULT_TRACE_DEPTH = 4;
 const DEFAULT_HIERARCHY_DEPTH = 12;
@@ -1035,7 +1039,7 @@ function relativePath(fromDir, target) {
 
 function buildEdgeRows(label, edges, projectRoot) {
   return edges.map((edge) => {
-    const fileLabel = sanitizeFileLabel(relativePath(projectRoot, edge.file || ""));
+    const fileLabel = edge.file ? sanitizeFileLabel(relativePath(projectRoot, edge.file)) : "";
     const loc = edge.line ? `${fileLabel}:${edge.line}` : fileLabel;
     return {
       direction: label,
@@ -1416,12 +1420,19 @@ function main() {
     edgeLimit
   );
 
-  const defaultOutDir = path.join(projectRoot, "output", "signal", safeSignalTag(topModule));
-  const outPath = outArg
-    ? path.resolve(outArg)
-    : path.join(defaultOutDir, `signal_flow_${safeSignalTag(signalQuery)}.md`);
+  const outputPlan = resolveSignalFlowOutputPaths({
+    projectRoot,
+    topModule,
+    signalQuery,
+    outputPath: outArg,
+  });
+  const outPath = outputPlan.markdownPath;
 
   const warnings = [...db.warnings, ...hierarchy.warnings];
+  const upstreamModules = buildModuleTraversalOrder(upstream, hierarchy, "upstream");
+  const downstreamModules = buildModuleTraversalOrder(downstream, hierarchy, "downstream");
+  const upstreamRows = buildEdgeRows("upstream", upstream.edges, projectRoot);
+  const downstreamRows = buildEdgeRows("downstream", downstream.edges, projectRoot);
   renderMarkdown({
     projectRoot,
     topModule,
@@ -1436,9 +1447,33 @@ function main() {
     allEdges: graph.edges,
     modulesByName: db.modulesByName,
   });
+  const artifactResult = writeSignalFlowResultArtifacts({
+    projectRoot,
+    outputPath: outArg || "",
+    status: "generated",
+    topModule,
+    signalQuery,
+    requestedTraceDepth: traceDepthArg.requestedRaw,
+    effectiveTraceDepth: traceDepth,
+    hierarchyDepth,
+    moduleCount: db.modulesByName.size,
+    hierarchyInstanceCount: hierarchy.instances.size,
+    totalGraphEdges: graph.edges.length,
+    matchedNodes,
+    upstreamRows,
+    downstreamRows,
+    upstreamModules,
+    downstreamModules,
+    upstreamTruncated: upstream.truncated,
+    downstreamTruncated: downstream.truncated,
+    warnings,
+    manifestJsonPath: manifestJsonArg ? path.resolve(manifestJsonArg) : "",
+  });
 
   console.log(`[SUCCESS] Signal flow markdown generated.`);
   console.log(`[INFO] Output: ${outPath}`);
+  console.log(`[INFO] Output Contract: ${artifactResult.contractPath}`);
+  console.log(`[INFO] Primary Output: ${artifactResult.primaryOutputPath}`);
   console.log(`[INFO] Top: ${topModule}`);
   console.log(`[INFO] Trace depth request: ${traceDepthArg.requestedRaw}`);
   console.log(`[INFO] Effective trace depth: ${traceDepth} (graph max: ${graphMaxDepth})`);

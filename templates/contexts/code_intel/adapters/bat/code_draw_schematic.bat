@@ -2,6 +2,7 @@
 setlocal EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
@@ -111,6 +112,7 @@ echo.
 echo  Input format:
 echo   - Number(s): 1 3 5  ^(space/comma separated^)
 echo   - ALL: generate all modules
+echo   - Q: return to menu
 if "!HAS_TOP!"=="1" (
     echo   - Enter: default !TOP_MODULE_NAME!
 ) else (
@@ -119,6 +121,7 @@ if "!HAS_TOP!"=="1" (
 echo.
 set "USER_INPUT="
 set /p "USER_INPUT=Select module number(s): "
+if /i "%USER_INPUT%"=="Q" exit /b %USER_CANCEL_RC%
 
 REM Handle default
 if "%USER_INPUT%"=="" (

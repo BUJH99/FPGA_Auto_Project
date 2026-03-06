@@ -1,0 +1,35 @@
+version: "1"
+project:
+  name: "ok_v1_sections"
+hdl:
+  top: "TOP"
+  src_globs:
+    - "src/**/*.sv"
+  tb_globs:
+    - "tb/**/*.sv"
+  inc_globs: []
+  xdc_globs: []
+  exclude_globs: []
+sim:
+  tool: "xsim"
+  timescale: "1ns/1ps"
+  test_names:
+    - "smoke"
+  scenarios:
+    - id: "reset_boot"
+      title: "Reset Boot"
+      start_ns: 0
+      duration_ns: 1000
+      sample_step_ns: 10
+      signals:
+        - "clk"
+        - "rst_n"
+vivado:
+  part: "xc7a35tcpg236-1"
+  strategy: "Default"
+  power_limit_w: 2.5
+report:
+  enable: true
+  format: "html"
+  modules:
+    - "TOP"

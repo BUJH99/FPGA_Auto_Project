@@ -1,27 +1,18 @@
-﻿#!/usr/bin/env python3
-"""
-Generate Slidev presentation Markdown/JSON from Verilog sources using Jinja2.
-
-This tool scans src/*.v, src/*.sv and builds a presentation_config object
-for templates/contexts/reporting/slidedev/presentation_design1.md.j2.
-"""
+#!/usr/bin/env python3
+"""Generate module verification presentation HTML."""
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import os
-import platform
 import re
 import shutil
+import subprocess
 import sys
-from copy import deepcopy
-from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 try:
     from jinja2 import Environment, FileSystemLoader
@@ -31,2980 +22,1252 @@ except Exception as exc:  # pragma: no cover
     sys.exit(2)
 
 
-IDENTIFIER_KEYWORDS: Set[str] = {
-    "always",
-    "assign",
-    "begin",
-    "case",
-    "casex",
-    "casez",
-    "default",
-    "else",
-    "end",
-    "endcase",
-    "endmodule",
-    "for",
-    "function",
-    "if",
-    "input",
-    "inout",
-    "localparam",
-    "module",
-    "negedge",
-    "or",
-    "output",
-    "parameter",
-    "posedge",
-    "reg",
-    "wire",
-    "logic",
-    "signed",
-    "unsigned",
-    "integer",
-    "real",
-    "time",
-    "task",
-    "while",
-    "repeat",
-    "generate",
-    "endgenerate",
-    "genvar",
-    "initial",
-    "typedef",
-    "struct",
-    "union",
-    "enum",
-    "automatic",
-    "disable",
-    "wait",
-    "fork",
-    "join",
-    "join_any",
-    "join_none",
-    "package",
-    "endpackage",
-    "interface",
-    "endinterface",
-    "import",
-    "export",
-}
-
 TEXT_DECODINGS: Tuple[str, ...] = ("utf-8-sig", "utf-8", "cp949", "euc-kr")
-IMAGE_EXTENSIONS: Tuple[str, ...] = (".svg", ".png", ".jpg", ".jpeg")
-
-DEFAULT_POWER_REPORT: Dict[str, object] = {
-    "totalOnChipPowerW": 0.421,
-    "dynamicPowerW": 0.176,
-    "staticPowerW": 0.245,
-    "clocksW": 0.013,
-    "signalsW": 0.004,
-    "logicW": 0.003,
-    "bramW": 0.001,
-    "pllW": 0.150,
-    "ioW": 0.005,
-    "junctionTempC": 25.5,
-    "effectiveTjaCPerW": None,
-    "maxAmbientC": None,
-    "thermalMarginC": 59.5,
-    "confidenceLevel": "Medium",
-}
-
-DEFAULT_TIMING_REPORT: Dict[str, object] = {
-    "wnsNs": 3.028,
-    "tnsNs": 0.0,
-    "whsNs": 0.066,
-    "thsNs": 0.0,
-    "wpwsNs": 0.820,
-    "tpwsNs": 0.0,
-    "failingEndpoints": 0,
-    "totalEndpoints": 128,
-}
-
-DEFAULT_UTIL_REPORT: Dict[str, object] = {
-    "lutUsed": 2514,
-    "lutAvailable": 364200,
-    "lutPct": 0.69,
-    "ffUsed": 1188,
-    "ffAvailable": 728400,
-    "ffPct": 0.16,
-    "ioUsed": 37,
-    "ioAvailable": 850,
-    "ioPct": 4.35,
-    "bufgUsed": 1,
-    "bufgAvailable": 32,
-    "bufgPct": 3.13,
-    "utilResources": [
-        {"label": "Slice LUTs", "used": 757, "available": 20800, "percent": 3.64},
-        {"label": "LUT as Logic", "used": 757, "available": 20800, "percent": 3.64},
-        {"label": "LUT as Memory", "used": 0, "available": 9600, "percent": 0.0},
-        {"label": "Slice Registers", "used": 749, "available": 41600, "percent": 1.8},
-        {"label": "Register as Flip Flop", "used": 743, "available": 41600, "percent": 1.79},
-        {"label": "Register as Latch", "used": 6, "available": 41600, "percent": 0.01},
-        {"label": "F7 Muxes", "used": 38, "available": 16300, "percent": 0.23},
-        {"label": "F8 Muxes", "used": 5, "available": 8150, "percent": 0.06},
-        {"label": "Block RAM Tile", "used": 0, "available": 50, "percent": 0.0},
-        {"label": "DSPs", "used": 0, "available": 90, "percent": 0.0},
-        {"label": "Bonded IOB", "used": 23, "available": 106, "percent": 21.7},
-        {"label": "BUFGCTRL", "used": 1, "available": 32, "percent": 3.13},
-        {"label": "MMCME2_ADV", "used": 0, "available": 5, "percent": 0.0},
-        {"label": "PLLE2_ADV", "used": 0, "available": 5, "percent": 0.0},
-    ],
-    "sliceLuts": 2514,
-    "sliceRegisters": 1188,
-    "bondedIob": 37,
-    "bufg": 1,
-}
-
-
-@dataclass
-class InstanceInfo:
-    child_module: str
-    instance_name: str
-    text_index: int
+RTL_SUFFIXES = {".v", ".sv"}
+TB_SUFFIXES = {".v", ".sv", ".svh"}
+COLORS = ("blue", "green", "amber", "purple", "teal", "rose")
 
 
 @dataclass
 class ModuleInfo:
     name: str
     file_path: Path
-    text_original: str
-    text_clean: str
-    ports: Dict[str, str] = field(default_factory=dict)
-    port_order: List[str] = field(default_factory=list)
-    signal_kinds: Dict[str, str] = field(default_factory=dict)
-    instances: List[InstanceInfo] = field(default_factory=list)
-    role: str = ""
-    summary: List[str] = field(default_factory=list)
-    state_description: List[str] = field(default_factory=list)
-    has_fsm: bool = False
-
-    def direct_children(self, known_modules: Set[str]) -> List[str]:
-        seen: Set[str] = set()
-        out: List[str] = []
-        for inst in sorted(self.instances, key=lambda i: i.text_index):
-            child = inst.child_module
-            if child not in known_modules or child in seen:
-                continue
-            seen.add(child)
-            out.append(child)
-        return out
+    text: str
+    ports: List[Dict[str, str]] = field(default_factory=list)
+    internals: List[Dict[str, str]] = field(default_factory=list)
+    children: List[str] = field(default_factory=list)
+    description: str = "Auto-generated module summary."
+    fsm_states: List[str] = field(default_factory=list)
 
 
-@dataclass(frozen=True)
-class SlideCanvasPolicy:
-    layout: str = "default"
-    defaults_layout: str = "default"
-    full_bleed: bool = True
-    aspect_ratio: str = "16/9"
-    canvas_width: int = 1280
+@dataclass
+class TbScaffold:
+    hint_name: str
+    root: Path
+    transaction: Optional[Path]
+    generator: Optional[Path]
+    driver: Optional[Path]
+    monitor: Optional[Path]
+    environment: Optional[Path]
+    coverage: Optional[Path]
+    scoreboard: Optional[Path]
+    base_test: Optional[Path]
+    tests: List[Path]
+    interface: Optional[Path] = None
 
 
-class SlidevDeckNormalizer:
-    _TOP_KEY_PATTERN = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*)\s*:")
-    _NESTED_LAYOUT_PATTERN = re.compile(r"^[ \t]+layout\s*:")
-    _NESTED_KEY_PATTERN = re.compile(r"^([ \t]+)[A-Za-z_][A-Za-z0-9_-]*\s*:")
-
-    def __init__(self, policy: SlideCanvasPolicy) -> None:
-        self._policy = policy
-
-    def normalize_frontmatter(self, markdown_text: str) -> str:
-        split = self._split_frontmatter(markdown_text)
-        if split is None:
-            return markdown_text
-
-        bom, frontmatter_lines, body_lines, newline = split
-        if not self._policy.full_bleed:
-            return markdown_text
-
-        normalized_frontmatter_lines = self._normalize_frontmatter_lines(frontmatter_lines, newline)
-        if normalized_frontmatter_lines == frontmatter_lines:
-            return markdown_text
-
-        return (
-            f"{bom}---{newline}"
-            f"{''.join(normalized_frontmatter_lines)}"
-            f"---{newline}"
-            f"{''.join(body_lines)}"
-        )
-
-    def normalize_file(self, md_path: Path) -> bool:
-        updated, _skipped = self._normalize_file_with_status(md_path)
-        return updated
-
-    def normalize_directory(self, presentation_dir: Path, pattern: str = "slidev_*.md") -> Tuple[int, int]:
-        if not presentation_dir.exists() or not presentation_dir.is_dir():
-            return 0, 0
-
-        updated_count = 0
-        skipped_count = 0
-        for md_path in sorted(presentation_dir.glob(pattern)):
-            if not md_path.is_file():
-                continue
-            updated, skipped = self._normalize_file_with_status(md_path)
-            if updated:
-                updated_count += 1
-            if skipped:
-                skipped_count += 1
-        return updated_count, skipped_count
-
-    def _normalize_file_with_status(self, md_path: Path) -> Tuple[bool, bool]:
+def read_text(path: Path) -> str:
+    data = path.read_bytes()
+    for enc in TEXT_DECODINGS:
         try:
-            original = read_text_autodetect(md_path)
-        except Exception as exc:
-            print(f"[WARN] Skipped markdown normalize (read fail): {md_path} ({exc})")
-            return False, True
-
-        if self._split_frontmatter(original) is None:
-            print(f"[WARN] Skipped markdown normalize (invalid frontmatter): {md_path}")
-            return False, True
-
-        normalized = self.normalize_frontmatter(original)
-        if normalized == original:
-            return False, False
-
-        try:
-            md_path.write_text(normalized, encoding="utf-8")
-        except Exception as exc:
-            print(f"[WARN] Skipped markdown normalize (write fail): {md_path} ({exc})")
-            return False, True
-        return True, False
-
-    def _split_frontmatter(
-        self,
-        markdown_text: str,
-    ) -> Optional[Tuple[str, List[str], List[str], str]]:
-        lines = markdown_text.splitlines(keepends=True)
-        if not lines:
-            return None
-
-        newline = "\r\n" if "\r\n" in markdown_text else "\n"
-        bom = ""
-        first_line = lines[0]
-        if first_line.startswith("\ufeff"):
-            bom = "\ufeff"
-            first_line = first_line[1:]
-            lines[0] = first_line
-
-        if first_line.strip() != "---":
-            return None
-
-        end_index = -1
-        for idx in range(1, len(lines)):
-            if lines[idx].strip() == "---":
-                end_index = idx
-                break
-        if end_index < 0:
-            return None
-
-        return bom, lines[1:end_index], lines[end_index + 1 :], newline
-
-    def _normalize_frontmatter_lines(self, lines: List[str], newline: str) -> List[str]:
-        entries = self._split_top_level_entries(lines)
-        normalized_entries: List[Tuple[Optional[str], List[str]]] = []
-        has_layout = False
-        has_defaults = False
-        has_aspect_ratio = False
-        has_canvas_width = False
-
-        for key, block in entries:
-            if key == "layout":
-                has_layout = True
-                normalized_entries.append(("layout", [f"layout: {self._policy.layout}{newline}"]))
-                continue
-
-            if key == "defaults":
-                has_defaults = True
-                normalized_entries.append(("defaults", self._normalize_defaults_block(block, newline)))
-                continue
-
-            if key == "aspectRatio":
-                has_aspect_ratio = True
-                normalized_entries.append(("aspectRatio", [f"aspectRatio: {self._policy.aspect_ratio}{newline}"]))
-                continue
-
-            if key == "canvasWidth":
-                has_canvas_width = True
-                normalized_entries.append(("canvasWidth", [f"canvasWidth: {self._policy.canvas_width}{newline}"]))
-                continue
-
-            normalized_entries.append((key, block))
-
-        if not has_layout:
-            insert_index = self._find_layout_insert_index(normalized_entries)
-            normalized_entries.insert(insert_index, ("layout", [f"layout: {self._policy.layout}{newline}"]))
-
-        if not has_defaults:
-            layout_index = self._find_key_index(normalized_entries, "layout")
-            defaults_insert_index = (layout_index + 1) if layout_index >= 0 else 0
-            defaults_block = [
-                f"defaults:{newline}",
-                f"  layout: {self._policy.defaults_layout}{newline}",
-            ]
-            normalized_entries.insert(defaults_insert_index, ("defaults", defaults_block))
-
-        if not has_aspect_ratio:
-            defaults_index = self._find_key_index(normalized_entries, "defaults")
-            aspect_insert_index = (defaults_index + 1) if defaults_index >= 0 else len(normalized_entries)
-            normalized_entries.insert(
-                aspect_insert_index,
-                ("aspectRatio", [f"aspectRatio: {self._policy.aspect_ratio}{newline}"]),
-            )
-
-        if not has_canvas_width:
-            aspect_index = self._find_key_index(normalized_entries, "aspectRatio")
-            canvas_insert_index = (aspect_index + 1) if aspect_index >= 0 else len(normalized_entries)
-            normalized_entries.insert(
-                canvas_insert_index,
-                ("canvasWidth", [f"canvasWidth: {self._policy.canvas_width}{newline}"]),
-            )
-
-        flattened: List[str] = []
-        for _key, block in normalized_entries:
-            flattened.extend(block)
-        return flattened
-
-    def _split_top_level_entries(self, lines: Sequence[str]) -> List[Tuple[Optional[str], List[str]]]:
-        entries: List[Tuple[Optional[str], List[str]]] = []
-        idx = 0
-        while idx < len(lines):
-            line = lines[idx]
-            if line.startswith((" ", "\t")):
-                entries.append((None, [line]))
-                idx += 1
-                continue
-
-            key_match = self._TOP_KEY_PATTERN.match(line)
-            if key_match is None:
-                entries.append((None, [line]))
-                idx += 1
-                continue
-
-            key = key_match.group(1)
-            block = [line]
-            idx += 1
-            while idx < len(lines):
-                nested_line = lines[idx]
-                if nested_line.startswith((" ", "\t")):
-                    block.append(nested_line)
-                    idx += 1
-                    continue
-
-                next_key_match = self._TOP_KEY_PATTERN.match(nested_line)
-                if next_key_match is not None:
-                    break
-
-                block.append(nested_line)
-                idx += 1
-            entries.append((key, block))
-        return entries
-
-    def _normalize_defaults_block(self, block: Sequence[str], newline: str) -> List[str]:
-        remaining_lines = [
-            line
-            for line in block[1:]
-            if self._NESTED_LAYOUT_PATTERN.match(line) is None
-        ]
-        indent = "  "
-        for line in remaining_lines:
-            indent_match = self._NESTED_KEY_PATTERN.match(line)
-            if indent_match is not None:
-                indent = indent_match.group(1)
-                break
-
-        normalized = [f"defaults:{newline}", f"{indent}layout: {self._policy.defaults_layout}{newline}"]
-        normalized.extend(remaining_lines)
-        return normalized
-
-    @staticmethod
-    def _find_key_index(entries: Sequence[Tuple[Optional[str], List[str]]], key_name: str) -> int:
-        for idx, (key, _block) in enumerate(entries):
-            if key == key_name:
-                return idx
-        return -1
-
-    @staticmethod
-    def _find_layout_insert_index(entries: Sequence[Tuple[Optional[str], List[str]]]) -> int:
-        for idx, (key, _block) in enumerate(entries):
-            if key in {"title", "theme", "transition"}:
-                continue
-            return idx
-        return len(entries)
-
-
-def replace_non_newline_with_space(text: str) -> str:
-    return re.sub(r"[^\n]", " ", text)
-
-
-def read_text_autodetect(file_path: Path) -> str:
-    raw = file_path.read_bytes()
-    for encoding in TEXT_DECODINGS:
-        try:
-            return raw.decode(encoding)
+            return data.decode(enc)
         except UnicodeDecodeError:
             continue
-    return raw.decode("utf-8", errors="replace")
+    return data.decode("latin1", errors="ignore")
 
 
-def strip_comments_keep_shape(text: str) -> str:
+def normalize(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(text or "").lower())
+
+
+def relpath_posix(path: Path, root: Path) -> str:
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except Exception:
+        return path.as_posix()
+
+
+def parse_decl_names(fragment: str) -> List[str]:
+    text = strip_verilog_comments(fragment)
+    text = re.sub(r"\[[^\]]+\]", " ", text)
     text = re.sub(
-        r"/\*[\s\S]*?\*/",
-        lambda m: replace_non_newline_with_space(m.group(0)),
+        r"\b(?:wire|reg|logic|signed|unsigned|var|const|static|input|output|inout)\b",
+        " ",
         text,
+        flags=re.I,
     )
-    text = re.sub(r"//[^\n\r]*", lambda m: " " * len(m.group(0)), text)
+    out = []
+    for part in text.split(","):
+        part = part.split("=")[0].strip()
+        m = re.search(r"([A-Za-z_][A-Za-z0-9_$]*)$", part)
+        if m:
+            out.append(m.group(1))
+    uniq = []
+    seen = set()
+    for name in out:
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append(name)
+    return uniq
+
+
+def strip_verilog_comments(fragment: str) -> str:
+    text = re.sub(r"/\*.*?\*/", " ", fragment, flags=re.S)
+    text = re.sub(r"//.*$", "", text, flags=re.M)
     return text
 
 
-def split_top_level(text: str, delimiter: str = ",") -> List[str]:
-    out: List[str] = []
-    token: List[str] = []
+def split_top_level_commas(fragment: str) -> List[str]:
+    items: List[str] = []
+    buf: List[str] = []
     paren = 0
-    bracket = 0
+    brack = 0
     brace = 0
-    for ch in text:
+
+    for ch in fragment:
+        if ch == "," and paren == 0 and brack == 0 and brace == 0:
+            item = "".join(buf).strip()
+            if item:
+                items.append(item)
+            buf = []
+            continue
+
+        buf.append(ch)
         if ch == "(":
             paren += 1
         elif ch == ")":
             paren = max(paren - 1, 0)
         elif ch == "[":
-            bracket += 1
+            brack += 1
         elif ch == "]":
-            bracket = max(bracket - 1, 0)
+            brack = max(brack - 1, 0)
         elif ch == "{":
             brace += 1
         elif ch == "}":
             brace = max(brace - 1, 0)
 
-        if ch == delimiter and paren == 0 and bracket == 0 and brace == 0:
-            out.append("".join(token))
-            token = []
+    tail = "".join(buf).strip()
+    if tail:
+        items.append(tail)
+    return items
+
+
+def parse_ansi_ports(module_text: str) -> List[Dict[str, str]]:
+    out: List[Dict[str, str]] = []
+    header = re.search(
+        r"\bmodule\s+[A-Za-z_][A-Za-z0-9_$]*\b(?:\s*#\s*\(.*?\))?\s*\((.*?)\)\s*;",
+        module_text,
+        flags=re.S,
+    )
+    if not header:
+        return out
+
+    header_text = strip_verilog_comments(header.group(1))
+    current_dir: Optional[str] = None
+    current_width = "1"
+
+    for item in split_top_level_commas(header_text):
+        text = item.strip()
+        if not text:
             continue
-        token.append(ch)
-    if token:
-        out.append("".join(token))
+        dm = re.match(r"^(input|output|inout)\b(.*)$", text, flags=re.I | re.S)
+        if dm:
+            current_dir = dm.group(1).lower()
+            rest = dm.group(2).strip()
+            width_m = re.search(r"(\[[^\]]+\])", rest)
+            current_width = width_m.group(1) if width_m else "1"
+        else:
+            rest = text
+            width_m = re.search(r"(\[[^\]]+\])", rest)
+            if width_m:
+                current_width = width_m.group(1)
+
+        if not current_dir:
+            continue
+
+        for n in parse_decl_names(rest):
+            out.append({"name": n, "dir": current_dir, "width": current_width, "desc": ""})
     return out
 
 
-def parse_balanced(text: str, start: int, open_ch: str, close_ch: str) -> Optional[Tuple[str, int]]:
-    if start < 0 or start >= len(text) or text[start] != open_ch:
-        return None
-    depth = 0
-    i = start
-    while i < len(text):
-        ch = text[i]
-        if ch == open_ch:
-            depth += 1
-        elif ch == close_ch:
-            depth -= 1
-            if depth == 0:
-                return text[start + 1 : i], i + 1
-        i += 1
-    return None
+def parse_modules(src_files: Sequence[Path]) -> Dict[str, ModuleInfo]:
+    modules: Dict[str, ModuleInfo] = {}
+    block_re = re.compile(r"(?ms)^\s*module\s+([A-Za-z_][A-Za-z0-9_$]*)\b(.*?^\s*endmodule\b)", flags=re.M)
+    for src in src_files:
+        text = read_text(src)
+        for hit in block_re.finditer(text):
+            name = hit.group(1)
+            body = hit.group(0)
+            ports = parse_ansi_ports(body)
 
+            body_decl_text = body
+            header_span = re.search(
+                r"(?s)^\s*module\s+[A-Za-z_][A-Za-z0-9_$]*\b(?:\s*#\s*\(.*?\))?\s*\(.*?\)\s*;",
+                body,
+            )
+            if header_span:
+                body_decl_text = body[header_span.end() :]
 
-def extract_decl_names_from_segment(segment: str) -> List[str]:
-    chunks = split_top_level(segment, ",")
-    names: List[str] = []
-    for raw in chunks:
-        chunk = raw.strip()
-        if not chunk:
-            continue
-        chunk = re.sub(r"=\s*.+$", " ", chunk)
-        chunk = re.sub(r"\[[^\]]*\]", " ", chunk)
-        chunk = re.sub(
-            r"\b(wire|reg|logic|signed|unsigned|var|tri|tri0|tri1|supply0|supply1|bit|byte|shortint|int|longint|integer|time|real)\b",
-            " ",
-            chunk,
-            flags=re.IGNORECASE,
-        )
-        m = re.search(r"([A-Za-z_][A-Za-z0-9_$]*)\s*$", chunk)
-        if m:
-            names.append(m.group(1))
-    return names
-
-
-def parse_header_ports(module_text: str, module_name: str) -> Tuple[Dict[str, str], List[str]]:
-    ports: Dict[str, str] = {}
-    port_order: List[str] = []
-    module_name_pos = module_text.find(module_name)
-    if module_name_pos < 0:
-        return ports, port_order
-    header_end = module_text.find(";")
-    if header_end < 0:
-        return ports, port_order
-    header = module_text[module_name_pos + len(module_name) : header_end + 1]
-    i = 0
-    while i < len(header) and header[i].isspace():
-        i += 1
-    if i < len(header) and header[i] == "#":
-        i += 1
-        while i < len(header) and header[i].isspace():
-            i += 1
-        if i < len(header) and header[i] == "(":
-            params = parse_balanced(header, i, "(", ")")
-            if params is None:
-                return ports, port_order
-            _, i = params
-    while i < len(header) and header[i].isspace():
-        i += 1
-    if i >= len(header) or header[i] != "(":
-        return ports, port_order
-    port_block = parse_balanced(header, i, "(", ")")
-    if port_block is None:
-        return ports, port_order
-
-    current_dir = ""
-    for segment in split_top_level(port_block[0], ","):
-        clean = segment.strip()
-        if not clean:
-            continue
-        dir_match = re.search(r"\b(input|output|inout)\b", clean, flags=re.IGNORECASE)
-        if dir_match:
-            current_dir = dir_match.group(1).lower()
-        for name in extract_decl_names_from_segment(clean):
-            if name not in ports:
-                ports[name] = current_dir or "unknown"
-                port_order.append(name)
-    return ports, port_order
-
-
-def parse_body_ports(module_text: str, ports: Dict[str, str], port_order: List[str]) -> None:
-    header_end = module_text.find(";")
-    body_text = module_text[header_end + 1 :] if header_end >= 0 else module_text
-    for m in re.finditer(r"^\s*(input|output|inout)\b([^;]*);", body_text, flags=re.MULTILINE | re.IGNORECASE):
-        direction = m.group(1).lower()
-        names = extract_decl_names_from_segment(m.group(2))
-        for name in names:
-            if name not in ports:
-                port_order.append(name)
-            ports[name] = direction
-
-
-def parse_internal_signals(module_text: str, signal_kinds: Dict[str, str]) -> None:
-    for m in re.finditer(r"^\s*(wire|reg|logic)\b([^;]*);", module_text, flags=re.MULTILINE | re.IGNORECASE):
-        kind = m.group(1).lower()
-        names = extract_decl_names_from_segment(m.group(2))
-        for name in names:
-            if name not in signal_kinds:
-                signal_kinds[name] = kind
-
-
-def extract_declared_reg_logic_names(module_text: str) -> Set[str]:
-    names: Set[str] = set()
-    for m in re.finditer(r"\b(?:reg|logic)\b\s*([^;]+);", module_text, flags=re.IGNORECASE | re.DOTALL):
-        decl = m.group(1)
-        for item in split_top_level(decl, ","):
-            token = item.strip()
-            if not token:
-                continue
-            token = re.sub(r"=\s*.+$", " ", token)
-            token = re.sub(r"\[[^\]]*\]", " ", token)
-            token = re.sub(r"\b(signed|unsigned)\b", " ", token, flags=re.IGNORECASE)
-            mm = re.search(r"([A-Za-z_][A-Za-z0-9_$]*)\s*$", token)
-            if mm:
-                names.add(mm.group(1))
-    return names
-
-
-def extract_always_blocks_for_fsm(module_text: str) -> List[Dict[str, str]]:
-    blocks: List[Dict[str, str]] = []
-    pattern = re.compile(
-        r"(always\s*@\s*(?:\([^)]*\)|\*)|always_comb|always_ff|always_latch)\s*begin",
-        flags=re.IGNORECASE,
-    )
-    token_re = re.compile(r"\bbegin\b|\bend\b", flags=re.IGNORECASE)
-
-    for m in pattern.finditer(module_text):
-        matched_text = m.group(0)
-        begin_rel = matched_text.lower().rfind("begin")
-        if begin_rel < 0:
-            continue
-        begin_pos = m.start() + begin_rel
-        depth = 1
-        end_pos = -1
-        for tok in token_re.finditer(module_text, begin_pos + len("begin")):
-            word = tok.group(0).lower()
-            if word == "begin":
-                depth += 1
-            else:
-                depth -= 1
-                if depth == 0:
-                    end_pos = tok.end()
+            if not ports:
+                for pm in re.finditer(r"(?m)^\s*(input|output|inout)\b([^;]*);", body_decl_text):
+                    direction = pm.group(1).lower()
+                    rest = strip_verilog_comments(pm.group(2))
+                    width_m = re.search(r"(\[[^\]]+\])", rest)
+                    width = width_m.group(1) if width_m else "1"
+                    for n in parse_decl_names(rest):
+                        ports.append({"name": n, "dir": direction, "width": width, "desc": ""})
+            if ports:
+                dedup = []
+                seen_port = set()
+                for p in ports:
+                    key = p["name"].lower()
+                    if key in seen_port:
+                        continue
+                    seen_port.add(key)
+                    dedup.append(p)
+                ports = dedup
+            port_names = {p["name"].lower() for p in ports}
+            internals = []
+            for sm in re.finditer(r"(?m)^\s*(wire|reg|logic)\b([^;]*);", body):
+                kind = sm.group(1).lower()
+                for n in parse_decl_names(sm.group(2)):
+                    if n.lower() in port_names:
+                        continue
+                    internals.append({"name": n, "type": kind, "purpose": ""})
+            comments = []
+            for line in body.splitlines()[:30]:
+                s = line.strip()
+                if s.startswith("//") and len(s) > 2:
+                    comments.append(s[2:].strip())
+                if len(comments) >= 2:
                     break
-        if end_pos < 0:
-            continue
-
-        blocks.append(
-            {
-                "header": module_text[m.start() : begin_pos].strip(),
-                "text": module_text[begin_pos:end_pos],
-            }
-        )
-
-    return blocks
-
-
-def detect_state_vars_like_fsm_tool(module_text: str, always_blocks: Sequence[Dict[str, str]]) -> Optional[Tuple[str, str]]:
-    reg_names = extract_declared_reg_logic_names(module_text)
-    for cur in sorted(reg_names, key=lambda n: n.lower()):
-        cur_l = cur.lower()
-        if not re.search(r"(cur|state)", cur_l):
-            continue
-        preferred = [
-            f"{cur}_d",
-            f"{cur}d",
-            f"{cur}_next",
-            f"{cur}_nxt",
-            f"next_{cur}",
-            f"nxt_{cur}",
-        ]
-        for cand in preferred:
-            if cand in reg_names:
-                return cur, cand
-
-    for block in always_blocks:
-        header = block.get("header", "")
-        text = block.get("text", "")
-        if not re.search(r"(posedge|negedge)", header, flags=re.IGNORECASE):
-            continue
-        for lhs, rhs in re.findall(r"\b([A-Za-z_]\w*)\b\s*<=\s*([A-Za-z_]\w*)\b\s*;", text):
-            lhs_l = lhs.lower()
-            rhs_l = rhs.lower()
-            if lhs_l == rhs_l:
-                continue
-            if not re.search(r"(cur|state)", lhs_l):
-                continue
-            rhs_looks_next = bool(
-                re.search(r"(next|nxt)", rhs_l)
-                or rhs_l.endswith("_d")
-                or rhs_l == f"{lhs_l}_d"
-                or rhs_l == f"{lhs_l}d"
+            fsm = sorted(set(re.findall(r"\b(?:S|ST|STATE)_[A-Za-z0-9_]+\b", body)))[:12]
+            modules[name] = ModuleInfo(
+                name=name,
+                file_path=src,
+                text=body,
+                ports=ports[:64],
+                internals=internals[:48],
+                description=" ".join(comments) if comments else "Auto-generated module summary.",
+                fsm_states=fsm,
             )
-            if rhs_looks_next:
-                return lhs, rhs
-
-    for block in always_blocks:
-        text = block.get("text", "")
-        case_m = re.search(r"\bcase\s*\(\s*([A-Za-z_]\w*)\s*\)", text, flags=re.IGNORECASE)
-        if not case_m:
-            continue
-        cur_var = case_m.group(1)
-        assign_re = re.compile(
-            rf"\b([A-Za-z_]\w*)\b\s*(?:<=|=)\s*\b{re.escape(cur_var)}\b\s*;",
-            flags=re.IGNORECASE,
-        )
-        assign_m = assign_re.search(text)
-        if assign_m:
-            return cur_var, assign_m.group(1)
-    return None
-
-
-def find_next_state_block_like_fsm_tool(
-    always_blocks: Sequence[Dict[str, str]], cur_var: str, next_var: str
-) -> Optional[Dict[str, str]]:
-    best_block: Optional[Dict[str, str]] = None
-    best_score = -1
-    next_re = re.compile(rf"\b{re.escape(next_var)}\b")
-    case_re = re.compile(rf"\bcase\s*\(\s*{re.escape(cur_var)}\s*\)", flags=re.IGNORECASE)
-    hold_re = re.compile(
-        rf"\b{re.escape(next_var)}\s*(?:<=|=)\s*{re.escape(cur_var)}\b",
-        flags=re.IGNORECASE,
-    )
-    assign_re = re.compile(rf"\b{re.escape(next_var)}\s*(?:<=|=)", flags=re.IGNORECASE)
-
-    for block in always_blocks:
-        text = block.get("text", "")
-        if not next_re.search(text):
-            continue
-        score = 0
-        if case_re.search(text):
-            score += 20
-        if hold_re.search(text):
-            score += 10
-        score += len(assign_re.findall(text))
-        if score > best_score:
-            best_score = score
-            best_block = block
-    return best_block
-
-
-def extract_case_body_for_var(text: str, var_name: str) -> str:
-    case_re = re.compile(rf"\bcase(?:x|z)?\s*\(\s*{re.escape(var_name)}\s*\)", flags=re.IGNORECASE)
-    match = case_re.search(text)
-    if not match:
-        return ""
-    start = match.end()
-    token_re = re.compile(r"\bcase(?:x|z)?\b|\bendcase\b", flags=re.IGNORECASE)
-    depth = 1
-    for token in token_re.finditer(text, start):
-        word = token.group(0).lower()
-        if word.startswith("case"):
-            depth += 1
-        else:
-            depth -= 1
-            if depth == 0:
-                return text[start : token.start()]
-    return ""
-
-
-def extract_case_labels(case_body: str) -> Set[str]:
-    labels: Set[str] = set()
-    if not case_body:
-        return labels
-    for m in re.finditer(r"^\s*([^:\n]+)\s*:", case_body, flags=re.MULTILINE):
-        raw_label = m.group(1)
-        for item in split_top_level(raw_label, ","):
-            token = item.strip()
-            if not token:
-                continue
-            if token.lower() == "default":
-                continue
-            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_$]*", token):
-                labels.add(token)
-    return labels
-
-
-def collect_named_state_symbols(module_text: str) -> Set[str]:
-    symbols: Set[str] = set()
-    for m in re.finditer(r"\b(?:localparam|parameter)\b([\s\S]*?);", module_text, flags=re.IGNORECASE):
-        decl = m.group(1)
-        for item in split_top_level(decl, ","):
-            assign_m = re.search(r"\b([A-Za-z_][A-Za-z0-9_$]*)\b\s*=", item)
-            if not assign_m:
-                continue
-            name = assign_m.group(1)
-            if name.isupper() or re.search(r"(state|idle|init|run|wait|done|start|stop|edit|tx|rx)", name, flags=re.IGNORECASE):
-                symbols.add(name)
-    for m in re.finditer(r"\btypedef\s+enum\b[\s\S]*?\{([\s\S]*?)\}\s*[A-Za-z_]\w*\s*;", module_text, flags=re.IGNORECASE):
-        body = m.group(1)
-        for item in split_top_level(body, ","):
-            name_m = re.match(r"\s*([A-Za-z_][A-Za-z0-9_$]*)", item)
-            if name_m:
-                symbols.add(name_m.group(1))
-    return symbols
-
-
-def detect_fsm(module_text: str, state_description: Sequence[str]) -> bool:
-    if state_description:
-        return True
-    always_blocks = extract_always_blocks_for_fsm(module_text)
-    if not always_blocks:
-        return False
-
-    vars_pair = detect_state_vars_like_fsm_tool(module_text, always_blocks)
-    if not vars_pair:
-        return False
-    cur_var, next_var = vars_pair
-
-    next_block = find_next_state_block_like_fsm_tool(always_blocks, cur_var, next_var)
-    if not next_block:
-        return False
-
-    block_text = next_block.get("text", "")
-    transition_targets = set(
-        re.findall(
-            rf"\b{re.escape(next_var)}\b\s*(?:<=|=)\s*([A-Za-z_][A-Za-z0-9_$]*)\b",
-            block_text,
-            flags=re.IGNORECASE,
-        )
-    )
-    transition_targets.discard(cur_var)
-    if not transition_targets:
-        return False
-
-    case_body = extract_case_body_for_var(block_text, cur_var)
-    case_labels = extract_case_labels(case_body)
-    declared_states = collect_named_state_symbols(module_text)
-    known_states = case_labels | declared_states | transition_targets
-    if len(known_states) < 2:
-        return False
-
-    if case_body:
-        return bool(case_labels or transition_targets)
-    return len(transition_targets) >= 2
-
-
-def normalize_module_info_key(raw_key: str) -> str:
-    key = re.sub(r"[\s_-]+", "", raw_key.strip().lower())
-    if key in {"name", "modulename"}:
-        return "name"
-    if key in {
-        "role",
-        "modulerole",
-        "function",
-        "description",
-        "역할",
-        "모듈역할",
-        "모듈기능",
-        "기능",
-        "모듈설명",
-        "설명",
-    }:
-        return "role"
-    if key in {
-        "summary",
-        "summary1",
-        "summary2",
-        "highlights",
-        "요약",
-        "요약1",
-        "요약2",
-        "핵심요약",
-        "핵심",
-    }:
-        return "summary"
-    if key in {
-        "statedescription",
-        "state",
-        "states",
-        "fsmstate",
-        "fsmstatedescription",
-        "상태설명",
-        "상태",
-        "상태기술",
-        "상태기술설명",
-        "fsm상태",
-        "fsm상태설명",
-    }:
-        return "state"
-    return ""
-
-
-def normalize_module_info_value(value: str) -> str:
-    text = value.strip()
-    text = text.strip("`'\"")
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
-
-
-def split_summary_value(value: str) -> List[str]:
-    if not value:
-        return []
-    if "|" in value:
-        parts = [item.strip() for item in value.split("|")]
-        return [item for item in parts if item]
-    return [value]
-
-
-def parse_module_info_block(block: str) -> Tuple[str, List[str], List[str]]:
-    role = ""
-    summary: List[str] = []
-    state_description: List[str] = []
-    section = ""
-
-    for raw_line in block.splitlines():
-        line = raw_line.strip()
-        line = re.sub(r"^(?:/\*+|\*/|//+|\*+)\s*", "", line)
-        line = re.sub(r"\s*\*/\s*$", "", line).strip()
-        line = re.sub(r"^\[\s*MODULE_INFO_(?:START|END)\s*\]\s*$", "", line, flags=re.IGNORECASE).strip()
-        if not line:
-            continue
-
-        key_match = re.match(r"^([A-Za-z가-힣_][A-Za-z0-9가-힣_\s-]*)\s*[:=\-]\s*(.*)$", line)
-        if key_match:
-            key = normalize_module_info_key(key_match.group(1))
-            value = normalize_module_info_value(key_match.group(2))
-            if key:
-                if key == "name":
-                    section = ""
-                    continue
-                if key == "role":
-                    role = value or role
-                    section = ""
-                    continue
-                if key == "summary":
-                    section = "summary"
-                    if value:
-                        summary.extend(split_summary_value(value))
-                    continue
-                if key == "state":
-                    section = "state"
-                    if value:
-                        state_description.append(value)
-                    continue
-
-        if re.match(r"^[A-Za-z가-힣_][A-Za-z0-9가-힣_\s-]*\s*[:=\-]", line):
-            section = ""
-            continue
-        if re.match(r"^(?:[-*•]|[0-9]+\.)\s+", line):
-            item = normalize_module_info_value(re.sub(r"^(?:[-*•]|[0-9]+\.)\s+", "", line))
-            if not item:
-                continue
-            if section == "summary":
-                summary.append(item)
-            elif section == "state":
-                state_description.append(item)
-            continue
-        if section == "summary":
-            normalized = normalize_module_info_value(line)
-            if normalized:
-                summary.append(normalized)
-        elif section == "state":
-            normalized = normalize_module_info_value(line)
-            if normalized:
-                state_description.append(normalized)
-
-    return role, summary, state_description
-
-
-def parse_module_info_from_leading_comment(file_text: str, module_start: int) -> Tuple[str, List[str], List[str]]:
-    prefix = file_text[:module_start]
-    block_match = re.search(r"/\*([\s\S]*?)\*/\s*$", prefix, flags=re.IGNORECASE)
-    if block_match:
-        parsed = parse_module_info_block(block_match.group(1))
-        if parsed[0] or parsed[1] or parsed[2]:
-            return parsed
-    line_match = re.search(r"((?:\s*//[^\n]*\n)+)\s*$", prefix, flags=re.IGNORECASE)
-    if line_match:
-        parsed = parse_module_info_block(line_match.group(1))
-        if parsed[0] or parsed[1] or parsed[2]:
-            return parsed
-    return "", [], []
-
-
-def parse_module_info_for_span(file_text: str, module_start: int, module_end: int) -> Tuple[str, List[str], List[str]]:
-    matches = list(
-        re.finditer(
-            r"(?:\[\s*)?MODULE_INFO_START(?:\s*\])?([\s\S]*?)(?:\[\s*)?MODULE_INFO_END(?:\s*\])?",
-            file_text,
-            flags=re.IGNORECASE | re.DOTALL,
-        )
-    )
-    if matches:
-        inside = [m for m in matches if module_start <= m.start() and m.end() <= module_end]
-        if inside:
-            chosen = inside[0]
-            return parse_module_info_block(chosen.group(1))
-        before = [m for m in matches if m.end() <= module_start]
-        if before:
-            chosen = before[-1]
-            return parse_module_info_block(chosen.group(1))
-        after = [m for m in matches if m.start() >= module_start]
-        if after:
-            return parse_module_info_block(after[0].group(1))
-        return parse_module_info_block(matches[0].group(1))
-    return parse_module_info_from_leading_comment(file_text, module_start)
-
-
-def parse_instances(module_text: str, module_names: Sequence[str], current_module: str) -> List[InstanceInfo]:
-    out: List[InstanceInfo] = []
-    for child in module_names:
-        if child == current_module:
-            continue
-        pattern = re.compile(
-            rf"(?<![\w$]){re.escape(child)}\s*(?:#\s*\([\s\S]*?\)\s*)?([A-Za-z_][A-Za-z0-9_$]*)\s*\(",
-            flags=re.MULTILINE,
-        )
-        for m in pattern.finditer(module_text):
-            prefix = module_text[max(0, m.start() - 20) : m.start()]
-            if re.search(r"\bmodule(?:\s+(?:automatic|static))?\s+$", prefix, flags=re.IGNORECASE):
-                continue
-            instance_name = m.group(1)
-            out.append(InstanceInfo(child_module=child, instance_name=instance_name, text_index=m.start()))
-    out.sort(key=lambda x: x.text_index)
-    unique: Dict[Tuple[str, str, int], InstanceInfo] = {}
-    for item in out:
-        unique[(item.child_module, item.instance_name, item.text_index)] = item
-    return list(unique.values())
-
-
-def parse_modules_from_source_file(file_path: Path) -> List[ModuleInfo]:
-    raw_text = read_text_autodetect(file_path)
-    clean_text = strip_comments_keep_shape(raw_text)
-    modules: List[ModuleInfo] = []
-    for m in re.finditer(
-        r"\bmodule\s+(?:automatic\s+|static\s+)?([A-Za-z_][A-Za-z0-9_$]*)\b([\s\S]*?)\bendmodule\b",
-        clean_text,
-        flags=re.MULTILINE,
-    ):
-        module_name = m.group(1)
-        module_clean = m.group(0)
-        module_orig = raw_text[m.start() : m.end()]
-        role, summary, state_desc = parse_module_info_for_span(raw_text, m.start(), m.end())
-
-        ports, port_order = parse_header_ports(module_clean, module_name)
-        parse_body_ports(module_clean, ports, port_order)
-        signal_kinds = dict(ports)
-        parse_internal_signals(module_clean, signal_kinds)
-
-        modules.append(
-            ModuleInfo(
-                name=module_name,
-                file_path=file_path,
-                text_original=module_orig,
-                text_clean=module_clean,
-                ports=ports,
-                port_order=port_order,
-                signal_kinds=signal_kinds,
-                role=role,
-                summary=summary,
-                state_description=state_desc,
-            )
-        )
+    known = set(modules.keys())
+    inst_re = re.compile(r"(?ms)^\s*([A-Za-z_][A-Za-z0-9_$]*)\s*(?:#\s*\(.*?\)\s*)?([A-Za-z_][A-Za-z0-9_$]*)\s*\(", flags=re.M)
+    for mod in modules.values():
+        seen = set()
+        for hit in inst_re.finditer(mod.text):
+            child = hit.group(1)
+            if child in known and child != mod.name and child.lower() not in seen:
+                seen.add(child.lower())
+                mod.children.append(child)
     return modules
 
 
-def build_module_db_from_files(source_files: Sequence[Path]) -> Dict[str, ModuleInfo]:
-    modules_by_name: Dict[str, ModuleInfo] = {}
-    duplicates: List[str] = []
-    for file_path in sorted(set(source_files), key=lambda p: str(p).lower()):
-        parsed = parse_modules_from_source_file(file_path)
-        for module in parsed:
-            if module.name in modules_by_name:
-                duplicates.append(module.name)
-                continue
-            modules_by_name[module.name] = module
-    if duplicates:
-        dup_names = ", ".join(sorted(set(duplicates)))
-        print(f"[WARN] Duplicate module names detected and ignored (kept first): {dup_names}")
-
-    names = sorted(modules_by_name.keys())
-    for name in names:
-        mod = modules_by_name[name]
-        mod.instances = parse_instances(mod.text_clean, names, mod.name)
-        mod.has_fsm = detect_fsm(mod.text_clean, mod.state_description)
-    return modules_by_name
+def choose_top(modules: Dict[str, ModuleInfo]) -> str:
+    if "TOP" in modules:
+        return "TOP"
+    usage = {k: 0 for k in modules}
+    for mod in modules.values():
+        for c in mod.children:
+            if c in usage:
+                usage[c] += 1
+    roots = sorted([k for k, v in usage.items() if v == 0], key=str.lower)
+    if roots:
+        return roots[0]
+    return sorted(modules.keys(), key=str.lower)[0]
 
 
-def load_manifest_snapshot(manifest_json: Path, project_root: Path) -> Dict[str, object]:
-    if not manifest_json.exists():
-        raise RuntimeError(f"Manifest JSON not found: {manifest_json}")
-    try:
-        payload = json.loads(manifest_json.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise RuntimeError(f"Failed to parse manifest JSON: {exc}") from exc
+def parse_selection(raw: str, options: Sequence[str], allow_all: bool = False) -> Tuple[List[str], List[str]]:
+    if not raw:
+        return [], []
+    if allow_all and raw.strip().lower() in {"all", "*"}:
+        return list(options), []
+    lookup = {o.lower(): o for o in options}
+    out, err = [], []
+    for token in [t.strip() for t in raw.split(",") if t.strip()]:
+        if token.isdigit():
+            idx = int(token)
+            if 1 <= idx <= len(options):
+                out.append(options[idx - 1])
+            else:
+                err.append(token)
+        elif token.lower() in lookup:
+            out.append(lookup[token.lower()])
+        else:
+            err.append(token)
+    uniq, seen = [], set()
+    for x in out:
+        if x.lower() in seen:
+            continue
+        seen.add(x.lower())
+        uniq.append(x)
+    return uniq, err
 
+
+def load_manifest(manifest_json: Path, project_root: Path) -> Dict[str, object]:
+    payload = json.loads(manifest_json.read_text(encoding="utf-8"))
     errors = payload.get("errors") or []
     if errors:
-        codes = ",".join(sorted({str(e.get("code", "")) for e in errors if isinstance(e, dict)}))
-        raise RuntimeError(f"Manifest JSON contains errors: {codes or 'unknown_error'}")
-
+        raise RuntimeError("Manifest JSON contains errors.")
     resolved = payload.get("resolved") if isinstance(payload.get("resolved"), dict) else {}
     src_rows = resolved.get("src_files") if isinstance(resolved.get("src_files"), list) else []
     tb_rows = resolved.get("tb_files") if isinstance(resolved.get("tb_files"), list) else []
 
-    def to_abs(rows: Sequence[object]) -> List[Path]:
-        out: List[Path] = []
+    def to_abs(rows: Sequence[object], allowed: set) -> List[Path]:
+        out = []
         for row in rows:
             text = str(row or "").strip()
             if not text:
                 continue
-            p = Path(text)
-            if not p.is_absolute():
-                p = (project_root / text).resolve()
-            if p.exists():
-                out.append(p)
-        return sorted(set(out), key=lambda x: str(x).lower())
+            path = Path(text)
+            if not path.is_absolute():
+                path = (project_root / text).resolve()
+            if path.exists() and path.suffix.lower() in allowed:
+                out.append(path)
+        return sorted(set(out), key=lambda p: str(p).lower())
 
-    src_files = [p for p in to_abs(src_rows) if p.suffix.lower() in {".v", ".sv"}]
-    tb_files = [p for p in to_abs(tb_rows) if p.suffix.lower() in {".v", ".sv"}]
-    top = ""
+    src_files = to_abs(src_rows, RTL_SUFFIXES)
+    tb_files = to_abs(tb_rows, TB_SUFFIXES)
     cfg = payload.get("config") if isinstance(payload.get("config"), dict) else {}
     hdl = cfg.get("hdl") if isinstance(cfg.get("hdl"), dict) else {}
-    if isinstance(hdl.get("top"), str):
-        top = hdl.get("top", "").strip()
-
+    top = str(hdl.get("top", "")).strip() if isinstance(hdl.get("top"), str) else ""
     if not src_files:
         raise RuntimeError("Manifest resolved no source files (.v/.sv).")
-
-    return {
-        "top": top,
-        "src_files": src_files,
-        "tb_files": tb_files,
-    }
+    return {"top": top, "src_files": src_files, "tb_files": tb_files}
 
 
-def choose_top_module(modules_by_name: Dict[str, ModuleInfo]) -> Optional[str]:
-    if "TOP" in modules_by_name:
-        return "TOP"
-    if "Top" in modules_by_name:
-        return "Top"
-    usage = {name: 0 for name in modules_by_name}
-    for mod in modules_by_name.values():
-        for inst in mod.instances:
-            if inst.child_module in usage:
-                usage[inst.child_module] += 1
-    roots = sorted([name for name, cnt in usage.items() if cnt == 0], key=lambda n: n.lower())
-    if roots:
-        return roots[0]
-    names = sorted(modules_by_name.keys(), key=lambda n: n.lower())
-    return names[0] if names else None
-
-
-def prompt_select_top(modules_by_name: Dict[str, ModuleInfo], initial_top: Optional[str]) -> str:
-    default_top = initial_top or choose_top_module(modules_by_name)
-    if not default_top:
-        raise RuntimeError("No module found.")
-    module_names = sorted(modules_by_name.keys(), key=lambda n: n.lower())
-    while True:
-        raw = input(f"Top module [default: {default_top}]: ").strip()
-        if not raw:
-            return default_top
-        matched = next((name for name in module_names if name.lower() == raw.lower()), None)
-        if matched:
-            return matched
-        print(f"[ERROR] Top module not found: {raw}")
-        print(f"[INFO] Available: {', '.join(module_names)}")
-
-
-def prompt_with_default(label: str, default: str) -> str:
+def locate_draw_fsm_cli() -> Optional[Path]:
+    script_dir = Path(__file__).resolve().parent
     try:
-        raw = input(f"{label} [default: {default}]: ").strip()
-    except EOFError:
-        return default
-    return raw if raw else default
+        templates_root = script_dir.parents[3]
+    except IndexError:
+        return None
+    cli = templates_root / "contexts" / "code_intel" / "adapters" / "cli" / "code_generate_fsm_cli.js"
+    return cli if cli.exists() else None
 
 
-def prompt_cover_meta(default_project_name: str, default_author: str) -> Tuple[str, str]:
-    print("")
-    print("[INFO] Cover metadata input:")
-    project_name = prompt_with_default("Project name", default_project_name)
-    author_name = prompt_with_default("Author", default_author)
-    return project_name, author_name
+def parse_cli_json_payload(text: str) -> Optional[Dict[str, object]]:
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw)
+        return payload if isinstance(payload, dict) else None
+    except Exception:
+        pass
+    m = re.search(r"(\{[\s\S]*\})", raw)
+    if not m:
+        return None
+    try:
+        payload = json.loads(m.group(1))
+        return payload if isinstance(payload, dict) else None
+    except Exception:
+        return None
 
 
-def classify_signal_bucket(kind: str) -> int:
-    k = (kind or "").lower()
-    if k == "input":
-        return 1
-    if k == "output":
-        return 2
-    if k == "inout":
-        return 3
-    if k in {"wire", "reg", "logic"}:
-        return 4
-    return 9
-
-
-def top_signal_entries(module: ModuleInfo) -> List[Tuple[str, str]]:
-    items = [(name, kind) for name, kind in module.signal_kinds.items()]
-    items.sort(key=lambda x: (classify_signal_bucket(x[1]), x[0].lower()))
-    return items
-
-
-def parse_index_or_name_selection(
-    raw: str,
-    names_ordered: Sequence[str],
-    allow_all: bool = True,
-) -> Tuple[List[str], List[str]]:
-    tokens = [tok for tok in re.split(r"[,\s]+", raw.strip()) if tok]
-    if allow_all and len(tokens) == 1 and tokens[0].upper() == "ALL":
-        return list(names_ordered), []
-
-    errors: List[str] = []
-    selected: List[str] = []
-    seen: Set[str] = set()
-    name_map = {name.lower(): name for name in names_ordered}
-    for token in tokens:
-        picked: Optional[str] = None
-        if token.isdigit():
-            idx = int(token)
-            if 1 <= idx <= len(names_ordered):
-                picked = names_ordered[idx - 1]
-            else:
-                errors.append(f"Index out of range: {token}")
-        else:
-            picked = name_map.get(token.lower())
-            if picked is None:
-                errors.append(f"Unknown name token: {token}")
-        if picked and picked not in seen:
-            seen.add(picked)
-            selected.append(picked)
-    return selected, errors
-
-
-def parse_datapath_module_spec(
-    raw: str,
-    module_names: Sequence[str],
-) -> Tuple[List[str], List[str]]:
-    tokens = [tok.strip() for tok in raw.split(",") if tok.strip()]
-    if not tokens:
-        return [], ["Selection cannot be empty."]
-
-    selected: List[str] = []
-    errors: List[str] = []
-    name_map = {name.lower(): name for name in module_names}
-
-    for token in tokens:
-        match = re.fullmatch(r"(.+?)(?:\s*[*:xX]\s*(\d+))?", token)
-        if not match:
-            errors.append(f"Invalid format token: {token}")
+def dedup_strings(items: Sequence[object]) -> List[str]:
+    out: List[str] = []
+    seen = set()
+    for item in items:
+        s = str(item or "").strip()
+        if not s:
             continue
-        name_token = (match.group(1) or "").strip()
-        count_text = (match.group(2) or "").strip()
-        count = int(count_text) if count_text else 1
-        if count <= 0:
-            errors.append(f"Count must be >= 1: {token}")
+        key = s.lower()
+        if key in seen:
             continue
-
-        picked = ""
-        if name_token.isdigit():
-            idx = int(name_token)
-            if 1 <= idx <= len(module_names):
-                picked = module_names[idx - 1]
-            else:
-                errors.append(f"Index out of range: {name_token}")
-                continue
-        else:
-            picked = name_map.get(name_token.lower(), "")
-            if not picked:
-                errors.append(f"Unknown module name: {name_token}")
-                continue
-
-        selected.extend([picked] * count)
-
-    return selected, errors
+        seen.add(key)
+        out.append(s)
+    return out
 
 
-def parse_datapath_pages_spec(
-    raw: str,
-    module_names: Sequence[str],
-) -> Tuple[List[Dict[str, object]], List[str]]:
-    segments_raw = raw.split("|")
-    segments = [seg.strip() for seg in segments_raw if seg.strip()]
-    if not segments:
-        return [], ["Selection cannot be empty."]
+def query_fsm_states_from_draw_cli(module: ModuleInfo, cli_path: Optional[Path]) -> List[str]:
+    if cli_path is None:
+        return []
+    node_bin = shutil.which("node")
+    if not node_bin:
+        return []
+    if not module.file_path.exists():
+        return []
 
-    errors: List[str] = []
-    pages: List[Dict[str, object]] = []
-    has_multiple_segments = len(segments) > 1
+    cmd = [
+        node_bin,
+        str(cli_path),
+        "--verilog",
+        str(module.file_path),
+        "--module",
+        module.name,
+        "--meta-only",
+    ]
 
-    for page_idx, segment in enumerate(segments, start=1):
-        title = ""
-        module_spec = segment
-
-        if "=" in segment:
-            left, right = segment.split("=", 1)
-            title = left.strip()
-            module_spec = right.strip()
-            if not title:
-                errors.append(f"Page {page_idx}: title is empty before '='")
-                continue
-            if not module_spec:
-                errors.append(f"Page {page_idx}: module list is empty after '='")
-                continue
-
-        selected, page_errors = parse_datapath_module_spec(module_spec, module_names)
-        if page_errors:
-            for err in page_errors:
-                errors.append(f"Page {page_idx}: {err}")
-            continue
-        if not selected:
-            errors.append(f"Page {page_idx}: no valid module selected")
-            continue
-
-        default_title = f"DataPath #{page_idx}" if has_multiple_segments else "DataPath"
-        page_title = title or default_title
-        pages.append(
-            {
-                "title": page_title,
-                "flowSteps": selected,
-                "flowBoxCount": len(selected),
-            }
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+            timeout=20,
+            check=False,
         )
-
-    if not pages and not errors:
-        errors.append("No valid DataPath page parsed.")
-    return pages, errors
-
-
-def prompt_select_datapath_slides(module_names: Sequence[str]) -> List[Dict[str, object]]:
-    print("")
-    print("[INFO] DataPath page input:")
-    for idx, name in enumerate(module_names, start=1):
-        print(f"  [{idx}] {name}")
-    print("")
-    print("[INFO] DataPath input format:")
-    print("  - Single page (legacy): TOP,ControlUnit,DisplayMux")
-    print("  - Multi page: TOP,ControlUnit | DisplayMux,UartTx")
-    print("  - Titled pages: Sensor Path=TOP,Hcsr04Core | UI Path=ControlUnit,DisplayMux")
-    print("  - Count syntax in each page: TOP*1,ControlUnit*2,DisplayMux")
-    print("  * Page delimiter: |")
-    print("  * Count delimiter supports *, x, :")
-
-    while True:
-        raw = input("DataPath page input (required): ").strip()
-        if not raw:
-            print("[ERROR] Selection cannot be empty.")
-            continue
-        pages, errors = parse_datapath_pages_spec(raw, module_names)
-        if errors:
-            for err in errors:
-                print(f"[ERROR] {err}")
-            continue
-        if not pages:
-            print("[ERROR] No valid DataPath page parsed.")
-            continue
-
-        print("[INFO] Selected DataPath pages:")
-        for idx, page in enumerate(pages, start=1):
-            title = str(page.get("title", "")).strip() or f"DataPath #{idx}"
-            steps = page.get("flowSteps")
-            step_list = steps if isinstance(steps, list) else []
-            print(f"  [Page {idx}] {title} ({len(step_list)} boxes)")
-            for step_idx, mod_name in enumerate(step_list, start=1):
-                print(f"    {step_idx}. {mod_name}")
-        return pages
-
-
-def prompt_select_detail_modules(module_names: Sequence[str], top_name: str) -> List[str]:
-    detail_candidates = [name for name in module_names if name != top_name]
-    if not detail_candidates:
-        print("[WARN] No non-top modules found. Module detail slides will be skipped.")
+    except Exception:
         return []
 
-    print("")
-    print("[INFO] Module detail selection input:")
-    print(f"[INFO] Top module '{top_name}' is excluded from detail slides.")
-    for idx, name in enumerate(detail_candidates, start=1):
-        print(f"  [{idx}] {name}")
-    print("")
-    print("[INFO] Selection format:")
-    print("  - ALL")
-    print("  - Number list: 1,5,3")
-    print("  - Name list: uart_rx,uart_tx")
-
-    while True:
-        raw = input("Module detail selection (required, default ALL): ").strip()
-        if not raw:
-            raw = "ALL"
-        selected, errors = parse_index_or_name_selection(raw, detail_candidates, allow_all=True)
-        if errors:
-            for err in errors:
-                print(f"[ERROR] {err}")
-            continue
-        if not selected:
-            print("[ERROR] No valid module selected.")
-            continue
-        print("[INFO] Selected module detail targets:")
-        for idx, name in enumerate(selected, start=1):
-            print(f"  [{idx}] {name}")
-        return selected
+    payload = parse_cli_json_payload(proc.stdout) or parse_cli_json_payload(proc.stderr)
+    if not payload:
+        return []
+    if not payload.get("ok"):
+        return []
+    states = payload.get("states")
+    if not isinstance(states, list):
+        return []
+    return dedup_strings(states)
 
 
-def prompt_select_module_rank(module_names: Sequence[str]) -> Dict[str, int]:
-    print("")
-    print("[INFO] Module detail order input (rank source):")
-    for idx, name in enumerate(module_names, start=1):
-        print(f"  [{idx}] {name}")
-    print("")
-    print("[INFO] Order selection format:")
-    print("  - ALL")
-    print("  - Number list: 1,5,3")
-    print("  - Name list: uart_rx,uart_tx")
-
-    while True:
-        raw = input("Module order input (required, default ALL): ").strip()
-        if not raw:
-            raw = "ALL"
-        selected, errors = parse_index_or_name_selection(raw, module_names, allow_all=True)
-        if errors:
-            for err in errors:
-                print(f"[ERROR] {err}")
-            continue
-        if not selected:
-            print("[ERROR] No valid module selected.")
-            continue
-        rank: Dict[str, int] = {}
-        for idx, name in enumerate(selected):
-            rank[name] = idx
-        tail = len(rank)
-        for name in module_names:
-            if name not in rank:
-                rank[name] = tail
-                tail += 1
-        print("[INFO] Rank order applied.")
-        return rank
-
-
-def prompt_manual_tb_insertions(
-    detail_modules: Sequence[str],
-    tb_files: Sequence[Path],
-) -> Dict[str, List[Optional[Path]]]:
-    print("")
-    print("[INFO] Manual TB page insertion (last step)")
-    if not detail_modules:
-        print("[INFO] No module detail targets found. Manual TB page insertion skipped.")
-        return {}
-
-    print("[INFO] Select the target module where manual TB page is inserted right after.")
-    for idx, name in enumerate(detail_modules, start=1):
-        print(f"  [M{idx}] {name}")
-
-    tb_names = [tb.name for tb in tb_files]
-    tb_lookup: Dict[str, Path] = {tb.name.lower(): tb for tb in tb_files}
-    print("")
-    if tb_names:
-        print("[INFO] Available testbench files:")
-        for idx, tb_name in enumerate(tb_names, start=1):
-            print(f"  [T{idx}] {tb_name}")
+def resolve_fsm_state_map(modules: Dict[str, ModuleInfo], module_order: Sequence[str]) -> Dict[str, List[str]]:
+    cli_path = locate_draw_fsm_cli()
+    using_cli = bool(cli_path and shutil.which("node"))
+    if using_cli:
+        print(f"[INFO] FSM detect: Draw FSM parser enabled ({cli_path})")
     else:
-        print("[WARN] No testbench file found under project tb folder.")
-        print("[WARN] Manual TB page will use placeholder file text only.")
+        print("[INFO] FSM detect: Draw FSM parser unavailable, using fallback regex states.")
 
-    while True:
-        raw_count = input("Manual TB page count [0 or more, default 0]: ").strip()
-        if not raw_count:
-            raw_count = "0"
-        if re.fullmatch(r"\d+", raw_count):
-            manual_count = int(raw_count)
-            break
-        print(f"[ERROR] Invalid manual TB page count: {raw_count}")
+    out: Dict[str, List[str]] = {}
+    for name in module_order:
+        module = modules[name]
+        states = query_fsm_states_from_draw_cli(module, cli_path if using_cli else None)
+        if not states:
+            states = dedup_strings(module.fsm_states)
+        out[name] = states
+    return out
 
-    if manual_count <= 0:
-        print("[INFO] Manual TB page insertion skipped.")
-        return {}
 
-    manual_map: Dict[str, List[Optional[Path]]] = defaultdict(list)
-    for page_idx in range(manual_count):
-        print("")
-        print(f"[INFO] Configure manual TB page #{page_idx + 1}")
-
-        target_module = ""
-        while True:
-            raw_module = input("  Target module (index/name): ").strip()
-            if not raw_module:
-                print("[ERROR] Target module is required.")
+def scan_tb_scaffolds(project_root: Path) -> Dict[str, TbScaffold]:
+    out: Dict[str, TbScaffold] = {}
+    for tb_root in (project_root / "tb", project_root / "TB"):
+        if not tb_root.exists():
+            continue
+        for child in sorted(tb_root.iterdir(), key=lambda p: p.name.lower()):
+            if not child.is_dir() or not child.name.lower().endswith("_tb"):
                 continue
-            selected, errors = parse_index_or_name_selection(raw_module, detail_modules, allow_all=False)
-            if errors:
-                for err in errors:
-                    print(f"[ERROR] {err}")
-                continue
-            if len(selected) != 1:
-                print("[ERROR] Please select exactly one module.")
-                continue
-            target_module = selected[0]
-            break
-
-        selected_tb: Optional[Path] = None
-        if tb_names:
-            while True:
-                raw_tb = input("  TB file (index/name, ENTER for placeholder): ").strip()
-                if not raw_tb or raw_tb.lower() in {"none", "placeholder"}:
-                    break
-                selected_tb_names, errors = parse_index_or_name_selection(raw_tb, tb_names, allow_all=False)
-                if errors:
-                    for err in errors:
-                        print(f"[ERROR] {err}")
-                    continue
-                if len(selected_tb_names) != 1:
-                    print("[ERROR] Please select exactly one TB file.")
-                    continue
-                selected_tb = tb_lookup.get(selected_tb_names[0].lower())
-                if selected_tb is None:
-                    print(f"[ERROR] TB file not found: {selected_tb_names[0]}")
-                    continue
-                break
-
-        manual_map[target_module].append(selected_tb)
-        tb_label = selected_tb.name if selected_tb is not None else "[placeholder]"
-        print(f"[INFO] Added manual TB page: {target_module} <- {tb_label}")
-
-    total_pages = sum(len(items) for items in manual_map.values())
-    print(f"[INFO] Manual TB pages configured: {total_pages}")
-    return dict(manual_map)
+            tests = sorted((child / "tests").glob("test*.svh"), key=lambda p: p.name.lower())
+            if not tests:
+                tests = sorted((child / "tests").glob("*.svh"), key=lambda p: p.name.lower())
+            tests = dedupe_test_files(tests)
+            hint = child.name[:-3]
+            # Interface file: look for interface.sv or *_if.sv in root
+            iface_candidates = list(child.glob("interface.sv")) + list(child.glob("*_if.sv"))
+            iface_path = iface_candidates[0] if iface_candidates else None
+            out[normalize(hint)] = TbScaffold(
+                hint_name=hint,
+                root=child,
+                transaction=(child / "objs" / "transaction.svh") if (child / "objs" / "transaction.svh").exists() else None,
+                generator=(child / "components" / "generator.svh") if (child / "components" / "generator.svh").exists() else None,
+                driver=(child / "components" / "driver.svh") if (child / "components" / "driver.svh").exists() else None,
+                monitor=(child / "components" / "monitor.svh") if (child / "components" / "monitor.svh").exists() else None,
+                environment=(child / "env" / "environment.svh") if (child / "env" / "environment.svh").exists() else None,
+                coverage=(child / "env" / "coverage.svh") if (child / "env" / "coverage.svh").exists() else None,
+                scoreboard=(child / "env" / "scoreboard.svh") if (child / "env" / "scoreboard.svh").exists() else None,
+                base_test=(child / "tests" / "base_test.svh") if (child / "tests" / "base_test.svh").exists() else None,
+                tests=tests,
+                interface=iface_path,
+            )
+    return out
 
 
-def build_sorted_children(mod: ModuleInfo, modules_by_name: Dict[str, ModuleInfo], rank: Dict[str, int]) -> List[str]:
-    children = mod.direct_children(set(modules_by_name.keys()))
-    children.sort(key=lambda n: (rank.get(n, 10**9), n.lower()))
-    return children
+def resolve_scaffold_mapping(
+    module_order: Sequence[str],
+    scaffolds: Dict[str, TbScaffold],
+    non_interactive: bool,
+) -> Dict[str, Optional[TbScaffold]]:
+    mapping: Dict[str, Optional[TbScaffold]] = {}
+    used = set()
+    for name in module_order:
+        hit = scaffolds.get(normalize(name))
+        if hit is not None and hit.root not in used:
+            mapping[name] = hit
+            used.add(hit.root)
+        else:
+            mapping[name] = None
 
+    if non_interactive:
+        return mapping
 
-def discover_testbenches(tb_dir: Path) -> List[Path]:
-    if not tb_dir.exists():
-        return []
-    files = sorted(tb_dir.glob("*.v")) + sorted(tb_dir.glob("*.sv"))
-    return sorted(set(files), key=lambda p: p.name.lower())
+    pool = [s for s in scaffolds.values() if s.root not in used]
+    if not pool:
+        return mapping
 
-
-def discover_testbenches_from_files(tb_files: Sequence[Path]) -> List[Path]:
-    return sorted(set(tb_files), key=lambda p: p.name.lower())
-
-
-def auto_map_testbench(tb_file: Path, module_names: Sequence[str]) -> Optional[str]:
-    stem = tb_file.stem.lower()
-    for mod in module_names:
-        mod_l = mod.lower()
-        if (
-            stem == f"tb_{mod_l}"
-            or stem == f"{mod_l}_tb"
-            or stem.startswith(f"tb_{mod_l}_")
-            or stem.startswith(f"{mod_l}_tb_")
-        ):
-            return mod
-    return None
-
-
-def prompt_map_unmatched_testbenches(
-    unmatched: Sequence[Path], module_names: Sequence[str], non_interactive: bool = False
-) -> Dict[str, List[Path]]:
-    mapping: Dict[str, List[Path]] = defaultdict(list)
+    unmatched = [name for name, item in mapping.items() if item is None]
     if not unmatched:
         return mapping
 
-    if non_interactive:
-        print("")
-        print("[WARN] Unmatched testbench files skipped in non-interactive mode:")
-        for tb in unmatched:
-            print(f"  - {tb.name}")
-        return mapping
-
-    print("")
-    print("[INFO] Unmatched testbench files need mapping.")
-    for tb in unmatched:
-        print("")
-        print(f"[TB] {tb.name}")
-        for idx, name in enumerate(module_names, start=1):
-            print(f"  [{idx}] {name}")
-        print("  -> Input format: 1 or TOP or 1,3,5 or TOP,ControlUnit")
+    print("\n[INFO] Optional TB mapping correction for unmatched modules")
+    for mod in unmatched:
+        print(f"\nModule: {mod}")
+        for idx, item in enumerate(pool, start=1):
+            print(f"  [{idx}] {item.root.name}")
+        print("  [S] skip")
         while True:
-            raw = input("Map to module(s) (index/name list/skip): ").strip()
-            if not raw or raw.lower() == "skip":
+            raw = input("Select scaffold index or S: ").strip()
+            if not raw or raw.lower() == "s":
                 break
-            selected, errors = parse_index_or_name_selection(raw, module_names, allow_all=False)
-            if errors:
-                for err in errors:
-                    print(f"[ERROR] {err}")
+            selected = None
+            if raw.isdigit():
+                idx = int(raw)
+                if 1 <= idx <= len(pool):
+                    selected = pool[idx - 1]
+            else:
+                for item in pool:
+                    if raw.lower() in {item.root.name.lower(), item.hint_name.lower()}:
+                        selected = item
+                        break
+            if selected is None:
+                print("[ERROR] Invalid scaffold selection.")
                 continue
-            if not selected:
-                print("[ERROR] Invalid module selection.")
-                continue
-            for picked in selected:
-                mapping[picked].append(tb)
+            mapping[mod] = selected
+            used.add(selected.root)
+            pool = [s for s in pool if s.root != selected.root]
             break
     return mapping
 
 
-def choose_waveform_asset(project_root: Path, module_name: str, tb_file: Path, presentation_dir: Path) -> str:
-    tb_stem = tb_file.stem
-    candidates = [
-        project_root / "output" / f"{tb_stem}.png",
-        project_root / "output" / f"{tb_stem}.svg",
-        project_root / "output" / f"{tb_stem}.jpg",
-        project_root / "output" / "FINALReport" / "assets" / "waveform" / f"{tb_stem}.png",
-        project_root / "output" / "FINALReport" / "assets" / "waveform" / f"{tb_stem}.svg",
-        project_root / "output" / "FINALReport" / "assets" / "waveform" / f"{module_name}.png",
-        project_root / "output" / "FINALReport" / "assets" / "waveform" / f"{module_name}.svg",
-    ]
-    for item in candidates:
-        if item.exists():
-            return os.path.relpath(item, presentation_dir).replace("\\", "/")
+def task_names(path: Optional[Path]) -> List[str]:
+    if path is None or not path.exists():
+        return []
+    return sorted(set(re.findall(r"\btask\s+(?:automatic\s+)?([A-Za-z_][A-Za-z0-9_$]*)", read_text(path), flags=re.I)))
+
+
+def parse_directed_task_split(path: Optional[Path]) -> Dict[str, List[str]]:
+    """Split generator tasks: tasks called in run() case = scenarioTasks, all others = helperTasks."""
+    if path is None or not path.exists():
+        return {"scenarioTasks": [], "helperTasks": []}
+    text = read_text(path)
+    # Extract all task names defined in the class
+    all_tasks = set(re.findall(r"\btask\s+(?:automatic\s+)?([A-Za-z_][A-Za-z0-9_$]*)", text, flags=re.I))
+    # Extract the run() body
+    run_m = re.search(r"\bvirtual\s+task\s+run\s*\(\s*\)\s*;(.*?)\bendtask\b", text, flags=re.S | re.I)
+    run_body = run_m.group(1) if run_m else ""
+    # Find ALL task calls inside run() body (any identifier followed by ())
+    tasks_in_run = set(re.findall(r"\b([A-Za-z_][A-Za-z0-9_$]*)\s*\(", run_body, flags=re.I)) & all_tasks
+    tasks_in_run.discard("run")
+    scenario_tasks = sorted(tasks_in_run)
+    # Helper tasks = defined tasks NOT directly called from run()
+    helper_tasks = sorted(all_tasks - tasks_in_run - {"run"})
+    return {"scenarioTasks": scenario_tasks, "helperTasks": helper_tasks}
+
+
+def parse_sva_assertions(scaffold: Optional[object]) -> List[Dict[str, str]]:
+    """Parse SVA assertions from interface.sv in the TB scaffold."""
+    if scaffold is None:
+        return []
+    iface_path = getattr(scaffold, "interface", None)
+    if iface_path is None or not iface_path.exists():
+        return []
+    text = read_text(iface_path)
+    results: List[Dict[str, str]] = []
+    # Collect property bodies: name -> body text
+    prop_bodies: Dict[str, str] = {}
+    for pm in re.finditer(
+        r"\bproperty\s+([A-Za-z_][A-Za-z0-9_$]*)\s*;([^;]+?)\bendproperty\b",
+        text, flags=re.S | re.I
+    ):
+        prop_bodies[pm.group(1).lower()] = re.sub(r"\s+", " ", pm.group(2).strip())
+    # Extract assert labels + property reference
+    for am in re.finditer(
+        r"([A-Za-z_][A-Za-z0-9_$]*)\s*:\s*assert\s+property\s*\(([A-Za-z_][A-Za-z0-9_$]*)\)",
+        text, flags=re.I
+    ):
+        label = am.group(1)
+        prop_name = am.group(2)
+        body = prop_bodies.get(prop_name.lower(), "")
+        # Extract disable iff from property body
+        cond = ""
+        cond_m = re.search(r"disable\s+iff\s*\(([^)]+)\)", body, flags=re.I)
+        if cond_m:
+            cond = cond_m.group(1).strip()
+        # Clean body for display: remove 'disable iff (...)'
+        clean_body = re.sub(r"disable\s+iff\s*\([^)]+\)\s*", "", body, flags=re.I).strip()
+        results.append({"name": label, "prop": prop_name, "rule": clean_body, "cond": cond})
+    return results
+
+
+def parse_env_mailboxes(path: Optional[Path]) -> List[str]:
+    """Extract mailbox variable names from environment.svh."""
+    if path is None or not path.exists():
+        return []
+    text = read_text(path)
+    return dedup_strings(re.findall(r"\b(mbx_[A-Za-z0-9_$]+)\b", text, flags=re.I))
+
+
+def parse_env_components(path: Optional[Path]) -> List[Dict[str, str]]:
+    """Extract component handles (m_* class declarations) from environment.svh."""
+    if path is None or not path.exists():
+        return []
+    text = read_text(path)
+    results = []
+    for m in re.finditer(r"(?m)^\s*([A-Za-z_][A-Za-z0-9_$]*)\s+(m_[A-Za-z0-9_$]+)\s*;", text):
+        cls = m.group(1)
+        inst = m.group(2)
+        # Skip primitive/process types
+        if cls.lower() in {"process", "string", "int", "real", "bit", "logic", "integer"}:
+            continue
+        results.append({"cls": cls, "inst": inst})
+    return results
+
+
+def parse_clk_freq_from_tb(scaffold: Optional[object]) -> str:
+    """Scan TB files for LP_CLK_PERIOD or P_CLK_HZ to derive a frequency label."""
+    if scaffold is None:
+        return ""
+    # Check tb_top.sv, tb_defs.svh, and include files
+    root = getattr(scaffold, "root", None)
+    if root is None:
+        return ""
+    candidates: List[Path] = []
+    for pat in ["tb_top.sv", "*.sv", "include/*.svh", "*.svh"]:
+        candidates.extend(root.glob(pat))
+    for path in candidates:
+        if not path.exists():
+            continue
+        text = read_text(path)
+        # LP_CLK_PERIOD in ns
+        m = re.search(r"LP_CLK_PERIOD\s*=\s*([0-9]+(?:\.[0-9]+)?)", text)
+        if m:
+            ns = float(m.group(1))
+            if ns > 0:
+                freq_mhz = 1000.0 / ns
+                if freq_mhz >= 1000:
+                    return f"{freq_mhz/1000:.0f}GHz"
+                elif freq_mhz == int(freq_mhz):
+                    return f"{int(freq_mhz)}MHz"
+                else:
+                    return f"{freq_mhz:.1f}MHz"
+        # P_CLK_HZ
+        m = re.search(r"P_CLK_HZ\s*=\s*([0-9_]+)", text)
+        if m:
+            hz = int(m.group(1).replace("_", ""))
+            if hz >= 1_000_000_000:
+                return f"{hz // 1_000_000_000}GHz"
+            elif hz >= 1_000_000:
+                return f"{hz // 1_000_000}MHz"
+            elif hz >= 1_000:
+                return f"{hz // 1_000}kHz"
     return ""
 
 
-def build_output_image_index(project_root: Path) -> Dict[str, List[Path]]:
-    output_dir = project_root / "output"
-    index: Dict[str, List[Path]] = defaultdict(list)
-    if not output_dir.exists():
-        return index
-
-    for path in output_dir.rglob("*"):
-        if not path.is_file():
-            continue
-        if path.suffix.lower() not in IMAGE_EXTENSIONS:
-            continue
-        stem = path.stem.lower()
-        keys = {stem}
-        for prefix in ("output_", "skin_"):
-            if stem.startswith(prefix) and len(stem) > len(prefix):
-                keys.add(stem[len(prefix) :])
-        for suffix in ("_detailed", "_simple", "_fsm", "_fsm_fsm"):
-            if stem.endswith(suffix) and len(stem) > len(suffix):
-                keys.add(stem[: -len(suffix)])
-        for key in keys:
-            index[key].append(path)
-    return index
+def summary_lines(path: Optional[Path], regex: str, limit: int = 3) -> List[str]:
+    if path is None or not path.exists():
+        return []
+    out = []
+    for line in read_text(path).splitlines():
+        if re.search(regex, line, flags=re.I):
+            out.append(line.strip())
+        if len(out) >= limit:
+            break
+    return out
 
 
-def find_first_existing_rel(presentation_dir: Path, candidates: Iterable[Path]) -> str:
-    for item in candidates:
-        if item.exists():
-            return os.path.relpath(item, presentation_dir).replace("\\", "/")
-    return ""
+def dedupe_test_files(tests: Sequence[Path]) -> List[Path]:
+    test_files = [p for p in tests if p.exists() and p.stem.lower() != "base_test"]
+    specific_nums = set()
+    for path in test_files:
+        m = re.match(r"^test[_-]?(\d+)[_-].+$", path.stem, flags=re.I)
+        if m:
+            specific_nums.add(int(m.group(1)))
 
-
-def find_first_existing_path(candidates: Iterable[Path]) -> Optional[Path]:
-    for item in candidates:
-        if item.exists():
-            return item
-    return None
-
-
-def dedup_paths(paths: Iterable[Path]) -> List[Path]:
     out: List[Path] = []
-    seen: Set[str] = set()
-    for path in paths:
-        key = str(path).lower()
+    seen = set()
+    for path in test_files:
+        stem = path.stem
+        key = normalize(stem)
         if key in seen:
+            continue
+        generic = re.match(r"^test[_-]?(\d+)$", stem, flags=re.I)
+        if generic and int(generic.group(1)) in specific_nums:
             continue
         seen.add(key)
         out.append(path)
     return out
 
 
-def image_rank(path: Path, module_name: str, kind: str) -> Tuple[int, int, str]:
-    module_l = module_name.lower()
-    parent = str(path.parent).replace("\\", "/").lower()
-    stem = path.stem.lower()
-    ext = path.suffix.lower()
-    score = 0
+def summarize_scenario(path: Path) -> Dict[str, str]:
+    text = read_text(path)
+    comment_line = next((line.strip().lstrip("/").strip() for line in text.splitlines() if line.strip().startswith("//")), "")
+    kind_m = re.search(r"\bm_cfg\.m_test_kind\s*=\s*[A-Za-z_][A-Za-z0-9_$]*::([A-Za-z0-9_]+)\s*;", text)
+    class_m = re.search(r"\bclass\s+([A-Za-z_][A-Za-z0-9_$]*)\s+extends\s+([A-Za-z_][A-Za-z0-9_$]*)", text)
 
-    if kind == "fsm":
-        if "/fsm/svg" in parent and stem in {f"{module_l}_fsm", f"{module_l}_fsm_fsm"}:
-            score += 100
-        elif "/fsm" in parent and module_l in stem and "fsm" in stem:
-            score += 90
-        elif module_l in stem and "fsm" in stem:
-            score += 70
-    elif kind == "top":
-        if "/diagram/detailed" in parent and stem == f"{module_l}_detailed":
-            score += 100
-        elif "/diagram/simple" in parent and stem == module_l:
-            score += 90
-        elif module_l in stem:
-            score += 50
+    scenario_tag = ""
+    if kind_m:
+        scenario_tag = kind_m.group(1)
+    elif class_m:
+        scenario_tag = class_m.group(1)
     else:
-        if "/diagram/simple" in parent and stem == module_l:
-            score += 100
-        elif "/diagram/detailed" in parent and stem == f"{module_l}_detailed":
-            score += 95
-        elif "/diagram/detailed" in parent and stem == module_l:
-            score += 90
-        elif stem == module_l:
-            score += 75
-        elif stem in {f"{module_l}_detailed", f"output_{module_l}", f"skin_{module_l}"}:
-            score += 70
-        elif module_l in stem:
-            score += 45
+        scenario_tag = path.stem
 
-    if ext == ".svg":
-        score += 10
-    elif ext == ".png":
-        score += 7
-    elif ext in {".jpg", ".jpeg"}:
-        score += 5
+    pretty = re.sub(r"^LP_TEST_\d+_?", "", scenario_tag, flags=re.I)
+    pretty = re.sub(r"^test[_-]?\d+[_-]?", "", pretty, flags=re.I)
+    pretty = re.sub(r"[_\-]+", " ", pretty).strip().title()
+    desc = comment_line or (pretty if pretty else f"Scenario from {path.stem}")
 
-    return (-score, len(str(path)), str(path).lower())
+    cfg_lines = []
+    for m in re.finditer(
+        r"\bm_cfg\.(m_num_transactions|m_post_cycles|m_seed|m_enable_random|m_require_full_coverage)\s*=\s*([^;]+);",
+        text,
+    ):
+        lhs = m.group(1).replace("m_", "")
+        rhs = re.sub(r"\s+", " ", m.group(2).strip())
+        cfg_lines.append(f"{lhs}={rhs}")
+        if len(cfg_lines) >= 3:
+            break
+    constraints = ", ".join(cfg_lines) if cfg_lines else "N/A"
+    return {"desc": desc, "constraints": constraints}
 
 
-def select_image_from_index(
-    module_name: str,
-    kind: str,
-    image_index: Dict[str, List[Path]],
-    presentation_dir: Path,
-) -> str:
-    module_l = module_name.lower()
-    candidates: List[Path] = []
-    if kind == "fsm":
-        preferred_keys = [f"{module_l}_fsm", f"{module_l}_fsm_fsm"]
-    elif kind == "top":
-        preferred_keys = [f"{module_l}_detailed", module_l, f"output_{module_l}", f"skin_{module_l}"]
-    else:
-        preferred_keys = [module_l, f"{module_l}_detailed", f"output_{module_l}", f"skin_{module_l}"]
+def parse_coverage_details(path: Optional[Path]) -> Dict[str, List[str]]:
+    if path is None or not path.exists():
+        return {"coverpoints": [], "crosses": [], "illegalBins": [], "summary": ["coverage.svh not found."]}
 
-    for key in preferred_keys:
-        candidates.extend(image_index.get(key, []))
-
-    if kind == "fsm":
-        for key, paths in image_index.items():
-            if "fsm" not in key:
-                continue
-            if key == module_l or key.startswith(f"{module_l}_") or key.endswith(f"_{module_l}"):
-                candidates.extend(paths)
-    else:
-        for key, paths in image_index.items():
-            if key.startswith(f"{module_l}_") and ("detailed" in key or "simple" in key):
-                candidates.extend(paths)
-
-    unique_candidates = dedup_paths(candidates)
-    if not unique_candidates:
-        return ""
-    unique_candidates.sort(key=lambda p: image_rank(p, module_name, kind))
-    return os.path.relpath(unique_candidates[0], presentation_dir).replace("\\", "/")
-
-
-def build_image_candidate_paths(base_dir: Path, stems: Sequence[str]) -> List[Path]:
-    out: List[Path] = []
-    seen: Set[str] = set()
-    for stem in stems:
-        if not stem:
-            continue
-        for ext in IMAGE_EXTENSIONS:
-            key = f"{stem.lower()}{ext}"
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append(base_dir / f"{stem}{ext}")
-    return out
-
-
-def resolve_module_simple_image(
-    module_name: str,
-    project_root: Path,
-    presentation_dir: Path,
-    image_index: Dict[str, List[Path]],
-) -> str:
-    candidates: List[Path] = []
-    candidates.extend(
-        build_image_candidate_paths(
-            project_root / "output" / "Diagram" / "Simple",
-            [module_name, module_name.lower(), f"{module_name}_simple", f"{module_name}_detailed"],
-        )
+    text = read_text(path)
+    coverpoints = dedup_strings(
+        list(re.findall(r"\b([A-Za-z_][A-Za-z0-9_$]*)\s*:\s*coverpoint\b", text, flags=re.I))
+        + list(re.findall(r"\bcoverpoint\s+([A-Za-z_][A-Za-z0-9_$]*)\b", text, flags=re.I))
     )
-    candidates.extend(
-        build_image_candidate_paths(
-            project_root / "output" / "Diagram" / "Detailed",
-            [f"{module_name}_detailed", module_name, module_name.lower()],
-        )
+    crosses = dedup_strings(
+        list(re.findall(r"\b([A-Za-z_][A-Za-z0-9_$]*)\s*:\s*cross\b", text, flags=re.I))
+        + [re.sub(r"\s+", " ", x.strip()) for x in re.findall(r"\bcross\s+([^;]+);", text, flags=re.I)]
     )
-    candidates.extend(
-        build_image_candidate_paths(
-            project_root / "output" / "Diagram" / "JSON",
-            [f"output_{module_name}", f"skin_{module_name}", f"output_{module_name.lower()}", f"skin_{module_name.lower()}"],
-        )
+    illegal_bins = dedup_strings(
+        list(re.findall(r"\billegal_bins\s+([A-Za-z_][A-Za-z0-9_$]*)\b", text, flags=re.I))
+        + [re.sub(r"\s+", " ", x.strip()) for x in re.findall(r"\billegal_bins\s+([^;]+);", text, flags=re.I)]
     )
-    candidates.extend(build_image_candidate_paths(project_root / "output", [module_name, module_name.lower()]))
 
-    resolved = find_first_existing_rel(presentation_dir, candidates)
-    if resolved:
-        return resolved
-    return select_image_from_index(module_name, "simple", image_index, presentation_dir)
+    if not coverpoints:
+        coverpoints = dedup_strings([f"cp_{x}" for x in re.findall(r"\bm_hit_cp_([A-Za-z0-9_]+)\b", text)])
+    if not crosses:
+        crosses = dedup_strings([f"cx_{x}" for x in re.findall(r"\bm_hit_cx_([A-Za-z0-9_]+)\b", text)])
+    if not illegal_bins and re.search(r"\billegal_bins\b", text, flags=re.I):
+        illegal_bins = ["illegal_bins detected (name parse fallback)"]
 
-
-def resolve_module_fsm_image(
-    module_name: str,
-    project_root: Path,
-    presentation_dir: Path,
-    image_index: Dict[str, List[Path]],
-) -> str:
-    candidates: List[Path] = []
-    candidates.extend(
-        build_image_candidate_paths(
-            project_root / "output" / "fsm" / "svg",
-            [f"{module_name}_fsm", f"{module_name}_fsm_fsm", module_name],
-        )
-    )
-    candidates.extend(
-        build_image_candidate_paths(
-            project_root / "output" / "fsm",
-            [f"{module_name}_fsm", f"{module_name}_fsm_fsm", module_name],
-        )
-    )
-    resolved = find_first_existing_rel(presentation_dir, candidates)
-    if resolved:
-        return resolved
-    return select_image_from_index(module_name, "fsm", image_index, presentation_dir)
+    summary = summary_lines(path, r"covergroup|coverpoint|cross|bins|ignore_bins|illegal_bins|m_hit_cp_|m_hit_cx_", 8)
+    if not summary:
+        summary = ["No explicit coverpoint/cross statement detected."]
+    return {"coverpoints": coverpoints[:16], "crosses": crosses[:16], "illegalBins": illegal_bins[:16], "summary": summary}
 
 
-def resolve_top_block_image(
-    top_name: str,
-    project_root: Path,
-    presentation_dir: Path,
-    image_index: Dict[str, List[Path]],
-) -> str:
-    candidates: List[Path] = []
-    candidates.extend(
-        build_image_candidate_paths(
-            project_root / "output" / "Diagram" / "Detailed",
-            [f"{top_name}_detailed", top_name],
-        )
-    )
-    candidates.extend(
-        build_image_candidate_paths(
-            project_root / "output" / "Diagram" / "JSON",
-            [
-                f"skin_{top_name}",
-                f"output_{top_name}",
-                f"skin_{top_name.lower()}",
-                f"output_{top_name.lower()}",
-            ],
-        )
-    )
-    candidates.extend(
-        build_image_candidate_paths(
-            project_root / "output" / "Diagram" / "Simple",
-            [top_name, f"{top_name}_simple", f"{top_name}_detailed"],
-        )
-    )
-    resolved = find_first_existing_rel(presentation_dir, candidates)
-    if resolved:
-        return resolved
-    return select_image_from_index(top_name, "top", image_index, presentation_dir)
+def role_text_from_instance(instance_name: str) -> str:
+    low = instance_name.lower()
+    if "driver" in low:
+        return "Drive DUT interface pins from generated transactions."
+    if "monitor" in low:
+        return "Sample DUT I/O and publish observed transactions."
+    if "scoreboard" in low:
+        return "Compare expected model output with observed response."
+    if "coverage" in low:
+        return "Collect functional coverage hits and closure metrics."
+    if "generator" in low:
+        return "Produce directed/random transaction streams."
+    return "Verification worker thread."
 
 
-def is_external_path(path_text: str) -> bool:
-    lower = path_text.strip().lower()
-    return lower.startswith("http://") or lower.startswith("https://") or lower.startswith("data:")
+def parse_env_thread_plan(path: Optional[Path]) -> Dict[str, object]:
+    if path is None or not path.exists():
+        return {"joinType": "N/A", "threads": [], "rawFork": "environment.svh not found.", "mailboxes": [], "components": []}
 
+    text = read_text(path)
+    decl_map = {}
+    for m in re.finditer(r"(?m)^\s*([A-Za-z_][A-Za-z0-9_$]*)\s+(m_[A-Za-z0-9_$]+)\s*;", text):
+        decl_map[m.group(2)] = m.group(1)
 
-def resolve_existing_path(path_text: str, project_root: Path, presentation_dir: Path) -> Optional[Path]:
-    raw = (path_text or "").strip()
-    if not raw or is_external_path(raw):
-        return None
-    p = Path(raw)
-    if p.is_absolute():
-        return p if p.exists() else None
+    run_body = ""
+    run_m = re.search(r"\b(?:virtual\s+)?task\s+run\s*\(\s*\)\s*;\s*(.*?)\bendtask\b", text, flags=re.S | re.I)
+    if run_m:
+        run_body = run_m.group(1)
 
-    candidates = [
-        (presentation_dir / raw).resolve(),
-        (project_root / raw).resolve(),
-    ]
-    if raw.startswith("../"):
-        candidates.append((project_root / raw[3:]).resolve())
+    join_type = "join"
+    join_m = re.search(r"\b(join_none|join_any|join)\b", run_body, flags=re.I)
+    if join_m:
+        join_type = join_m.group(1).lower()
 
-    for c in candidates:
-        if c.exists():
-            return c
-    return None
-
-
-def copy_asset_to_presentation(
-    source: Path,
-    presentation_dir: Path,
-    bucket: str,
-    copied_cache: Dict[Tuple[str, str], str],
-) -> str:
-    source_resolved = source.resolve()
-    cache_key = (str(source_resolved).lower(), bucket)
-    if cache_key in copied_cache:
-        return copied_cache[cache_key]
-
-    safe_bucket = re.sub(r"[^A-Za-z0-9_-]+", "_", bucket.strip() or "misc")
-    dst_dir = presentation_dir / "assets" / safe_bucket
-    dst_dir.mkdir(parents=True, exist_ok=True)
-
-    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", source_resolved.stem).strip("._")
-    if not stem:
-        stem = "asset"
-    digest = hashlib.md5(str(source_resolved).encode("utf-8")).hexdigest()[:8]
-    ext = source_resolved.suffix or ".bin"
-    dst_name = f"{stem}_{digest}{ext}"
-    dst_path = dst_dir / dst_name
-    if not dst_path.exists():
-        shutil.copy2(source_resolved, dst_path)
-
-    rel = os.path.relpath(dst_path, presentation_dir).replace("\\", "/")
-    if not rel.startswith("."):
-        rel = f"./{rel}"
-    copied_cache[cache_key] = rel
-    return rel
-
-
-def materialize_presentation_assets(
-    presentation_config: dict,
-    project_root: Path,
-    presentation_dir: Path,
-) -> None:
-    copied_cache: Dict[Tuple[str, str], str] = {}
-
-    def rewrite_path(container: dict, key: str, bucket: str) -> None:
-        value = container.get(key)
-        if not isinstance(value, str):
-            return
-        raw = value.strip()
-        if not raw or is_external_path(raw):
-            return
-        src = resolve_existing_path(raw, project_root, presentation_dir)
-        if src is None:
-            return
-        container[key] = copy_asset_to_presentation(src, presentation_dir, bucket, copied_cache)
-
-    assets = presentation_config.get("assets")
-    if isinstance(assets, dict):
-        rewrite_path(assets, "topBlockSvg", "top")
-        rewrite_path(assets, "testbenchWaveform", "waveform")
-        rewrite_path(assets, "timingDiagramSvg", "timing")
-        rewrite_path(assets, "clockResetTreeSvg", "clock_reset")
-        rewrite_path(assets, "powerReportRpt", "reports")
-        rewrite_path(assets, "timingReportRpt", "reports")
-        rewrite_path(assets, "utilReportRpt", "reports")
-
-    modules = presentation_config.get("modules")
-    if not isinstance(modules, list):
-        return
-
-    for module in modules:
-        if not isinstance(module, dict):
-            continue
-        kind = str(module.get("slideKind", "module")).strip().lower()
-        if kind == "testbench":
-            rewrite_path(module, "testbenchWaveform", "waveform")
-        else:
-            rewrite_path(module, "simpleDiagramSvg", "diagram")
-            rewrite_path(module, "fsmImage", "fsm")
-
-
-def module_layout(mod: ModuleInfo, modules_by_name: Dict[str, ModuleInfo]) -> str:
-    children = mod.direct_children(set(modules_by_name.keys()))
-    if children:
-        return "parent-module"
-    if mod.has_fsm:
-        return "fsm-module"
-    return "leaf-module"
-
-
-def build_module_slides(
-    top_name: str,
-    modules_by_name: Dict[str, ModuleInfo],
-    detail_modules: Sequence[str],
-    rank: Dict[str, int],
-    tb_map: Dict[str, List[Path]],
-    manual_tb_map: Dict[str, List[Optional[Path]]],
-    top_testbench_pages: int,
-    project_root: Path,
-    presentation_dir: Path,
-    image_index: Dict[str, List[Path]],
-) -> List[dict]:
-    emitted: Set[str] = set()
-    visiting: Set[str] = set()
-    slides: List[dict] = []
-    detail_module_set: Set[str] = set(detail_modules)
-
-    def build_testbench_slide(
-        module_name: str,
-        tb_file: Optional[Path],
-        page_index: int,
-        subtitle: str = "",
-        placeholder_label: str = "",
-    ) -> dict:
-        if tb_file is not None:
-            tb_name = tb_file.stem
-            tb_files = [os.path.relpath(tb_file, presentation_dir).replace("\\", "/")]
-            waveform = choose_waveform_asset(project_root, module_name, tb_file, presentation_dir)
-        else:
-            tb_name = f"tb_{module_name}_{page_index + 1}"
-            fallback_label = placeholder_label.strip() or f"[Input Needed] Map TOP testbench file #{page_index + 1}"
-            tb_files = [fallback_label]
-            waveform = ""
-        slide = {
-            "slideKind": "testbench",
-            "name": tb_name,
-            "linkedModule": module_name,
-            "testbenchFiles": tb_files,
-            "testbenchWaveform": waveform,
-            "testbenchChecks": [
-                "Reset release and startup behavior",
-                "Main control/data handshake timing",
-                "Boundary/error stimulus handling result",
-            ],
-        }
-        if subtitle.strip():
-            slide["testbenchSubtitle"] = subtitle.strip()
-        return slide
-
-    def emit_module(name: str) -> None:
-        if name in emitted:
-            return
-        if name in visiting:
-            print(f"[WARN] Cycle detected in hierarchy at module: {name}")
-            return
-        if name not in modules_by_name:
-            return
-
-        visiting.add(name)
-        mod = modules_by_name[name]
-        children = build_sorted_children(mod, modules_by_name, rank)
-        layout = module_layout(mod, modules_by_name)
-        is_top_module = name == top_name
-
-        simple_svg = resolve_module_simple_image(
-            module_name=name,
-            project_root=project_root,
-            presentation_dir=presentation_dir,
-            image_index=image_index,
-        )
-        fsm_svg = resolve_module_fsm_image(
-            module_name=name,
-            project_root=project_root,
-            presentation_dir=presentation_dir,
-            image_index=image_index,
-        )
-        role_text = mod.role.strip() if mod.role.strip() else "[입력 필요] MODULE_INFO 주석의 역할(Role)을 입력하세요."
-        summary_items = [item for item in mod.summary if item.strip()]
-        if not summary_items:
-            summary_items = [
-                "[입력 필요] 요약 1",
-                "[입력 필요] 요약 2",
-            ]
-        elif len(summary_items) == 1:
-            summary_items.append("[입력 필요] 요약 2")
-
-        child_modules = [
+    calls = re.findall(r"\b(m_[A-Za-z0-9_$]+)\.run\s*\(", run_body, flags=re.I)
+    threads = []
+    for idx, inst in enumerate(calls, start=1):
+        threads.append(
             {
-                "name": child,
-                "role": (modules_by_name[child].role.strip() if modules_by_name[child].role.strip() else ""),
+                "name": f"Thread {idx}",
+                "instance": inst,
+                "className": decl_map.get(inst, ""),
+                "role": role_text_from_instance(inst),
             }
-            for child in children
-        ]
-
-        # TOP module is explained by Top Block Diagram slide, so skip detail slide generation.
-        if (not is_top_module) and (name in detail_module_set):
-            slides.append(
-                {
-                    "slideKind": "module",
-                    "name": name,
-                    "role": role_text,
-                    "summary": summary_items,
-                    "stateDescription": mod.state_description,
-                    "simpleDiagramSvg": simple_svg,
-                    "fsmImage": fsm_svg,
-                    "detailLayout": layout,
-                    "childModules": child_modules,
-                }
-            )
-            for manual_tb_idx, manual_tb_file in enumerate(manual_tb_map.get(name, [])):
-                slides.append(
-                    build_testbench_slide(
-                        name,
-                        manual_tb_file,
-                        manual_tb_idx,
-                        subtitle="TESTBENCH",
-                        placeholder_label=f"[Input Needed] Map manual testbench file #{manual_tb_idx + 1}",
-                    )
-                )
-
-        for child in children:
-            emit_module(child)
-
-        if (not is_top_module) and (name in detail_module_set) and layout == "parent-module":
-            for tb_idx, tb_file in enumerate(tb_map.get(name, [])):
-                slides.append(build_testbench_slide(name, tb_file, tb_idx))
-
-        if is_top_module and top_testbench_pages > 0:
-            top_tb_files = tb_map.get(name, [])
-            for top_tb_idx in range(top_testbench_pages):
-                tb_file = top_tb_files[top_tb_idx] if top_tb_idx < len(top_tb_files) else None
-                slides.append(build_testbench_slide(name, tb_file, top_tb_idx))
-
-        visiting.remove(name)
-        emitted.add(name)
-
-    ordered_selected_roots = sorted(detail_module_set, key=lambda x: (rank.get(x, 10**9), x.lower()))
-    ordered_roots = [top_name] + [n for n in ordered_selected_roots if n != top_name]
-    for root in ordered_roots:
-        emit_module(root)
-    return slides
-
-
-def collect_tb_mapping(
-    project_root: Path,
-    module_names: Sequence[str],
-    tb_files: Optional[Sequence[Path]] = None,
-    include_auto_mapped_tb_pages: bool = True,
-    non_interactive: bool = False,
-) -> Dict[str, List[Path]]:
-    if tb_files is None:
-        tb_files = []
-    else:
-        tb_files = discover_testbenches_from_files(tb_files)
-    mapped: Dict[str, List[Path]] = defaultdict(list)
-    unmatched: List[Path] = []
-
-    for tb_file in tb_files:
-        target = auto_map_testbench(tb_file, module_names)
-        if target:
-            if include_auto_mapped_tb_pages:
-                mapped[target].append(tb_file)
-        else:
-            unmatched.append(tb_file)
-
-    if unmatched:
-        manual_map = prompt_map_unmatched_testbenches(
-            unmatched,
-            module_names,
-            non_interactive=non_interactive,
         )
-        for module_name, files in manual_map.items():
-            mapped[module_name].extend(files)
-
-    for key in list(mapped.keys()):
-        dedup = sorted(set(mapped[key]), key=lambda p: p.name.lower())
-        mapped[key] = dedup
-    return mapped
+    fork_snippet = "fork ... " + join_type
+    mailboxes = parse_env_mailboxes(path)
+    components = parse_env_components(path)
+    return {"joinType": join_type, "threads": threads, "rawFork": fork_snippet, "mailboxes": mailboxes, "components": components}
 
 
-def to_optional_float(raw: str) -> Optional[float]:
-    text = str(raw or "").replace(",", "").strip()
-    if not text:
-        return None
-    text = text.replace("*", "").strip()
-    if text.startswith("<"):
-        text = text[1:].strip()
-    if text.endswith("%"):
-        text = text[:-1].strip()
-    if text.lower() in {"---", "na", "n/a", "unspecified", "-", "_"}:
-        return None
-    try:
-        return float(text)
-    except ValueError:
-        return None
+def parse_test_inheritance(base_test: Optional[Path], tests: Sequence[Path]) -> Dict[str, object]:
+    base_class = ""
+    base_methods: List[str] = []
+    if base_test and base_test.exists():
+        base_text = read_text(base_test)
+        m = re.search(r"\bclass\s+([A-Za-z_][A-Za-z0-9_$]*)\b", base_text, flags=re.I)
+        if m:
+            base_class = m.group(1)
+        base_methods = re.findall(r"\bvirtual\s+task\s+([A-Za-z_][A-Za-z0-9_$]*)\s*\(", base_text, flags=re.I)
 
-
-def find_metric_value(text: str, patterns: Sequence[str]) -> Optional[float]:
-    lines = text.splitlines()
-    for line in lines:
-        for pattern in patterns:
-            if not re.search(pattern, line, flags=re.IGNORECASE):
-                continue
-            tail = re.sub(pattern, " ", line, flags=re.IGNORECASE)
-            m = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", tail)
-            if m:
-                value = to_optional_float(m.group(0))
-                if value is not None:
-                    return value
-    return None
-
-
-def find_metric_text(text: str, patterns: Sequence[str]) -> str:
-    lines = text.splitlines()
-    for line in lines:
-        for pattern in patterns:
-            m = re.search(pattern, line, flags=re.IGNORECASE)
-            if not m:
-                continue
-            tail = line[m.end() :].replace("|", " ").replace(":", " ").replace("=", " ").strip()
-            if tail:
-                parts = [p.strip() for p in re.split(r"\s{2,}", tail) if p.strip()]
-                return parts[0] if parts else tail
-    return ""
-
-
-def find_metric_numbers(text: str, pattern: str) -> List[float]:
-    lines = text.splitlines()
-    for line in lines:
-        if not re.search(pattern, line, flags=re.IGNORECASE):
+    derived = []
+    for t in tests:
+        if t.name.lower() == "base_test.svh" or not t.exists():
             continue
-        tail = re.sub(pattern, " ", line, flags=re.IGNORECASE)
-        matches = re.findall(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", tail)
-        out = [v for v in (to_optional_float(x) for x in matches) if v is not None]
-        if out:
-            return out
-    return []
-
-
-def percent_of(part: Optional[float], total: Optional[float]) -> Optional[float]:
-    if part is None or total is None or total <= 0:
-        return None
-    raw = (part / total) * 100.0
-    return max(0.0, min(100.0, raw))
-
-
-def parse_power_table_value(text: str, label_pattern: str) -> Optional[float]:
-    matcher = re.compile(label_pattern, flags=re.IGNORECASE)
-    for line in text.splitlines():
-        if "|" not in line:
-            continue
-        cells = [c.strip() for c in line.split("|")[1:-1]]
-        if len(cells) < 2:
-            continue
-        label = re.sub(r"\s+", " ", cells[0].replace("*", " ")).strip()
-        if not matcher.fullmatch(label):
-            continue
-        value = to_optional_float(cells[1])
-        if value is not None:
-            return value
-    return None
-
-
-def first_not_none(*values: Optional[float]) -> Optional[float]:
-    for value in values:
-        if value is not None:
-            return value
-    return None
-
-
-def parse_power_report_text(text: str) -> Dict[str, object]:
-    total_from_table = parse_power_table_value(text, r"(?:Total|Total\s+On-Chip\s+Power\s*\(W\))")
-    dynamic_from_table = parse_power_table_value(text, r"Dynamic(?:\s*\(W\))?")
-    static_from_table = parse_power_table_value(text, r"(?:Device\s+)?Static(?:\s+Power)?(?:\s*\(W\))?")
-    clocks_from_table = parse_power_table_value(text, r"Clocks?")
-    signals_from_table = parse_power_table_value(text, r"Signals?")
-    logic_from_table = parse_power_table_value(text, r"(?:Slice\s+Logic|Logic)")
-    io_from_table = parse_power_table_value(text, r"(?:I/O|IO)")
-
-    return {
-        "totalOnChipPowerW": first_not_none(
-            total_from_table,
-            find_metric_value(text, [r"Total\s+On[- ]Chip\s+Power"]),
-        ),
-        "dynamicPowerW": first_not_none(
-            dynamic_from_table,
-            find_metric_value(text, [r"(?:Total\s+)?Dynamic(?:\s+On[- ]Chip)?(?:\s+Power)?\b"]),
-        ),
-        "staticPowerW": first_not_none(
-            static_from_table,
-            find_metric_value(text, [r"(?:Device\s+)?Static(?:\s+Power)?\b"]),
-        ),
-        "clocksW": first_not_none(clocks_from_table, find_metric_value(text, [r"\bClocks?\b"])),
-        "signalsW": first_not_none(signals_from_table, find_metric_value(text, [r"\bSignals?\b"])),
-        "logicW": first_not_none(logic_from_table, find_metric_value(text, [r"\bLogic\b"])),
-        "bramW": find_metric_value(text, [r"\bBRAM\b"]),
-        "pllW": find_metric_value(text, [r"\bPLL\b"]),
-        "ioW": first_not_none(io_from_table, find_metric_value(text, [r"\b(?:I/O|IO)\b"])),
-        "junctionTempC": find_metric_value(text, [r"Junction\s+Temperature"]),
-        "effectiveTjaCPerW": find_metric_value(text, [r"Effective\s+TJA"]),
-        "maxAmbientC": find_metric_value(text, [r"Max\s+Ambient"]),
-        "thermalMarginC": find_metric_value(text, [r"Thermal\s+Margin"]),
-        "confidenceLevel": find_metric_text(text, [r"Confidence\s+Level"]),
-    }
-
-
-def parse_design_timing_summary_row(text: str) -> Dict[str, Optional[float]]:
-    lines = text.splitlines()
-    max_scan = 96
-    for idx, line in enumerate(lines):
-        if not re.search(r"\bDesign\s+Timing\s+Summary\b", line, flags=re.IGNORECASE):
-            continue
-        section = lines[idx : min(len(lines), idx + max_scan)]
-
-        header_idx = -1
-        for rel_idx, candidate in enumerate(section):
-            if re.search(r"\bWNS\s*\(ns\)", candidate, flags=re.IGNORECASE) and re.search(
-                r"\bTPWS(?:\s*\(ns\))?", candidate, flags=re.IGNORECASE
-            ):
-                header_idx = rel_idx
-                break
-        if header_idx < 0:
-            continue
-
-        for data_line in section[header_idx + 1 : header_idx + 14]:
-            values = [to_optional_float(v) for v in re.findall(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", data_line)]
-            nums = [v for v in values if v is not None]
-            if len(nums) < 12:
-                continue
-            return {
-                "wnsNs": nums[0],
-                "tnsNs": nums[1],
-                "failingEndpoints": nums[2],
-                "totalEndpoints": nums[3],
-                "whsNs": nums[4],
-                "thsNs": nums[5],
-                "wpwsNs": nums[8],
-                "tpwsNs": nums[9],
-            }
-    return {}
-
-
-def parse_timing_detail_line(text: str, label: str) -> Dict[str, Optional[float]]:
-    pattern = re.compile(
-        rf"^\s*{re.escape(label)}\s*:\s*(\d+)\s+Failing\s+Endpoints,\s*Worst\s+Slack\s*"
-        r"([-+]?\d*\.?\d+)\s*ns,\s*Total\s+Violation\s*([-+]?\d*\.?\d+)\s*ns",
-        flags=re.IGNORECASE,
-    )
-    for line in text.splitlines():
-        m = pattern.search(line)
+        text = read_text(t)
+        m = re.search(r"\bclass\s+([A-Za-z_][A-Za-z0-9_$]*)\s+extends\s+([A-Za-z_][A-Za-z0-9_$]*)\b", text, flags=re.I)
         if not m:
             continue
-        return {
-            "failing": to_optional_float(m.group(1)),
-            "worst": to_optional_float(m.group(2)),
-            "total": to_optional_float(m.group(3)),
-        }
-    return {}
-
-
-def parse_timing_report_text(text: str) -> Dict[str, object]:
-    summary_row = parse_design_timing_summary_row(text)
-    setup_detail = parse_timing_detail_line(text, "Setup")
-    hold_detail = parse_timing_detail_line(text, "Hold")
-    pw_detail = parse_timing_detail_line(text, "PW")
-
-    wns = summary_row.get("wnsNs")
-    tns = summary_row.get("tnsNs")
-    whs = summary_row.get("whsNs")
-    ths = summary_row.get("thsNs")
-    wpws = summary_row.get("wpwsNs")
-    tpws = summary_row.get("tpwsNs")
-    failing = summary_row.get("failingEndpoints")
-    total = summary_row.get("totalEndpoints")
-
-    if wns is None:
-        wns = setup_detail.get("worst")
-    if tns is None:
-        tns = setup_detail.get("total")
-    if whs is None:
-        whs = hold_detail.get("worst")
-    if ths is None:
-        ths = hold_detail.get("total")
-    if wpws is None:
-        wpws = pw_detail.get("worst")
-    if tpws is None:
-        tpws = pw_detail.get("total")
-    if failing is None:
-        failing = setup_detail.get("failing")
-
-    return {
-        "wnsNs": wns if wns is not None else find_metric_value(text, [r"\bWNS(?:\s*\(ns\))?\b"]),
-        "tnsNs": tns if tns is not None else find_metric_value(text, [r"\bTNS(?:\s*\(ns\))?\b"]),
-        "whsNs": whs if whs is not None else find_metric_value(text, [r"\bWHS(?:\s*\(ns\))?\b"]),
-        "thsNs": ths if ths is not None else find_metric_value(text, [r"\bTHS(?:\s*\(ns\))?\b"]),
-        "wpwsNs": wpws if wpws is not None else find_metric_value(text, [r"\bWPWS(?:\s*\(ns\))?\b"]),
-        "tpwsNs": tpws if tpws is not None else find_metric_value(text, [r"\bTPWS(?:\s*\(ns\))?\b"]),
-        "failingEndpoints": failing if failing is not None else find_metric_value(text, [r"Failing\s+Endpoints"]),
-        "totalEndpoints": total if total is not None else find_metric_value(text, [r"Total\s+Endpoints"]),
-    }
-
-
-def normalize_util_label(raw: str) -> str:
-    return re.sub(r"\s+", " ", str(raw or "").replace("*", " ")).strip()
-
-
-def parse_util_table_rows(text: str) -> List[Dict[str, object]]:
-    rows: List[Dict[str, object]] = []
-    inside = False
-    for line in text.splitlines():
-        if (
-            re.search(r"\|\s*Site\s+Type\s*\|", line, flags=re.IGNORECASE)
-            and re.search(r"\|\s*Used\s*\|", line, flags=re.IGNORECASE)
-            and re.search(r"\|\s*Available\s*\|", line, flags=re.IGNORECASE)
-            and re.search(r"\|\s*Util%?\s*\|", line, flags=re.IGNORECASE)
-        ):
-            inside = True
+        cls_name = m.group(1)
+        parent = m.group(2)
+        if base_class and parent.lower() != base_class.lower():
             continue
-        if not inside:
-            continue
-        trimmed = line.strip()
-        if not trimmed:
-            inside = False
-            continue
-        if "|" not in line or re.match(r"^\+-+", trimmed):
-            continue
-        cells = [c.strip() for c in line.split("|")[1:-1]]
-        if len(cells) < 6:
-            continue
-        label = normalize_util_label(cells[0])
-        if not label or re.fullmatch(r"site\s*type", label, flags=re.IGNORECASE):
-            continue
-        used = to_optional_float(cells[1])
-        available = to_optional_float(cells[4])
-        percent_raw = to_optional_float(cells[5])
-        percent = percent_raw if percent_raw is not None else percent_of(used, available)
-        # Keep only rows with utilization share (% > 0).
-        if percent is None or percent <= 0:
-            continue
-        rows.append({"label": label, "used": used, "available": available, "percent": percent})
-
-    deduped: List[Dict[str, object]] = []
-    seen: Set[str] = set()
-    for row in rows:
-        key = str(row["label"]).lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(row)
-    return deduped
+        # Detect overridden virtual tasks
+        overridden = re.findall(r"\bvirtual\s+task\s+([A-Za-z_][A-Za-z0-9_$]*)\s*\(", text, flags=re.I)
+        overridden = [fn for fn in overridden if fn.lower() != "run"]
+        # Extract first cfg set line from configure() override
+        cfg_summary = ""
+        cfg_m = re.search(r"\btask\s+configure\s*\(\s*\)\s*;(.*?)\bendtask\b", text, flags=re.S | re.I)
+        if cfg_m:
+            cfg_lines = [l.strip() for l in cfg_m.group(1).splitlines() if re.search(r"m_cfg\.m_test_kind|m_cfg\.m_num_transactions", l)]
+            cfg_summary = " | ".join(cfg_lines[:2])
+        derived.append({"name": cls_name, "parent": parent, "file": t.stem, "overrides": overridden, "cfgSummary": cfg_summary})
+    return {"baseClass": base_class, "baseMethods": base_methods, "derived": derived[:12]}
 
 
-def parse_util_row_numbers(text: str, pattern: str) -> Dict[str, Optional[float]]:
-    nums = find_metric_numbers(text, pattern)
-    used = nums[0] if len(nums) > 0 else None
-    available = nums[1] if len(nums) > 1 else None
-    percent = nums[2] if len(nums) > 2 else percent_of(used, available)
-    return {"used": used, "available": available, "percent": percent}
-
-
-def parse_util_report_text(text: str) -> Dict[str, object]:
-    util_resources = parse_util_table_rows(text)
-
-    def pick_row(label_pattern: str) -> Optional[Dict[str, object]]:
-        for row in util_resources:
-            if re.search(label_pattern, str(row.get("label", "")), flags=re.IGNORECASE):
-                return row
-        return None
-
-    lut_row = pick_row(r"\b(?:slice\s+luts?|luts?)\b")
-    ff_row = pick_row(r"\b(?:slice\s+registers?|registers?|ff)\b")
-    io_row = pick_row(r"\b(?:bonded\s+iobs?|i/o|io)\b")
-    bufg_row = pick_row(r"\b(?:bufgctrl|bufg)\b")
-
-    lut = lut_row or parse_util_row_numbers(text, r"(?:^|[|\s])(?:Slice\s+LUTs?|LUT)\b(?!RAM)")
-    ff = ff_row or parse_util_row_numbers(text, r"(?:^|[|\s])(?:Slice\s+Registers?|FF)\b")
-    io = io_row or parse_util_row_numbers(text, r"(?:^|[|\s])(?:Bonded\s+IOBs?|I/O|IO)\b")
-    bufg = bufg_row or parse_util_row_numbers(text, r"(?:^|[|\s])BUFG(?:CTRL)?s?\b")
-
-    lut_used = lut.get("used") if isinstance(lut, dict) else None
-    lut_avail = lut.get("available") if isinstance(lut, dict) else None
-    lut_pct = lut.get("percent") if isinstance(lut, dict) else None
-    ff_used = ff.get("used") if isinstance(ff, dict) else None
-    ff_avail = ff.get("available") if isinstance(ff, dict) else None
-    ff_pct = ff.get("percent") if isinstance(ff, dict) else None
-    io_used = io.get("used") if isinstance(io, dict) else None
-    io_avail = io.get("available") if isinstance(io, dict) else None
-    io_pct = io.get("percent") if isinstance(io, dict) else None
-    bufg_used = bufg.get("used") if isinstance(bufg, dict) else None
-    bufg_avail = bufg.get("available") if isinstance(bufg, dict) else None
-    bufg_pct = bufg.get("percent") if isinstance(bufg, dict) else None
-
-    return {
-        "lutUsed": lut_used,
-        "lutAvailable": lut_avail,
-        "lutPct": lut_pct,
-        "ffUsed": ff_used,
-        "ffAvailable": ff_avail,
-        "ffPct": ff_pct,
-        "ioUsed": io_used,
-        "ioAvailable": io_avail,
-        "ioPct": io_pct,
-        "bufgUsed": bufg_used,
-        "bufgAvailable": bufg_avail,
-        "bufgPct": bufg_pct,
-        "utilResources": util_resources,
-        "sliceLuts": lut_used,
-        "sliceRegisters": ff_used,
-        "bondedIob": io_used,
-        "bufg": bufg_used,
-    }
-
-
-def parse_report_file(path: Optional[Path], parser) -> Dict[str, object]:
-    if path is None or not path.exists():
-        return {}
-    try:
-        text = read_text_autodetect(path)
-    except Exception:
-        return {}
-    try:
-        return parser(text)
-    except Exception:
-        return {}
-
-
-def with_default_report_data(parsed: Dict[str, object], defaults: Dict[str, object]) -> Dict[str, object]:
-    if not isinstance(parsed, dict) or not parsed:
-        return deepcopy(defaults)
-    merged = deepcopy(defaults)
-    for key, value in parsed.items():
-        if value is None:
-            continue
-        merged[key] = value
-    return merged
-
-
-def load_hdl_index(project_root: Path) -> Dict[str, object]:
-    candidates = [
-        project_root / "output" / "cache" / "hdl_index.json",
-        project_root / "Presentation" / "assets" / "hdl_index.json",
-    ]
-    for p in candidates:
-        if not p.exists():
-            continue
-        try:
-            raw = p.read_text(encoding="utf-8")
-            obj = json.loads(raw)
-            if isinstance(obj, dict):
-                obj["_source_path"] = str(p)
-                return obj
-        except Exception:
-            continue
-    return {}
-
-
-def build_presentation_config(
+def parse_results(
     project_root: Path,
-    top_name: str,
-    modules_by_name: Dict[str, ModuleInfo],
-    datapath_slides: Sequence[Dict[str, object]],
-    detail_modules: Sequence[str],
-    rank: Dict[str, int],
-    tb_map: Dict[str, List[Path]],
-    manual_tb_map: Dict[str, List[Optional[Path]]],
-    top_testbench_pages: int,
-    presentation_dir: Path,
-    image_index: Dict[str, List[Path]],
-    project_display_name: str,
-    author_name: str,
-    hdl_index: Optional[Dict[str, object]] = None,
-) -> dict:
-    now = datetime.now()
-    project_name = project_root.name
+    module_name: str,
+    scenario_names: Sequence[str],
+    scaffold: Optional[TbScaffold] = None,
+) -> Dict[str, object]:
+    token = normalize(module_name)
+    reg_files = sorted((project_root / "output").glob("regression_*.md"), key=lambda p: p.stat().st_mtime)
+    reg_candidates = [p for p in reg_files if token in normalize(p.stem)] or reg_files[-1:]
 
-    top_block_svg = resolve_top_block_image(
-        top_name=top_name,
-        project_root=project_root,
-        presentation_dir=presentation_dir,
-        image_index=image_index,
-    )
+    reg_rows: Dict[str, Dict[str, object]] = {}
+    for path in reg_candidates:
+        lines = read_text(path).splitlines()
+        header = None
+        for line in lines:
+            if not line.strip().startswith("|"):
+                continue
+            cols = [c.strip() for c in line.strip().strip("|").split("|")]
+            if not cols:
+                continue
+            col0 = cols[0].lower()
+            if "testname" in col0:
+                header = [c.lower() for c in cols]
+                continue
+            if cols[0].startswith("---") or cols[0].startswith(":"):
+                continue
+            if header is None:
+                continue
+            row = {header[idx] if idx < len(header) else f"c{idx}": cols[idx] for idx in range(len(cols))}
+            name = row.get("testname", cols[0]).strip()
+            result = str(row.get("result", cols[1] if len(cols) > 1 else "")).upper()
+            if result not in {"PASS", "FAIL"}:
+                continue
+            checked_txt = str(row.get("checked", row.get("checks", "0"))).strip()
+            errors_txt = str(row.get("errors", row.get("error", "0"))).strip()
+            score_txt = str(row.get("score", row.get("coverage", ""))).strip()
+            reg_rows[normalize(name)] = {
+                "name": name,
+                "status": result,
+                "checked": int(checked_txt) if checked_txt.isdigit() else 0,
+                "errors": int(errors_txt) if errors_txt.isdigit() else 0,
+                "reason": str(row.get("reason", "")).strip(),
+                "score": score_txt,
+            }
 
-    default_tb_wave = find_first_existing_rel(
-        presentation_dir,
-        [
-            project_root / "output" / "FINALReport" / "assets" / "waveform" / "testbench_overview.png",
-            project_root / "output" / "FINALReport" / "assets" / "waveform" / "testbench_overview.svg",
-        ],
-    )
+    log_candidates: List[Path] = []
+    log_dir = project_root / "log" / "vivado_sim"
+    if log_dir.exists():
+        log_candidates.extend(sorted(log_dir.glob("*.log"), key=lambda p: p.stat().st_mtime))
+    if scaffold and scaffold.root.exists():
+        log_candidates.extend(sorted(scaffold.root.rglob("*.log"), key=lambda p: p.stat().st_mtime))
+    if not log_candidates:
+        log_candidates = []
 
-    power_candidates = [
-        project_root / "output" / "reports" / "power_report.rpt",
-        project_root / "output" / "reports" / "post_route_power.rpt",
-    ]
-    timing_candidates = [
-        project_root / "output" / "reports" / "timing_summary.rpt",
-        project_root / "output" / "reports" / "post_route_timing_summary.rpt",
-        project_root / "output" / "reports" / "timing_report.rpt",
-    ]
-    util_candidates = [
-        project_root / "output" / "reports" / "post_route_util.rpt",
-        project_root / "output" / "reports" / "post_route_utilization.rpt",
-        project_root / "output" / "reports" / "post_place_util.rpt",
-        project_root / "output" / "reports" / "post_synth_util.rpt",
-        project_root / "output" / "reports" / "utilization_report.rpt",
-    ]
-    power_report_path = find_first_existing_path(power_candidates)
-    timing_report_path = find_first_existing_path(timing_candidates)
-    util_report_path = find_first_existing_path(util_candidates)
-    power_report = (
-        os.path.relpath(power_report_path, presentation_dir).replace("\\", "/")
-        if power_report_path
-        else ""
-    )
-    timing_report = (
-        os.path.relpath(timing_report_path, presentation_dir).replace("\\", "/")
-        if timing_report_path
-        else ""
-    )
-    util_report = (
-        os.path.relpath(util_report_path, presentation_dir).replace("\\", "/")
-        if util_report_path
-        else ""
-    )
-    parsed_power_report = with_default_report_data(
-        parse_report_file(power_report_path, parse_power_report_text),
-        DEFAULT_POWER_REPORT,
-    )
-    parsed_timing_report = with_default_report_data(
-        parse_report_file(timing_report_path, parse_timing_report_text),
-        DEFAULT_TIMING_REPORT,
-    )
-    parsed_util_report = with_default_report_data(
-        parse_report_file(util_report_path, parse_util_report_text),
-        DEFAULT_UTIL_REPORT,
-    )
-    util_rows_raw = parsed_util_report.get("utilResources")
-    util_rows = util_rows_raw if isinstance(util_rows_raw, list) else []
-    util_rows_max = 8
-    util_rows_display = [deepcopy(row) for row in util_rows[:util_rows_max] if isinstance(row, dict)]
-    util_rows_omitted = max(0, len(util_rows) - len(util_rows_display))
-    hdl_index = hdl_index or {}
-    hdl_summary = hdl_index.get("summary") if isinstance(hdl_index.get("summary"), dict) else {}
-    hdl_decls = hdl_index.get("declarations") if isinstance(hdl_index.get("declarations"), dict) else {}
-    sv_packages = hdl_decls.get("packages") if isinstance(hdl_decls.get("packages"), list) else []
-    sv_interfaces = hdl_decls.get("interfaces") if isinstance(hdl_decls.get("interfaces"), list) else []
+    log_selected: Dict[str, Dict[str, object]] = {}
+    current_key = ""
+    current_name = ""
+    for path in log_candidates[-4:]:
+        text = read_text(path)
+        for line in text.splitlines():
+            pick = re.search(r"Selected\s+TESTNAME\s*=\s*([A-Za-z0-9_]+)", line, flags=re.I)
+            if pick:
+                current_name = pick.group(1)
+                current_key = normalize(current_name)
+                if current_key not in log_selected:
+                    log_selected[current_key] = {"name": current_name}
+                continue
+            env_hit = re.search(
+                r"ENV report:\s*checked=(\d+)\s+errors=(\d+)\s+coverage=([0-9]+(?:\.[0-9]+)?)%",
+                line,
+                flags=re.I,
+            )
+            if env_hit and current_key:
+                log_selected[current_key] = {
+                    "name": log_selected.get(current_key, {}).get("name", current_name),
+                    "checked": int(env_hit.group(1)),
+                    "errors": int(env_hit.group(2)),
+                    "coverage": float(env_hit.group(3)),
+                }
 
-    module_slides = build_module_slides(
-        top_name=top_name,
-        modules_by_name=modules_by_name,
-        detail_modules=detail_modules,
-        rank=rank,
-        tb_map=tb_map,
-        manual_tb_map=manual_tb_map,
-        top_testbench_pages=top_testbench_pages,
-        project_root=project_root,
-        presentation_dir=presentation_dir,
-        image_index=image_index,
-    )
+    def test_index(name: str) -> str:
+        m = re.search(r"\btest[_-]?(\d+)", name, flags=re.I)
+        return m.group(1).lstrip("0") if m else ""
 
-    normalized_datapath_slides: List[Dict[str, object]] = []
-    fallback_datapath_steps = [
-        "[Input Needed] Datapath step #1",
-        "[Input Needed] Datapath step #2",
-        "[Input Needed] Datapath step #3",
-    ]
-    for idx, raw_slide in enumerate(datapath_slides, start=1):
-        if not isinstance(raw_slide, dict):
-            continue
-        raw_title = str(raw_slide.get("title", "")).strip()
-        page_title = raw_title or (f"DataPath #{idx}" if len(datapath_slides) > 1 else "DataPath")
-        raw_flow_steps = raw_slide.get("flowSteps")
-        flow_steps = (
-            [str(item).strip() for item in raw_flow_steps if str(item).strip()]
-            if isinstance(raw_flow_steps, list)
-            else []
-        )
-        if not flow_steps:
-            continue
-        normalized_datapath_slides.append(
+    reg_by_idx: Dict[str, Dict[str, object]] = {}
+    for row in reg_rows.values():
+        idx = test_index(str(row.get("name", "")))
+        if idx and idx not in reg_by_idx:
+            reg_by_idx[idx] = row
+
+    log_by_idx: Dict[str, Dict[str, object]] = {}
+    for row in log_selected.values():
+        idx = test_index(str(row.get("name", "")))
+        if idx and idx not in log_by_idx:
+            log_by_idx[idx] = row
+
+    score_rows = []
+    fail = 0
+    for sname in scenario_names:
+        key = normalize(sname)
+        idx = test_index(sname)
+        reg_exact = reg_rows.get(key)
+        reg = reg_exact or (reg_by_idx.get(idx) if idx else None)
+        log = log_selected.get(key) or (log_by_idx.get(idx) if idx else None)
+
+        status = str((reg_exact or {}).get("status", (reg or {}).get("status", ""))).upper()
+        checked = int((log or {}).get("checked", (reg or {}).get("checked", 0)) or 0)
+        errors = int((log or {}).get("errors", (reg or {}).get("errors", 0)) or 0)
+        reason = str((reg_exact or {}).get("reason", (reg or {}).get("reason", "")) or "")
+
+        score_txt = str((reg or {}).get("score", "")).strip()
+        score = None
+        sm = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*%", score_txt)
+        if (log or {}).get("coverage") is not None:
+            score = float((log or {}).get("coverage", 0.0))
+        elif sm:
+            score = float(sm.group(1))
+        elif score_txt and re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", score_txt):
+            score = float(score_txt)
+        elif checked > 0:
+            score = max(0.0, (float(checked - errors) / float(checked)) * 100.0)
+        elif status == "PASS":
+            score = 100.0
+        elif status == "FAIL":
+            score = 0.0
+        else:
+            score = 100.0
+
+        if not status:
+            if errors > 0:
+                status = "FAIL"
+            elif checked > 0:
+                status = "PASS"
+            else:
+                status = "N/A"
+
+        if status == "FAIL" or errors > 0:
+            fail += 1
+
+        score_rows.append(
             {
-                "title": page_title,
-                "flowSteps": flow_steps,
-                "flowBoxCount": len(flow_steps),
+                "name": sname,
+                "score": round(score, 2),
+                "checked": checked,
+                "errors": errors,
+                "status": status,
+                "reason": reason,
             }
         )
 
-    if not normalized_datapath_slides:
-        normalized_datapath_slides = [
-            {
-                "title": "DataPath",
-                "flowSteps": fallback_datapath_steps,
-                "flowBoxCount": len(fallback_datapath_steps),
-            }
-        ]
+    if not score_rows:
+        score_rows = [{"name": "overall", "score": 100.0, "checked": 0, "errors": 0, "status": "N/A", "reason": ""}]
 
-    legacy_datapath_steps = list(normalized_datapath_slides[0].get("flowSteps", fallback_datapath_steps))
-    legacy_datapath_box_count = int(normalized_datapath_slides[0].get("flowBoxCount", len(legacy_datapath_steps)))
-
-    os_label = f"{platform.system()} {platform.release()}".strip()
-
+    refs = [relpath_posix(p, project_root) for p in (reg_candidates + log_candidates[-4:])]
     return {
-        "meta": {
-            "projectTitle": f"Project Presentation: {project_display_name}",
-            "projectSubtitle": f"Auto-generated from RTL source (Top: {top_name})",
-            "author": author_name,
-            "date": now.strftime("%Y-%m-%d"),
-            "team": "FPGA Team",
-            "cover": {
-                "titleLine1": "FPGA Project",
-                "titleLine2": project_display_name,
-                "subtitle": f"Top module: {top_name}",
-                "dateLabel": "Date",
-                "authorLabel": "Author",
-            },
-        },
-        "developmentEnvironment": {
-            "os": os_label,
-            "tools": ["Vivado", "Python", "Jinja2"],
-            "language": ["Verilog", "SystemVerilog"],
-            "hdlIndex": {
-                "available": bool(hdl_index),
-                "sourcePath": str(hdl_index.get("_source_path", "")),
-                "summary": hdl_summary,
-            },
-        },
-        "svDeclarations": {
-            "packages": sv_packages,
-            "interfaces": sv_interfaces,
-            "counts": {
-                "packages": len(sv_packages),
-                "interfaces": len(sv_interfaces),
-            },
-        },
-        "featurePlaceholders": [
-            {
-                "title": "Top Architecture",
-                "description": f"Hierarchy-driven summary from {top_name}",
-            },
-            {
-                "title": "Module Details",
-                "description": "1 module per page with role/summary and FSM or hierarchy layout",
-            },
-            {
-                "title": "Datapath",
-                "description": "User-defined module chain for datapath flow",
-            },
-            {
-                "title": "Verification",
-                "description": "Testbench slides inserted after 6.3 module subtree",
-            },
-        ],
-        "constraints": [
-            "[Input Needed] Clock constraint and timing budget",
-            "[Input Needed] I/O standard and pin policy",
-            "[Input Needed] CDC/reset release policy",
-            "[Input Needed] Resource/power target",
-        ],
-        "timingNotes": [
-            "[Input Needed] Main timing path notes",
-            "[Input Needed] Setup/hold exception rationale",
-            "[Input Needed] Validation vs design intent",
-        ],
-        "datapathSlides": normalized_datapath_slides,
-        "datapathFlowSteps": legacy_datapath_steps,
-        "datapathFlowBoxCount": legacy_datapath_box_count,
-        "clockFlowSteps": [
-            "[Input Needed] Clock source generation",
-            "[Input Needed] Clock distribution path",
-            "[Input Needed] Clock domain boundary checks",
-        ],
-        "resetFlowSteps": [
-            "[Input Needed] Reset source and polarity",
-            "[Input Needed] Reset sync and release order",
-            "[Input Needed] Safe startup condition",
-        ],
-        "conclusionPoints": [
-            "[Input Needed] Implementation result summary",
-            "[Input Needed] Requirement coverage and limits",
-        ],
-        "conclusionNextSteps": [
-            "[Input Needed] Improvement roadmap",
-            "[Input Needed] Additional test/validation plan",
-        ],
-        "assets": {
-            "topBlockSvg": top_block_svg,
-            "testbenchWaveform": default_tb_wave,
-            "timingDiagramSvg": "",
-            "clockResetTreeSvg": "",
-            "powerReportRpt": power_report,
-            "timingReportRpt": timing_report,
-            "utilReportRpt": util_report,
-        },
-        "reportData": {
-            "power": parsed_power_report,
-            "timing": parsed_timing_report,
-            "util": parsed_util_report,
-        },
-        "reportLayout": {
-            "utilRowsMax": util_rows_max,
-            "utilRowsDisplay": util_rows_display,
-            "utilRowsOmitted": util_rows_omitted,
-        },
-        "reportPreview": {
-            "enableOnLoadFail": True,
-            "power": parsed_power_report,
-            "timing": parsed_timing_report,
-            "util": parsed_util_report,
-        },
-        "modules": module_slides,
+        "logDesc": " | ".join(refs[:4]) if refs else "No regression/log artifacts found.",
+        "scenarioScores": score_rows,
+        "overallIssues": "0 cases" if fail == 0 else f"{fail} cases",
     }
 
 
-def resolve_paths(args: argparse.Namespace) -> Tuple[Path, Path, Path, Path, Path]:
-    script_dir = Path(__file__).resolve().parent
-    project_root = Path(args.project).resolve()
-    default_template = (script_dir.parent.parent / "slidedev" / "presentation_design1.md.j2").resolve()
-    template_path = Path(args.template).resolve() if args.template else default_template
-
-    presentation_dir = project_root / "Presentation"
-    presentation_dir.mkdir(parents=True, exist_ok=True)
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    default_prefix = f"slidev_{project_root.name}_{timestamp}"
-    output_md = (
-        Path(args.output_md).resolve()
-        if args.output_md
-        else (Path(args.output_html).resolve() if args.output_html else (presentation_dir / f"{default_prefix}.md"))
-    )
-    output_json = Path(args.output_json).resolve() if args.output_json else (presentation_dir / f"{default_prefix}.json")
-    output_dir = Path(args.output_dir).resolve() if args.output_dir else (presentation_dir / default_prefix)
-
-    return project_root, template_path, output_md, output_json, output_dir
+def find_asset(project_root: Path, module_name: str, ext: str, keyword: str) -> Optional[Path]:
+    token = normalize(module_name)
+    roots = [project_root / "Presentation", project_root / "NEW_Presentation", project_root / "output", project_root / "report_assets"]
+    candidates = []
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in root.rglob(f"*.{ext}"):
+            low = path.name.lower()
+            if keyword in low or token in normalize(path.stem):
+                candidates.append(path)
+    if not candidates:
+        return None
+    candidates.sort(key=lambda p: (token in normalize(p.stem), p.stat().st_mtime), reverse=True)
+    return candidates[0]
 
 
-def clean_presentation_assets(presentation_dir: Path) -> None:
-    assets_dir = presentation_dir / "assets"
-    if not assets_dir.exists():
-        return
-    if not assets_dir.is_dir():
-        raise RuntimeError(f"Expected directory for assets path, got file: {assets_dir}")
-    shutil.rmtree(assets_dir)
-    print(f"[INFO] Cleaned previous assets directory: {assets_dir}")
+def copy_asset(src: Optional[Path], out_dir: Path, subdir: str, stem: str) -> str:
+    if src is None or not src.exists():
+        return ""
+    dst_dir = out_dir / "assets" / subdir
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    dst = dst_dir / f"{stem}{src.suffix.lower()}"
+    try:
+        if src.resolve() != dst.resolve():
+            shutil.copyfile(src, dst)
+    except Exception:
+        shutil.copyfile(src, dst)
+    return relpath_posix(dst, out_dir)
 
 
-def validate_environment(project_root: Path, template_path: Path) -> Path:
-    if not project_root.exists():
-        raise RuntimeError(f"Project path not found: {project_root}")
-    if not template_path.exists():
-        raise RuntimeError(f"Template file not found: {template_path}")
-    return project_root
+def module_payload(
+    project_root: Path,
+    out_dir: Path,
+    module: ModuleInfo,
+    top_name: str,
+    scaffold: Optional[TbScaffold],
+    fsm_states: Optional[Sequence[object]] = None,
+) -> Dict[str, object]:
+    effective_fsm_states = dedup_strings(fsm_states if fsm_states is not None else module.fsm_states)
+    if module.children:
+        spec_kind = "type1"
+    elif effective_fsm_states:
+        spec_kind = "type3"
+    else:
+        spec_kind = "type2"
 
+    tx_in = sorted(set(re.findall(r"\bm_i[A-Za-z0-9_]*\b", read_text(scaffold.transaction) if scaffold and scaffold.transaction else "")))
+    tx_out = sorted(set(re.findall(r"\bm_o[A-Za-z0-9_]*\b", read_text(scaffold.transaction) if scaffold and scaffold.transaction else "")))
+    drv_pins = sorted(set(re.findall(r"\btb_i[A-Za-z0-9_]*\b", read_text(scaffold.driver) if scaffold and scaffold.driver else "")))
+    mon_pins = sorted(set(re.findall(r"\btb_[io][A-Za-z0-9_]*\b", read_text(scaffold.monitor) if scaffold and scaffold.monitor else "")))
+    tests = scaffold.tests if scaffold else []
+    scenarios = []
+    for idx, t in enumerate(tests):
+        scenario_info = summarize_scenario(t)
+        scenarios.append(
+            {
+                "name": t.stem,
+                "border": COLORS[idx % len(COLORS)],
+                "desc": scenario_info["desc"],
+                "constraints": scenario_info["constraints"],
+                "expected": "PASS",
+            }
+        )
+    if not scenarios:
+        scenarios = [{"name": "no_test_found", "border": "slate", "desc": "No test*.svh found in TB scaffold.", "constraints": "N/A", "expected": "N/A"}]
 
-def render_markdown(template_path: Path, output_md: Path, presentation_config: dict) -> None:
-    # Slidev markdown with raw HTML blocks is sensitive to blank lines produced by
-    # Jinja control statements. Trim/lstrip keeps generated slides parse-stable.
-    env = Environment(
-        loader=FileSystemLoader(str(template_path.parent)),
-        autoescape=False,
-        trim_blocks=True,
-        lstrip_blocks=True,
-    )
-    template = env.get_template(template_path.name)
-    markdown_text = template.render(presentation_config=presentation_config)
-    output_md.parent.mkdir(parents=True, exist_ok=True)
-    output_md.write_text(markdown_text, encoding="utf-8")
+    coverage_detail = parse_coverage_details(scaffold.coverage if scaffold else None)
+    coverage_data = [{"title": f"Coverage-{i+1}", "desc": line} for i, line in enumerate(coverage_detail["summary"])]
+    if not coverage_data:
+        coverage_data = [{"title": "Coverage", "desc": "coverage.svh not found or no coverage line detected."}]
 
+    # Parse SVA assertions from interface.sv
+    sva_assertions = parse_sva_assertions(scaffold)
 
-def copy_slidev_theme_assets(template_path: Path, output_md: Path) -> None:
-    theme_css_src = template_path.parent / "theme_design1.css"
-    if not theme_css_src.exists():
-        raise RuntimeError(f"Slidev theme CSS not found: {theme_css_src}")
-    theme_css_dst = output_md.parent / "theme_design1.css"
-    shutil.copyfile(theme_css_src, theme_css_dst)
+    scb_path = scaffold.scoreboard if scaffold else None
+    scb_lines_raw = summary_lines(scb_path, r"function|task|case|if|\$error|\$display|compare|expect|\bassert\b|\bproperty\b|mismatch", 8)
+    # Filter out header guards and pure declarations
+    scb_lines = [l for l in scb_lines_raw if not re.match(r"^`(ifndef|define|endif|include)|^//|^package|^endpackage|^class|^endclass", l.strip())]
+    if not scb_lines:
+        scb_lines = ["scoreboard.svh not found or no logic detected."]
+    scb_text = " | ".join(scb_lines[:2]) if scb_lines else "scoreboard.svh not found."
+    assert_text = " | ".join(scb_lines[2:4]) if len(scb_lines) > 2 else "No assertion/property statement detected."
+
+    # Build scored scbFlow from parsed function/task names in scoreboard.svh
+    scb_fn_names: List[str] = []
+    if scb_path and scb_path.exists():
+        scb_fn_names = re.findall(r"\b(?:function|task)(?:\s+\w+)\s+([A-Za-z_][A-Za-z0-9_$]*)\s*[\/\(;]", read_text(scb_path), flags=re.I)
+    fn_summary = ", ".join(scb_fn_names[:4]) if scb_fn_names else "(auto-parse unavailable)"
+
+    def scb_flow_step(i, title, body, icon, color):
+        return {"title": title, "body": body, "icon": icon, "color": color}
+
+    built_scb_flow = [
+        scb_flow_step(0, "1. Transaction Pop", "mbx_mon2scb.get(tx_obs) — DUT 관측 트랜잭션 수신", "ph-download-simple", "blue"),
+        scb_flow_step(1, "2. Golden Model Compute", f"Scoreboard 내부에서 기댓값 계산. 파싱된 함수: {fn_summary}", "ph-cpu", "indigo"),
+        scb_flow_step(2, "3. Compare Output", f"{scb_lines[0] if scb_lines else 'No compare logic detected'}", "ph-scales", "violet"),
+        scb_flow_step(3, "4. Report Pass / Error", "$display / $error 로 결과 로깅. 불일치 시 에러 카운터 증가.", "ph-flag-banner", "emerald"),
+    ]
+    code_refs = [relpath_posix(scaffold.scoreboard, project_root)] if scaffold and scaffold.scoreboard else []
+
+    test_names = [s["name"] for s in scenarios]
+    results = parse_results(project_root, module.name, test_names, scaffold=scaffold)
+    env_flow = parse_env_thread_plan(scaffold.environment if scaffold else None)
+    inheritance = parse_test_inheritance(scaffold.base_test if scaffold else None, tests)
+    clk_freq_label = parse_clk_freq_from_tb(scaffold)
+    env_text = " | ".join(summary_lines(scaffold.base_test if scaffold else None, r"task|new\(|run\(|start\(", 4)) or "base_test.svh not found."
+    simlog = copy_asset(find_asset(project_root, module.name, "png", "log"), out_dir, "simlog", module.name)
+    timing = copy_asset(find_asset(project_root, module.name, "svg", "timing"), out_dir, "timing", module.name)
+
+    return {
+        "type": "top" if module.name == top_name else ("unit" if not module.children else "general"),
+        "specKind": spec_kind,
+        "name": module.name,
+        "description": module.description,
+        "clkFreqLabel": clk_freq_label,
+        "ioPorts": module.ports,
+        "internalSignals": module.internals,
+        "fsmStates": effective_fsm_states,
+        "hierarchy": [{"name": c, "desc": "Child module instance"} for c in module.children],
+        "assets": {
+            "simpleDiagramSvg": f"../output/Diagram/Simple/{module.name}.svg",
+            "detailedDiagramSvg": f"../output/Diagram/Detailed/{module.name}_detailed.svg",
+            "fsmDiagramSvg": f"../output/fsm/svg/{module.name}_fsm.svg",
+            "simulationLogImage": simlog,
+            "timingDiagramSvg": timing,
+        },
+        "verification": {
+            "tb": {
+                "hasScaffold": bool(scaffold),
+                "txFile": relpath_posix(scaffold.transaction, project_root) if scaffold and scaffold.transaction else "",
+                "genFile": relpath_posix(scaffold.generator, project_root) if scaffold and scaffold.generator else "",
+                "drvFile": relpath_posix(scaffold.driver, project_root) if scaffold and scaffold.driver else "",
+                "monFile": relpath_posix(scaffold.monitor, project_root) if scaffold and scaffold.monitor else "",
+                "txIn": tx_in,
+                "txOut": tx_out,
+                "genDirected": [t.stem for t in tests] + task_names(scaffold.generator if scaffold else None),
+                "genDirectedSplit": parse_directed_task_split(scaffold.generator if scaffold else None),
+                "genRandom": " | ".join(summary_lines(scaffold.generator if scaffold else None, r"rand|random|srandom|\$urandom", 3)) or "No random policy detected.",
+                "driverPins": drv_pins,
+                "monitorPins": mon_pins,
+                "driveStyle": "wait reset deassert -> drive on negedge -> sample on posedge",
+                "envFile": relpath_posix(scaffold.environment, project_root) if scaffold and scaffold.environment else "",
+            },
+            "scenarios": scenarios,
+            "coverage": coverage_data,
+            "coverageDetail": {
+                "coverpoints": coverage_detail["coverpoints"],
+                "crosses": coverage_detail["crosses"],
+                "illegalBins": coverage_detail["illegalBins"],
+            },
+            "scbAssert": {"scbText": scb_text, "assertText": assert_text, "scbFlow": built_scb_flow, "goldenBasis": "", "assertions": sva_assertions if sva_assertions else scb_lines, "codeRefs": code_refs},
+            "envTest": {
+                "text": env_text,
+                "envForkJoin": env_flow,
+                "testInheritance": inheritance,
+            },
+            "results": results,
+        },
+    }
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Generate Slidev presentation Markdown/JSON from Verilog source",
-    )
-    parser.add_argument("--project", required=True, help="Target project directory")
-    parser.add_argument("--manifest-json", required=True, help="Resolved manifest JSON path from _manifest_context")
-    parser.add_argument("--top", default="", help="Top module name (optional)")
-    parser.add_argument("--project-title", default="", help="Cover project title (optional)")
-    parser.add_argument("--author", default="", help="Cover author name (optional)")
-    parser.add_argument("--template", default="", help="Template Markdown(Jinja2) path (optional)")
-    parser.add_argument(
-        "--output-md",
-        default="",
-        help="Output Slidev Markdown path (optional)",
-    )
-    parser.add_argument(
-        "--output-html",
-        default="",
-        help="Deprecated alias of --output-md (for compatibility)",
-    )
-    parser.add_argument("--output-json", default="", help="Output JSON path (optional)")
-    parser.add_argument("--output-dir", default="", help="Slidev build output directory (optional)")
-    parser.add_argument(
-        "--clean-assets",
-        action="store_true",
-        help="Clean existing Presentation/assets folder before generation",
-    )
-    parser.add_argument(
-        "--top-testbench-pages",
-        type=int,
-        default=0,
-        help="Number of TOP-linked testbench slides to generate",
-    )
-    parser.add_argument(
-        "--disable-auto-mapped-tb-pages",
-        action="store_true",
-        help="Disable TB slide insertion for filename auto-matched testbenches",
-    )
-    parser.add_argument(
-        "--non-interactive",
-        action="store_true",
-        help="Use defaults for prompts (for automation/CI)",
-    )
-    return parser.parse_args()
+    p = argparse.ArgumentParser(description="Generate module verification presentation HTML from project artifacts")
+    p.add_argument("--project", required=True)
+    p.add_argument("--manifest-json", required=True)
+    p.add_argument("--top", default="")
+    p.add_argument("--project-title", default="")
+    p.add_argument("--author", default="")
+    p.add_argument("--template", default="")
+    p.add_argument("--output-html", default="")
+    p.add_argument("--clean-assets", action="store_true")
+    p.add_argument("--non-interactive", action="store_true")
+    return p.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     try:
-        project_root, template_path, output_md, output_json, output_dir = resolve_paths(args)
-        validate_environment(project_root, template_path)
-        manifest_json = Path(args.manifest_json).expanduser().resolve()
-        manifest_ctx = load_manifest_snapshot(manifest_json, project_root)
+        script_dir = Path(__file__).resolve().parent
+        project_root = Path(args.project).resolve()
+        template_path = Path(args.template).resolve() if args.template else (script_dir.parent.parent / "presentation" / "presentation_module_verification_template.html.j2").resolve()
+        out_dir = project_root / "Presentation"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_html = Path(args.output_html).resolve() if args.output_html else (out_dir / f"presentation_{project_root.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html")
         if args.clean_assets:
-            clean_presentation_assets(output_md.parent)
+            shutil.rmtree(out_dir / "assets", ignore_errors=True)
+            print(f"[INFO] Cleaned assets: {out_dir / 'assets'}")
 
-        print("==============================================================================")
-        print(" Slidev Presentation Source Generator (Python + Jinja2)")
-        print("==============================================================================")
-        print(f"[INFO] Project: {project_root}")
-        print(f"[INFO] Template: {template_path}")
-        hdl_index = load_hdl_index(project_root)
-        if hdl_index:
-            hdl_summary = hdl_index.get("summary", {}) if isinstance(hdl_index.get("summary"), dict) else {}
-            pkg_count = len((hdl_index.get("declarations", {}) or {}).get("packages", []) or [])
-            if_count = len((hdl_index.get("declarations", {}) or {}).get("interfaces", []) or [])
-            print(
-                f"[INFO] HDL index: {hdl_index.get('_source_path','')} "
-                f"(files={hdl_summary.get('totalFiles','?')}, modules={hdl_summary.get('modules','?')}, "
-                f"packages={pkg_count}, interfaces={if_count})"
-            )
-        else:
-            print("[INFO] HDL index: not found (continuing with local parser)")
+        manifest = load_manifest(Path(args.manifest_json).resolve(), project_root)
+        modules = parse_modules(manifest["src_files"])
+        if not modules:
+            raise RuntimeError("No modules parsed from source files.")
+        names = sorted(modules.keys(), key=str.lower)
+        top_name = args.top.strip() or str(manifest.get("top") or "").strip() or choose_top(modules)
+        top_name = next((n for n in names if n.lower() == top_name.lower()), top_name)
+        if top_name not in modules:
+            raise RuntimeError(f"Top module not found: {top_name}")
+        if not args.non_interactive:
+            print("\n[INFO] Select top module")
+            for i, n in enumerate(names, 1):
+                print(f"  [{i}] {n}")
+            top_raw = input(f"Top module [default: {top_name}]: ").strip()
+            if top_raw:
+                selected, err = parse_selection(top_raw, names, allow_all=False)
+                if err or len(selected) != 1:
+                    raise RuntimeError("Invalid top module selection.")
+                top_name = selected[0]
 
-        modules_by_name = build_module_db_from_files(manifest_ctx["src_files"])
-        if not modules_by_name:
-            raise RuntimeError("No Verilog modules parsed from manifest-resolved src files.")
-
-        module_names = sorted(modules_by_name.keys(), key=lambda n: n.lower())
-        print(f"[INFO] Parsed module count: {len(module_names)}")
-
-        requested_top = args.top.strip()
-        if (not requested_top) and manifest_ctx.get("top"):
-            requested_top = str(manifest_ctx.get("top", "")).strip()
-        if requested_top:
-            top_name = next((name for name in module_names if name.lower() == requested_top.lower()), "")
-            if not top_name:
-                raise RuntimeError(f"Top module not found: {requested_top}")
-        elif args.non_interactive:
-            auto_top = choose_top_module(modules_by_name)
-            if not auto_top:
-                raise RuntimeError("No module found for auto top selection.")
-            top_name = auto_top
-        else:
-            top_name = prompt_select_top(modules_by_name, choose_top_module(modules_by_name))
-        print(f"[INFO] Selected top module: {top_name}")
-        if args.top_testbench_pages < 0:
-            raise RuntimeError(f"--top-testbench-pages must be >= 0: {args.top_testbench_pages}")
-        top_testbench_pages = args.top_testbench_pages
-        print(f"[INFO] TOP testbench page count: {top_testbench_pages}")
-        include_auto_mapped_tb_pages = not args.disable_auto_mapped_tb_pages
-        print(f"[INFO] Auto-matched TB page insertion: {include_auto_mapped_tb_pages}")
-
-        default_project_title = args.project_title.strip() or project_root.name
-        default_author_name = args.author.strip() or "KOREA"
         if args.non_interactive:
-            print("[INFO] Non-interactive mode: using default cover metadata and slide selections.")
-            project_display_name = default_project_title
-            author_name = default_author_name
-            datapath_slides = [
-                {
-                    "title": "DataPath",
-                    "flowSteps": list(module_names),
-                    "flowBoxCount": len(module_names),
-                }
-            ] if module_names else []
-            detail_modules = [name for name in module_names if name != top_name]
-            rank = {name: idx for idx, name in enumerate(detail_modules)}
+            detail = [n for n in names if n != top_name]
+            title = args.project_title.strip() or project_root.name
+            author = args.author.strip() or "FPGA Team"
+            trouble = {"issue": "No major blocker", "solution": "N/A"}
+            conclusion = {"summary": "Verification artifacts were generated successfully.", "nextSteps": "Run additional directed/random regression as needed."}
         else:
-            project_display_name, author_name = prompt_cover_meta(default_project_title, default_author_name)
+            title = input(f"Presentation title [default: {args.project_title.strip() or project_root.name}]: ").strip() or (args.project_title.strip() or project_root.name)
+            author = input(f"Author [default: {args.author.strip() or 'FPGA Team'}]: ").strip() or (args.author.strip() or "FPGA Team")
+            candidates = [n for n in names if n != top_name]
+            print("\n[INFO] Detail modules")
+            for i, n in enumerate(candidates, 1):
+                print(f"  [{i}] {n}")
+            raw = input("Detail modules (ALL or index/name list, default ALL): ").strip()
+            detail, err = parse_selection(raw, candidates, allow_all=True) if raw else (candidates, [])
+            if err:
+                raise RuntimeError(f"Invalid detail module selection: {', '.join(err)}")
+            raw_order = input("Detail order (index/name list, default current): ").strip()
+            if raw_order:
+                order, err = parse_selection(raw_order, detail, allow_all=False)
+                if err or len(order) != len(detail):
+                    raise RuntimeError("Invalid detail module order.")
+                detail = order
+            trouble = {"issue": input("Trouble issue [default: No major blocker]: ").strip() or "No major blocker", "solution": input("Trouble solution [default: N/A]: ").strip() or "N/A"}
+            conclusion = {"summary": input("Conclusion summary [default: Verification artifacts were generated successfully.]: ").strip() or "Verification artifacts were generated successfully.", "nextSteps": input("Next steps [default: Run additional directed/random regression as needed.]: ").strip() or "Run additional directed/random regression as needed."}
 
-            datapath_slides = prompt_select_datapath_slides(module_names)
-            detail_modules = prompt_select_detail_modules(module_names, top_name)
-            if detail_modules:
-                rank = prompt_select_module_rank(detail_modules)
-            else:
-                rank = {}
-                print("[INFO] Module detail target is empty. Module detail order input skipped.")
-
-        tb_map = collect_tb_mapping(
-            project_root,
-            module_names,
-            tb_files=manifest_ctx.get("tb_files", []),
-            include_auto_mapped_tb_pages=include_auto_mapped_tb_pages,
-            non_interactive=args.non_interactive,
-        )
-        mapped_tb_count = sum(len(items) for items in tb_map.values())
-        print(f"[INFO] Testbench files mapped: {mapped_tb_count}")
-        image_index = build_output_image_index(project_root)
-        if args.non_interactive:
-            manual_tb_map = {}
-            print("[INFO] Non-interactive mode: manual TB page insertion skipped.")
-        else:
-            manual_tb_map = prompt_manual_tb_insertions(
-                detail_modules=detail_modules,
-                tb_files=discover_testbenches_from_files(manifest_ctx.get("tb_files", [])),
+        scaffolds = scan_tb_scaffolds(project_root)
+        order = [top_name] + [n for n in detail if n != top_name]
+        tb_mapping = resolve_scaffold_mapping(order, scaffolds, args.non_interactive)
+        fsm_state_map = resolve_fsm_state_map(modules, order)
+        payload_modules = [
+            module_payload(
+                project_root,
+                out_dir,
+                modules[n],
+                top_name,
+                tb_mapping.get(n),
+                fsm_states=fsm_state_map.get(n, []),
             )
-        manual_tb_count = sum(len(items) for items in manual_tb_map.values())
-        print(f"[INFO] Manual TB pages inserted by user: {manual_tb_count}")
+            for n in order
+        ]
+        type_counts = {"type1": 0, "type2": 0, "type3": 0}
+        for m in payload_modules:
+            k = str(m.get("specKind", "")).lower()
+            if k in type_counts:
+                type_counts[k] += 1
+        print(f"[INFO] SPEC kinds: type1={type_counts['type1']} type2={type_counts['type2']} type3={type_counts['type3']}")
 
-        presentation_config = build_presentation_config(
-            project_root=project_root,
-            top_name=top_name,
-            modules_by_name=modules_by_name,
-            datapath_slides=datapath_slides,
-            detail_modules=detail_modules,
-            rank=rank,
-            tb_map=tb_map,
-            manual_tb_map=manual_tb_map,
-            top_testbench_pages=top_testbench_pages,
-            presentation_dir=output_md.parent,
-            image_index=image_index,
-            project_display_name=project_display_name,
-            author_name=author_name,
-            hdl_index=hdl_index,
-        )
-        materialize_presentation_assets(presentation_config, project_root, output_md.parent)
+        project_data = {
+            "meta": {"title": title, "subtitle": "Module Verification Presentation", "author": author, "date": datetime.now().strftime("%Y-%m-%d"), "version": "v1.0"},
+            "env": {
+                "top": top_name,
+                "tools": "vivado, verilog, system verilog",
+                "svComponentSvg": "../NEW_Presentation/SV Component.svg",
+            },
+            "modules": payload_modules,
+            "trouble": trouble,
+            "conclusion": conclusion,
+        }
 
-        output_json.parent.mkdir(parents=True, exist_ok=True)
-        output_json.write_text(
-            json.dumps(presentation_config, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        render_markdown(template_path, output_md, presentation_config)
-        copy_slidev_theme_assets(template_path, output_md)
-        deck_normalizer = SlidevDeckNormalizer(policy=SlideCanvasPolicy())
-        normalized_updated, normalized_skipped = deck_normalizer.normalize_directory(output_md.parent)
-        print(f"[INFO] Normalized slidev markdowns: updated={normalized_updated} skipped={normalized_skipped}")
-
+        env = Environment(loader=FileSystemLoader(str(template_path.parent)), autoescape=False, trim_blocks=True, lstrip_blocks=True)
+        html = env.get_template(template_path.name).render(project_data_json=json.dumps(project_data, ensure_ascii=False, indent=2))
+        out_html.write_text(html, encoding="utf-8")
         print("------------------------------------------------------------------------------")
-        print("[SUCCESS] Slidev source generated.")
-        print(f"[INFO] Markdown: {output_md}")
-        print(f"[INFO] JSON: {output_json}")
-        print(f"[INFO] Build output dir (for slidev build): {output_dir}")
+        print("[SUCCESS] Presentation HTML generated.")
+        print(f"[INFO] Template: {template_path}")
+        print(f"[INFO] HTML: {out_html}")
         return 0
     except KeyboardInterrupt:
         print("\n[ERROR] Interrupted by user.")
@@ -3015,4 +1278,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

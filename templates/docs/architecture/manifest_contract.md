@@ -119,14 +119,13 @@ Errors:
 
 Warnings:
 - `glob_no_match`
-- `reserved_section_ignored`
 
 ## JSON Output Example
 ```json
 {
   "manifest_path": "C:/repo/my_proj/fpga_auto.yml",
   "project_root": "C:/repo/my_proj",
-  "config": { "version": "0" },
+  "config": { "version": "1" },
   "resolved": {
     "src_files": ["src/top.sv"],
     "tb_files": ["tb/tb_top.sv"],

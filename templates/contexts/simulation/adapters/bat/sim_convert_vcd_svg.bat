@@ -2,6 +2,7 @@
 setlocal EnableExtensions EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "USER_CANCEL_RC=99"
 
 set "TARGET_PROJECT="
 set "NO_PAUSE=0"
@@ -67,6 +68,8 @@ echo.
 
 python "%PY_SCRIPT%" "%TARGET_PROJECT%"
 set "RC=%errorlevel%"
+
+if "%RC%"=="%USER_CANCEL_RC%" exit /b %USER_CANCEL_RC%
 
 if not "%RC%"=="0" (
     echo.

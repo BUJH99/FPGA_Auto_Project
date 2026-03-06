@@ -1,9 +1,9 @@
 const { createResult, addError } = require("../domain/manifest_result");
 const { resolveProjectRoot, assertProjectRoot } = require("../domain/project_root");
 const { loadManifestDocument } = require("../domain/manifest_document");
-const { resolveFileSet } = require("../domain/resolved_file_set");
 const { ManifestSnapshot } = require("../domain/manifest_snapshot");
 const { FileCatalog } = require("../domain/file_catalog");
+const { resolveProjectFileSet } = require("./project_file_resolver");
 
 class ProjectCatalogService {
   resolveFromProjectRoot(projectRootInput) {
@@ -31,7 +31,7 @@ class ProjectCatalogService {
       };
     }
 
-    result.resolved = resolveFileSet(result, projectRootAbs, config);
+    result.resolved = resolveProjectFileSet(result, projectRootAbs, config);
 
     let snapshot = null;
     try {

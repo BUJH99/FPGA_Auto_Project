@@ -35,7 +35,7 @@ Canonical entrypoints live under `templates/contexts/**/adapters/bat`.
 | 8 | `sim_iverilog_vcd_run.bat` | Partial | `.sv` filelist and TB top parsing supported (`-g2012`) | Icarus SV feature coverage is tool-limited |
 | 9 | `sim_vcd_svg_run.bat` | SV-agnostic/N/A | Converts VCD to SVG | Depends on existing VCD, not HDL language directly |
 | 14 | `legacy_report_generate.bat` | Partial | Consumes Vivado outputs; source scan includes `.v/.sv` | Legacy HTML flow, limited semantic SV understanding |
-| 15 | `legacy_docs_generate.bat` | Partial | Legacy doc tool now scans `.v/.sv` | Legacy parser remains heuristic and feature-limited |
+| 15 | `report_generate_docs.bat` | Partial | Docs generator now scans `.v/.sv` | Parser remains heuristic and feature-limited |
 | 16 | `vivado_ipi_gui_launch.bat` | Supported | Vivado project source add supports `.v/.sv` | GUI and Vivado environment dependency |
 | 17 | `vivado_build_flow_run.bat` | Partial | Non-project build reads `.v` + `.sv` | Build success depends on Vivado + source/tool constraints |
 | 18 | `vivado_block_design_finalize.bat` | SV-agnostic/N/A | BD/IP export automation | No direct SV parsing path |

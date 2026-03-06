@@ -2,6 +2,7 @@
 setlocal enabledelayedexpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "USER_CANCEL_RC=99"
 
 :: ============================================================================
 :: HDL FPGA Automation Pipeline
@@ -71,10 +72,12 @@ for /L %%i in (1,1,%count%) do (
     echo [%%i] !TB_NAME_%%i!   (Location: !TB_REL_%%i!)
 )
 echo ----------------------------------------------------------------------------
+echo Option: Q = cancel
 
 :: 3. User Selection
 :PROMPT
 set /p "selection=Select Testbench Number (1-%count%): "
+if /i "%selection%"=="Q" exit /b %USER_CANCEL_RC%
 
 :: Validate input
 if "%selection%"=="" goto PROMPT

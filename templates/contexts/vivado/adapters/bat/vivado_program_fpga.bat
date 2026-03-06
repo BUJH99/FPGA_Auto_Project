@@ -2,6 +2,7 @@
 setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
@@ -44,6 +45,10 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+call :prompt_run_or_cancel
+set "PROMPT_RC=%errorlevel%"
+if "%PROMPT_RC%"=="%USER_CANCEL_RC%" exit /b %USER_CANCEL_RC%
+
 if not exist output mkdir output
 
 :: Run Hardware Manager script in batch mode
@@ -66,6 +71,14 @@ exit /b 0
 :maybe_pause
 if "%NO_PAUSE%"=="1" exit /b 0
 pause
+exit /b 0
+
+:prompt_run_or_cancel
+if "%NO_PAUSE%"=="1" exit /b 0
+echo.
+set "RUN_INPUT="
+set /p "RUN_INPUT=Press Enter to continue, or Q to return to menu: "
+if /i "%RUN_INPUT%"=="Q" exit /b %USER_CANCEL_RC%
 exit /b 0
 
 :route_vivado_artifacts

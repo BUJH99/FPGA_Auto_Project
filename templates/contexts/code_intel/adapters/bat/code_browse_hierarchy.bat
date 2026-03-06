@@ -53,9 +53,10 @@ more +%START_LINE% "%~f0" > "%PS_FILE%"
 
 :: Run PowerShell
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_FILE%" "%TARGET_PROJECT%" "%HDL_INDEXER%" "%BROWSE_ONCE%" "%INCLUDE_TB%" "%TB_ONLY%" "%SCOPE_SPECIFIED%"
+set "PS_RC=%errorlevel%"
 
 del "%PS_FILE%"
-goto :eof
+exit /b %PS_RC%
 
 
 :POWERSHELL_SCRIPT_START
@@ -78,31 +79,29 @@ $global:fileTextCache = @{} # Path -> comment-stripped text
 $global:declLineCache = @{} # type::name::path -> line number
 $global:antigravityCommand = Get-Command antigravity -ErrorAction SilentlyContinue
 $global:counter = 1
+$selectedTbFolderKey = ""
+$userCancelRc = 99
+$quitRequested = $false
 
 if ($BrowseOnce -ne "1" -and $ScopeSpecified -ne "1") {
     Write-Host ""
     Write-Host "[Hierarchy Scope]" -ForegroundColor Yellow
     Write-Host "  [1] src only (tb hidden)"
-    Write-Host "  [2] src + tb"
     Write-Host "  [3] tb only"
-    $scopeSel = Read-Host " Select scope (1-3, default 1)"
+    $scopeSel = Read-Host " Select scope (1 or 3, default 1)"
     $scopeSel = [string]$scopeSel
     $scopeSel = $scopeSel.Trim().Trim('"', "'")
     switch ($scopeSel.ToLowerInvariant()) {
-        "2" {
-            $IncludeTb = "1"
-            $TbOnly = "0"
-        }
         "3" {
             $IncludeTb = "1"
             $TbOnly = "1"
         }
-        "src" {
+        "1" {
             $IncludeTb = "0"
             $TbOnly = "0"
         }
-        "all" {
-            $IncludeTb = "1"
+        "src" {
+            $IncludeTb = "0"
             $TbOnly = "0"
         }
         "tb" {
@@ -117,6 +116,9 @@ if ($BrowseOnce -ne "1" -and $ScopeSpecified -ne "1") {
             $IncludeTb = "1"
             $TbOnly = "1"
         }
+        "q" { exit $userCancelRc }
+        "quit" { exit $userCancelRc }
+        "cancel" { exit $userCancelRc }
         "" {
             $IncludeTb = "0"
             $TbOnly = "0"
@@ -127,6 +129,21 @@ if ($BrowseOnce -ne "1" -and $ScopeSpecified -ne "1") {
             $TbOnly = "0"
         }
     }
+}
+
+$hierarchyLogDir = Join-Path $ProjectRoot "log\hierarchy"
+New-Item -Path $hierarchyLogDir -ItemType Directory -Force | Out-Null
+$hierarchyLogFile = Join-Path $hierarchyLogDir ("hierarchy_{0}.log" -f (Get-Date -Format "yyyyMMdd_HHmmss_fff"))
+$hierarchyTranscriptActive = $false
+
+Write-Host ("[INFO] Hierarchy logs    : {0}" -f $hierarchyLogDir)
+Write-Host ("[INFO] Hierarchy log file: {0}" -f $hierarchyLogFile)
+try {
+    Start-Transcript -Path $hierarchyLogFile -Force | Out-Null
+    $hierarchyTranscriptActive = $true
+    Write-Host ("[INFO] Hierarchy log file: {0}" -f $hierarchyLogFile)
+} catch {
+    Write-Host ("[WARN] Failed to start hierarchy transcript: {0}" -f $_.Exception.Message) -ForegroundColor DarkYellow
 }
 
 function New-DeclGroups {
@@ -187,6 +204,7 @@ function Add-DeclItem {
 function Get-DeclRegex {
     param([string]$DeclType)
     switch ($DeclType) {
+        "module"    { return [regex]'(?im)\bmodule\s+(?:automatic\s+|static\s+)?([A-Za-z_][A-Za-z0-9_$]*)\b' }
         "package"   { return [regex]'(?im)\bpackage\s+([A-Za-z_][A-Za-z0-9_$]*)\b' }
         "interface" { return [regex]'(?im)\binterface\s+([A-Za-z_][A-Za-z0-9_$]*)\b' }
         "program"   { return [regex]'(?im)\bprogram\s+(?:automatic\s+|static\s+)?([A-Za-z_][A-Za-z0-9_$]*)\b' }
@@ -401,6 +419,389 @@ function Should-IncludeIndexedFile {
     return $FileScope -in @("src", "shared")
 }
 
+function New-BrowseTarget {
+    param(
+        [string]$Path,
+        [int]$Line = 0,
+        [string]$Kind,
+        [string]$Label,
+        [string]$FolderKey = ""
+    )
+
+    $idx = $global:counter
+    $global:fileIndexMap[$idx] = [pscustomobject]@{
+        Path      = $Path
+        Line      = $Line
+        Kind      = $Kind
+        Label     = $Label
+        FolderKey = $FolderKey
+    }
+    $global:counter++
+    return $idx
+}
+
+function Get-TbFolderKeyFromRelativePath {
+    param([string]$RelPath)
+
+    $norm = [string]$RelPath
+    if ([string]::IsNullOrWhiteSpace($norm)) { return "" }
+    $norm = $norm.Replace('\', '/')
+    $norm = [regex]::Replace($norm, '^[./]+', '')
+    if ($norm -notmatch '^tb(?:/|$)') { return "" }
+
+    $parts = @($norm -split '/')
+    if ($parts.Count -lt 2 -or [string]::IsNullOrWhiteSpace($parts[1])) {
+        return "tb"
+    }
+
+    return ("tb/" + $parts[1])
+}
+
+function New-TbFolderEntry {
+    param([string]$FolderKey)
+
+    $folderRelWin = $FolderKey.Replace('/', '\')
+    return [pscustomobject]@{
+        Key     = $FolderKey
+        Display = $FolderKey
+        Leaf    = (Split-Path -Path $folderRelWin -Leaf)
+        Path    = [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot $folderRelWin))
+    }
+}
+
+function Add-TbFolderEntry {
+    param(
+        [hashtable]$FolderMap,
+        [string]$FolderKey
+    )
+
+    if ([string]::IsNullOrWhiteSpace($FolderKey)) { return }
+    if ($FolderMap.ContainsKey($FolderKey)) { return }
+    $FolderMap[$FolderKey] = New-TbFolderEntry -FolderKey $FolderKey
+}
+
+function Get-TbFolderEntriesFromIndex {
+    param($IndexObj)
+
+    $folderMap = @{}
+    foreach ($f in $IndexObj.files) {
+        $scope = Get-IndexedFileScope -Role ([string]$f.role) -RelPath ([string]$f.path)
+        if ($scope -ne "tb") { continue }
+        Add-TbFolderEntry -FolderMap $folderMap -FolderKey (Get-TbFolderKeyFromRelativePath -RelPath ([string]$f.path))
+    }
+
+    return @($folderMap.Values | Sort-Object Display)
+}
+
+function Get-TbFolderEntriesFallback {
+    $folderMap = @{}
+    if (-not (Test-Path $tbDir)) { return @() }
+
+    $tbFiles = @(
+        Get-ChildItem -Path $tbDir -Recurse -File |
+            Where-Object { $_.Extension -in ".v", ".sv" }
+    ) | Sort-Object FullName
+
+    foreach ($tbFile in $tbFiles) {
+        $relPath = Get-DisplayRelativePath -BasePath $ProjectRoot -TargetPath $tbFile.FullName
+        Add-TbFolderEntry -FolderMap $folderMap -FolderKey (Get-TbFolderKeyFromRelativePath -RelPath $relPath)
+    }
+
+    return @($folderMap.Values | Sort-Object Display)
+}
+
+function Add-RtlModuleEntry {
+    param(
+        [hashtable]$ModuleMap,
+        [string]$ModuleName,
+        [string]$ModulePath,
+        [string]$RelPath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ModuleName)) { return }
+    if ([string]::IsNullOrWhiteSpace($ModulePath)) { return }
+    if ($ModuleMap.ContainsKey($ModuleName)) { return }
+
+    $ModuleMap[$ModuleName] = [pscustomobject]@{
+        Name    = $ModuleName
+        Path    = $ModulePath
+        RelPath = ([string]$RelPath).Replace('\', '/')
+        Line    = (Get-DeclLine -DeclType "module" -DeclName $ModuleName -DeclPath $ModulePath)
+    }
+}
+
+function Get-RtlModuleCatalogFromIndex {
+    param($IndexObj)
+
+    $moduleMap = @{}
+    foreach ($f in $IndexObj.files) {
+        $scope = Get-IndexedFileScope -Role ([string]$f.role) -RelPath ([string]$f.path)
+        if ($scope -ne "src") { continue }
+
+        $fullPath = [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot ([string]$f.path)))
+        foreach ($decl in $f.declarations) {
+            if ([string]$decl.type -ne "module") { continue }
+            Add-RtlModuleEntry -ModuleMap $moduleMap -ModuleName ([string]$decl.name) -ModulePath $fullPath -RelPath ([string]$f.path)
+        }
+    }
+
+    return $moduleMap
+}
+
+function Get-RtlModuleCatalogFallback {
+    $moduleMap = @{}
+    if (-not (Test-Path $srcDir)) { return $moduleMap }
+
+    $srcFiles = @(
+        Get-ChildItem -Path $srcDir -Recurse -File |
+            Where-Object { $_.Extension -in ".v", ".sv", ".svh" }
+    ) | Sort-Object FullName
+
+    $moduleRegex = Get-DeclRegex -DeclType "module"
+    foreach ($srcFile in $srcFiles) {
+        $text = Get-FileTextStrippedCached -Path $srcFile.FullName
+        if ([string]::IsNullOrWhiteSpace($text)) { continue }
+        $relPath = Get-DisplayRelativePath -BasePath $ProjectRoot -TargetPath $srcFile.FullName
+
+        foreach ($match in $moduleRegex.Matches($text)) {
+            Add-RtlModuleEntry -ModuleMap $moduleMap -ModuleName ([string]$match.Groups[1].Value) -ModulePath $srcFile.FullName -RelPath $relPath
+        }
+    }
+
+    return $moduleMap
+}
+
+function Get-TbOnlyHierarchyData {
+    param($IndexObj = $null)
+
+    if ($IndexObj -and $IndexObj.files) {
+        return @{
+            TbFolders  = @(Get-TbFolderEntriesFromIndex -IndexObj $IndexObj)
+            RtlModules = (Get-RtlModuleCatalogFromIndex -IndexObj $IndexObj)
+            Indexer    = $true
+            TbOnly     = $true
+        }
+    }
+
+    return @{
+        TbFolders  = @(Get-TbFolderEntriesFallback)
+        RtlModules = (Get-RtlModuleCatalogFallback)
+        Indexer    = $false
+        TbOnly     = $true
+    }
+}
+
+function Get-TbFolderSourceFiles {
+    param(
+        [string]$FolderPath,
+        [bool]$Recursive = $false
+    )
+
+    if ([string]::IsNullOrWhiteSpace($FolderPath) -or -not (Test-Path $FolderPath)) {
+        return @()
+    }
+
+    if ($Recursive) {
+        return @(
+            Get-ChildItem -Path $FolderPath -Recurse -File |
+                Where-Object { $_.Extension -in ".v", ".sv" }
+        ) | Sort-Object FullName
+    }
+
+    return @(
+        Get-ChildItem -Path $FolderPath -File |
+            Where-Object { $_.Extension -in ".v", ".sv" }
+    ) | Sort-Object FullName
+}
+
+function Get-TbTopEntriesForFolder {
+    param([string]$FolderPath)
+
+    $sourceFiles = @(Get-TbFolderSourceFiles -FolderPath $FolderPath -Recursive:$false)
+    if ($sourceFiles.Count -eq 0) {
+        $sourceFiles = @(Get-TbFolderSourceFiles -FolderPath $FolderPath -Recursive:$true)
+    }
+
+    $topEntries = @()
+    foreach ($sourceFile in $sourceFiles) {
+        $text = Get-FileTextStrippedCached -Path $sourceFile.FullName
+        if ([string]::IsNullOrWhiteSpace($text)) { continue }
+
+        $matches = @()
+        foreach ($declType in @("module", "program")) {
+            $re = Get-DeclRegex -DeclType $declType
+            foreach ($match in $re.Matches($text)) {
+                $matches += [pscustomobject]@{
+                    Type   = $declType
+                    Name   = [string]$match.Groups[1].Value
+                    Offset = [int]$match.Index
+                    Line   = [regex]::Matches($text.Substring(0, $match.Index), "`n").Count + 1
+                }
+            }
+        }
+
+        foreach ($entry in @($matches | Sort-Object Offset, Type, Name)) {
+            $topEntries += [pscustomobject]@{
+                Type    = $entry.Type
+                Name    = $entry.Name
+                Path    = $sourceFile.FullName
+                RelPath = Get-DisplayRelativePath -BasePath $ProjectRoot -TargetPath $sourceFile.FullName
+                Line    = [int]$entry.Line
+            }
+        }
+    }
+
+    return @($topEntries | Sort-Object RelPath, Line, Name)
+}
+
+function Get-DeclBlockText {
+    param(
+        [string]$DeclType,
+        [string]$DeclName,
+        [string]$DeclPath
+    )
+
+    $text = Get-FileTextStrippedCached -Path $DeclPath
+    if ([string]::IsNullOrWhiteSpace($text)) { return "" }
+
+    $escapedName = [regex]::Escape($DeclName)
+    $pattern = ""
+    switch ($DeclType) {
+        "module"  { $pattern = "(?ims)\bmodule\s+(?:automatic\s+|static\s+)?$escapedName\b[\s\S]*?\bendmodule\b" }
+        "program" { $pattern = "(?ims)\bprogram\s+(?:automatic\s+|static\s+)?$escapedName\b[\s\S]*?\bendprogram\b" }
+        default   { return $text }
+    }
+
+    $match = [regex]::Match($text, $pattern)
+    if ($match.Success) {
+        return [string]$match.Value
+    }
+
+    return $text
+}
+
+function Get-DirectDutEntriesForTop {
+    param(
+        $TopEntry,
+        [hashtable]$RtlModules
+    )
+
+    if (-not $TopEntry -or -not $RtlModules -or $RtlModules.Count -eq 0) {
+        return @()
+    }
+
+    $blockText = Get-DeclBlockText -DeclType ([string]$TopEntry.Type) -DeclName ([string]$TopEntry.Name) -DeclPath ([string]$TopEntry.Path)
+    if ([string]::IsNullOrWhiteSpace($blockText)) { return @() }
+
+    $children = @()
+    $seen = @{}
+    foreach ($moduleName in @($RtlModules.Keys | Sort-Object)) {
+        $escapedName = [regex]::Escape($moduleName)
+        $pattern = "\b$escapedName\b\s*(?:#\s*\([\s\S]*?\)\s*)?([A-Za-z_][A-Za-z0-9_$]*)\s*\("
+        if (-not [regex]::IsMatch($blockText, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
+            continue
+        }
+
+        if ($seen.ContainsKey($moduleName)) { continue }
+        $seen[$moduleName] = $true
+        $children += $RtlModules[$moduleName]
+    }
+
+    return @($children | Sort-Object Name)
+}
+
+function Get-TbFolderSvDeclarations {
+    param([string]$FolderPath)
+
+    if ([string]::IsNullOrWhiteSpace($FolderPath) -or -not (Test-Path $FolderPath)) {
+        return @()
+    }
+
+    $declEntries = @()
+    $declTypes = @("package", "interface", "program", "class", "checker")
+    $svFiles = @(
+        Get-ChildItem -Path $FolderPath -Recurse -File |
+            Where-Object { $_.Extension -in ".sv", ".svh" }
+    ) | Sort-Object FullName
+
+    foreach ($svFile in $svFiles) {
+        $text = Get-FileTextStrippedCached -Path $svFile.FullName
+        if ([string]::IsNullOrWhiteSpace($text)) { continue }
+
+        $relFile = (Get-DisplayRelativePath -BasePath $FolderPath -TargetPath $svFile.FullName).Replace('\', '/')
+        $relDir = [System.IO.Path]::GetDirectoryName($relFile)
+        if ($null -eq $relDir -or $relDir -eq ".") { $relDir = "" }
+        $relDir = ([string]$relDir).Replace('\', '/')
+
+        $matches = @()
+        foreach ($declType in $declTypes) {
+            $re = Get-DeclRegex -DeclType $declType
+            foreach ($match in $re.Matches($text)) {
+                $matches += [pscustomobject]@{
+                    Type   = $declType
+                    Name   = [string]$match.Groups[1].Value
+                    Offset = [int]$match.Index
+                    Line   = [regex]::Matches($text.Substring(0, $match.Index), "`n").Count + 1
+                }
+            }
+        }
+
+        foreach ($entry in @($matches | Sort-Object Offset, Type, Name)) {
+            $declEntries += [pscustomobject]@{
+                Type        = $entry.Type
+                Name        = $entry.Name
+                Path        = $svFile.FullName
+                Line        = [int]$entry.Line
+                RelFile     = $relFile
+                RelDir      = $relDir
+                Offset      = [int]$entry.Offset
+                FolderParts = @($(if ([string]::IsNullOrWhiteSpace($relDir)) { @() } else { $relDir -split '/' }))
+            }
+        }
+    }
+
+    return @($declEntries | Sort-Object RelDir, RelFile, Offset, Type, Name)
+}
+
+function New-TbDeclTreeNode {
+    param(
+        [string]$Name,
+        [string]$RelativePath
+    )
+
+    return [pscustomobject]@{
+        Name         = $Name
+        RelativePath = $RelativePath
+        Children     = @{}
+        Declarations = @()
+    }
+}
+
+function Build-TbDeclTree {
+    param([array]$Entries)
+
+    $root = New-TbDeclTreeNode -Name "" -RelativePath ""
+    foreach ($entry in @($Entries)) {
+        $node = $root
+        foreach ($part in @($entry.FolderParts)) {
+            if ([string]::IsNullOrWhiteSpace($part)) { continue }
+            $childRelPath = if ([string]::IsNullOrWhiteSpace([string]$node.RelativePath)) {
+                $part
+            } else {
+                ([string]$node.RelativePath + "/" + $part)
+            }
+            if (-not $node.Children.ContainsKey($part)) {
+                $node.Children[$part] = New-TbDeclTreeNode -Name $part -RelativePath $childRelPath
+            }
+            $node = $node.Children[$part]
+        }
+
+        $node.Declarations += $entry
+    }
+
+    return $root
+}
+
 function Convert-IndexToHierarchyData {
     param(
         $IndexObj,
@@ -500,6 +901,10 @@ function Get-Hierarchy {
     }
 
     $idx = Try-LoadHdlIndex -ProjectRoot $ProjectRoot -HdlIndexerPath $HdlIndexerPath
+    if ($tbOnlyEnabled) {
+        return (Get-TbOnlyHierarchyData -IndexObj $idx)
+    }
+
     if ($idx -and $idx.files) {
         return (Convert-IndexToHierarchyData -IndexObj $idx -IncludeTb:$includeTbEnabled -TbOnly:$tbOnlyEnabled)
     }
@@ -602,13 +1007,35 @@ function Get-Hierarchy {
     }
 }
 
+function Get-HierarchyLevelColor {
+    param([int]$Depth = 0)
+
+    $palette = @(
+        "Red",
+        "Green",
+        "Blue",
+        "Yellow",
+        "Magenta",
+        "Cyan",
+        "White",
+        "Gray"
+    )
+
+    if ($Depth -lt 0) { $Depth = 0 }
+    if ($Depth -ge $palette.Count) {
+        return $palette[$palette.Count - 1]
+    }
+    return $palette[$Depth]
+}
+
 function Print-Node {
     param (
         $mName,
         $indent,
         $last,
         $data,
-        $pathSet = $null
+        $pathSet = $null,
+        [int]$Depth = 0
     )
 
     if (-not $pathSet) { $pathSet = @{} }
@@ -641,10 +1068,12 @@ function Print-Node {
     $conn = "+-- "
     if ($last) { $conn = "\-- " }
 
+    $nodeColor = Get-HierarchyLevelColor -Depth $Depth
+
     # Colorize
     Write-Host ("{0}{1}" -f $indent, $conn) -NoNewline -ForegroundColor DarkGray
     Write-Host ("[{0,2}] " -f $idx) -NoNewline -ForegroundColor Yellow
-    Write-Host (" " + $mName) -NoNewline -ForegroundColor Cyan
+    Write-Host (" " + $mName) -NoNewline -ForegroundColor $nodeColor
     Write-Host (" ({0})" -f $fName) -ForegroundColor Gray
 
     # Children
@@ -656,9 +1085,198 @@ function Print-Node {
 
         for ($i = 0; $i -lt $children.Count; $i++) {
             $isLast = ($i -eq $children.Count - 1)
-            Print-Node -mName $children[$i] -indent $newIndent -last $isLast -data $data -pathSet $nextPathSet
+            Print-Node -mName $children[$i] -indent $newIndent -last $isLast -data $data -pathSet $nextPathSet -Depth ($Depth + 1)
         }
     }
+}
+
+function Print-TbFolderList {
+    param($data)
+
+    $folders = @($data.TbFolders)
+    if ($folders.Count -eq 0) {
+        Write-Host "No TB folders found."
+        return
+    }
+
+    Write-Host " [TB Folders]" -ForegroundColor Yellow
+    for ($i = 0; $i -lt $folders.Count; $i++) {
+        $folder = $folders[$i]
+        $isLast = ($i -eq $folders.Count - 1)
+        $conn = "+-- "
+        if ($isLast) { $conn = "\-- " }
+
+        $idx = New-BrowseTarget -Path ([string]$folder.Path) -Line 0 -Kind "tb-folder" -Label ([string]$folder.Display) -FolderKey ([string]$folder.Key)
+
+        Write-Host $conn -NoNewline -ForegroundColor DarkGray
+        Write-Host ("[{0,2}] " -f $idx) -NoNewline -ForegroundColor Yellow
+        Write-Host (" " + $folder.Display) -ForegroundColor Cyan
+    }
+}
+
+function Print-TbDutEntry {
+    param(
+        $Entry,
+        [string]$Indent,
+        [bool]$Last
+    )
+
+    $conn = "+-- "
+    if ($Last) { $conn = "\-- " }
+
+    $idx = New-BrowseTarget -Path ([string]$Entry.Path) -Line ([int]$Entry.Line) -Kind "module" -Label ([string]$Entry.Name)
+
+    Write-Host ("{0}{1}" -f $Indent, $conn) -NoNewline -ForegroundColor DarkGray
+    Write-Host ("[{0,2}] " -f $idx) -NoNewline -ForegroundColor Yellow
+    Write-Host (" " + $Entry.Name) -NoNewline -ForegroundColor Cyan
+    Write-Host (" ({0})" -f $Entry.RelPath) -ForegroundColor Gray
+}
+
+function Print-TbTopEntry {
+    param(
+        $TopEntry,
+        [array]$DutEntries,
+        [string]$Indent = "",
+        [bool]$Last = $true
+    )
+
+    $conn = "+-- "
+    if ($Last) { $conn = "\-- " }
+
+    $label = if ([string]$TopEntry.Type -ieq "program") {
+        "program " + [string]$TopEntry.Name
+    } else {
+        [string]$TopEntry.Name
+    }
+
+    $idx = New-BrowseTarget -Path ([string]$TopEntry.Path) -Line ([int]$TopEntry.Line) -Kind ([string]$TopEntry.Type) -Label $label
+
+    Write-Host ("{0}{1}" -f $Indent, $conn) -NoNewline -ForegroundColor DarkGray
+    Write-Host ("[{0,2}] " -f $idx) -NoNewline -ForegroundColor Yellow
+    Write-Host (" " + $label) -NoNewline -ForegroundColor Cyan
+    Write-Host (" ({0})" -f $TopEntry.RelPath) -ForegroundColor Gray
+
+    $dutRows = @($DutEntries)
+    if ($dutRows.Count -eq 0) { return }
+
+    $childIndent = $Indent + $(if ($Last) { "    " } else { "|   " })
+    for ($i = 0; $i -lt $dutRows.Count; $i++) {
+        Print-TbDutEntry -Entry $dutRows[$i] -Indent $childIndent -Last ($i -eq $dutRows.Count - 1)
+    }
+}
+
+function Print-TbDeclEntry {
+    param(
+        $Entry,
+        [string]$Indent,
+        [bool]$Last
+    )
+
+    $conn = "+-- "
+    if ($Last) { $conn = "\-- " }
+
+    $idx = New-BrowseTarget -Path ([string]$Entry.Path) -Line ([int]$Entry.Line) -Kind "decl" -Label ([string]($Entry.Type + " " + $Entry.Name))
+
+    Write-Host ("{0}{1}" -f $Indent, $conn) -NoNewline -ForegroundColor DarkGray
+    Write-Host ("[{0,2}] " -f $idx) -NoNewline -ForegroundColor Yellow
+    Write-Host (" {0} {1}" -f $Entry.Type, $Entry.Name) -NoNewline -ForegroundColor Magenta
+    Write-Host (" ({0})" -f $Entry.RelFile) -ForegroundColor Gray
+}
+
+function Print-TbDeclContainer {
+    param(
+        $Node,
+        [string]$Label,
+        [string]$Indent,
+        [bool]$Last
+    )
+
+    $conn = "+-- "
+    if ($Last) { $conn = "\-- " }
+
+    Write-Host ("{0}{1}" -f $Indent, $conn) -NoNewline -ForegroundColor DarkGray
+    Write-Host ("[{0}]" -f $Label) -ForegroundColor Cyan
+
+    $childIndent = $Indent + $(if ($Last) { "    " } else { "|   " })
+    $items = @()
+    foreach ($decl in @($Node.Declarations | Sort-Object RelFile, Offset, Type, Name)) {
+        $items += [pscustomobject]@{
+            Kind  = "decl"
+            Value = $decl
+        }
+    }
+    foreach ($childName in @($Node.Children.Keys | Sort-Object)) {
+        $items += [pscustomobject]@{
+            Kind  = "folder"
+            Value = $Node.Children[$childName]
+        }
+    }
+
+    for ($i = 0; $i -lt $items.Count; $i++) {
+        $item = $items[$i]
+        $isLastItem = ($i -eq $items.Count - 1)
+        if ($item.Kind -eq "decl") {
+            Print-TbDeclEntry -Entry $item.Value -Indent $childIndent -Last $isLastItem
+        } else {
+            Print-TbDeclContainer -Node $item.Value -Label ([string]$item.Value.Name) -Indent $childIndent -Last $isLastItem
+        }
+    }
+}
+
+function Print-TbDeclarationTree {
+    param([array]$DeclEntries)
+
+    $entries = @($DeclEntries)
+    if ($entries.Count -eq 0) { return }
+
+    $root = Build-TbDeclTree -Entries $entries
+
+    Write-Host ""
+    Write-Host " [SV Declarations]" -ForegroundColor Yellow
+
+    $items = @()
+    if (@($root.Declarations).Count -gt 0) {
+        $rootNode = New-TbDeclTreeNode -Name "root" -RelativePath ""
+        $rootNode.Declarations = @($root.Declarations)
+        $items += [pscustomobject]@{
+            Kind  = "folder"
+            Value = $rootNode
+        }
+    }
+    foreach ($childName in @($root.Children.Keys | Sort-Object)) {
+        $items += [pscustomobject]@{
+            Kind  = "folder"
+            Value = $root.Children[$childName]
+        }
+    }
+
+    for ($i = 0; $i -lt $items.Count; $i++) {
+        Print-TbDeclContainer -Node $items[$i].Value -Label ([string]$items[$i].Value.Name) -Indent "" -Last ($i -eq $items.Count - 1)
+    }
+}
+
+function Print-TbFolderDetail {
+    param(
+        $Folder,
+        [hashtable]$RtlModules
+    )
+
+    Write-Host (" [TB Folder] {0}" -f $Folder.Display) -ForegroundColor Yellow
+    Write-Host ""
+
+    $topEntries = @(Get-TbTopEntriesForFolder -FolderPath ([string]$Folder.Path))
+    if ($topEntries.Count -eq 0) {
+        Write-Host "No TB top modules/programs found."
+    } else {
+        for ($i = 0; $i -lt $topEntries.Count; $i++) {
+            $topEntry = $topEntries[$i]
+            $dutEntries = @(Get-DirectDutEntriesForTop -TopEntry $topEntry -RtlModules $RtlModules)
+            Print-TbTopEntry -TopEntry $topEntry -DutEntries $dutEntries -Indent "" -Last ($i -eq $topEntries.Count - 1)
+        }
+    }
+
+    $declEntries = @(Get-TbFolderSvDeclarations -FolderPath ([string]$Folder.Path))
+    Print-TbDeclarationTree -DeclEntries $declEntries
 }
 
 function Print-SvDeclGroup {
@@ -709,12 +1327,24 @@ function Print-SvDeclList {
 }
 
 # --- Main Loop ---
+try {
 while ($true) {
     Clear-Host
     Write-Host "============================================================" -ForegroundColor Green
     Write-Host "   HDL Project Navigator (Verilog/SystemVerilog)" -ForegroundColor Green
     Write-Host "============================================================" -ForegroundColor Green
-    Write-Host " [Numbers] Open File  |  [S1/S2/S3] Scope  |  [ENTER] Refresh  |  [Q] Quit" -ForegroundColor White
+
+    $tbOnlyEnabled = ($TbOnly -eq "1")
+    if ($tbOnlyEnabled) {
+        if ([string]::IsNullOrWhiteSpace($selectedTbFolderKey)) {
+            Write-Host " [Numbers] Open Folder  |  [S1/S3] Scope  |  [ENTER] Refresh  |  [Q] Quit" -ForegroundColor White
+        } else {
+            Write-Host " [Numbers] Open File  |  [B] Back  |  [S1/S3] Scope  |  [ENTER] Refresh  |  [Q] Quit" -ForegroundColor White
+        }
+    } else {
+        Write-Host " [Numbers] Open File  |  [S1/S3] Scope  |  [ENTER] Refresh  |  [Q] Quit" -ForegroundColor White
+    }
+
     if ($TbOnly -eq "1") {
         Write-Host " [Scope] tb only (--tb-only)" -ForegroundColor DarkGray
     } elseif ($IncludeTb -eq "1") {
@@ -726,20 +1356,51 @@ while ($true) {
 
     $data = Get-Hierarchy
     if ($data.Error) {
+        $selectedTbFolderKey = ""
         Write-Host $data.Error -ForegroundColor Red
     } else {
         if ($data.Indexer) {
             Write-Host " [Indexer] hdl_indexer.js active" -ForegroundColor DarkGray
             Write-Host ""
         }
-        if ($data.Top.Count -gt 0) {
-            foreach ($root in $data.Top) {
-                Print-Node -mName $root -indent "" -last $true -data $data
+
+        if ($tbOnlyEnabled) {
+            $selectedTbFolder = $null
+            if (-not [string]::IsNullOrWhiteSpace($selectedTbFolderKey)) {
+                $selectedTbFolder = @($data.TbFolders | Where-Object { $_.Key -eq $selectedTbFolderKey } | Select-Object -First 1)
+            }
+            if (-not $selectedTbFolder) {
+                $selectedTbFolderKey = ""
+            }
+
+            if ($BrowseOnce -eq "1") {
+                $tbFolders = @($data.TbFolders)
+                if ($tbFolders.Count -eq 0) {
+                    Write-Host "No TB folders found."
+                } else {
+                    for ($i = 0; $i -lt $tbFolders.Count; $i++) {
+                        if ($i -gt 0) {
+                            Write-Host ""
+                            Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
+                        }
+                        Print-TbFolderDetail -Folder $tbFolders[$i] -RtlModules $data.RtlModules
+                    }
+                }
+            } elseif ([string]::IsNullOrWhiteSpace($selectedTbFolderKey)) {
+                Print-TbFolderList -data $data
+            } else {
+                Print-TbFolderDetail -Folder $selectedTbFolder[0] -RtlModules $data.RtlModules
             }
         } else {
-            Write-Host "No modules found."
+            if ($data.Top.Count -gt 0) {
+                foreach ($root in $data.Top) {
+                    Print-Node -mName $root -indent "" -last $true -data $data
+                }
+            } else {
+                Write-Host "No modules found."
+            }
+            Print-SvDeclList -data $data
         }
-        Print-SvDeclList -data $data
     }
 
     Write-Host ""
@@ -750,21 +1411,26 @@ while ($true) {
     $inputTrimmed = $inputTrimmed.Trim()
     $inputUpper = $inputTrimmed.ToUpperInvariant()
 
-    if ($inputUpper -eq 'Q') { break }
+    if ($inputUpper -eq 'Q') {
+        $quitRequested = $true
+        break
+    }
+
+    if ($tbOnlyEnabled -and -not [string]::IsNullOrWhiteSpace($selectedTbFolderKey) -and $inputUpper -eq 'B') {
+        $selectedTbFolderKey = ""
+        continue
+    }
 
     if ($inputUpper -eq 'S1') {
         $IncludeTb = "0"
         $TbOnly = "0"
-        continue
-    }
-    if ($inputUpper -eq 'S2') {
-        $IncludeTb = "1"
-        $TbOnly = "0"
+        $selectedTbFolderKey = ""
         continue
     }
     if ($inputUpper -eq 'S3') {
         $IncludeTb = "1"
         $TbOnly = "1"
+        $selectedTbFolderKey = ""
         continue
     }
 
@@ -772,26 +1438,29 @@ while ($true) {
         $idx = [int]$inputTrimmed
         if ($global:fileIndexMap.ContainsKey($idx)) {
             $target = $global:fileIndexMap[$idx]
+            if ([string]$target.Kind -eq "tb-folder") {
+                $selectedTbFolderKey = [string]$target.FolderKey
+                continue
+            }
+
             Open-IndexedTarget -Target $target
             Start-Sleep -Milliseconds 200
         } else {
-            if ($idx -eq 1) {
-                $IncludeTb = "0"
-                $TbOnly = "0"
-                continue
-            }
-            if ($idx -eq 2) {
-                $IncludeTb = "1"
-                $TbOnly = "0"
-                continue
-            }
-            if ($idx -eq 3) {
-                $IncludeTb = "1"
-                $TbOnly = "1"
-                continue
-            }
             Write-Host "Invalid Index." -ForegroundColor Red
             Start-Sleep -Milliseconds 500
         }
     }
+}
+}
+finally {
+    if ($hierarchyTranscriptActive) {
+        try {
+            Stop-Transcript | Out-Null
+        } catch {
+        }
+    }
+}
+
+if ($quitRequested) {
+    exit $userCancelRc
 }

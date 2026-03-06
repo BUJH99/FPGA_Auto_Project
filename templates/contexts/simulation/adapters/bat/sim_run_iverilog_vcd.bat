@@ -2,6 +2,7 @@
 setlocal EnableExtensions EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "USER_CANCEL_RC=99"
 
 set "TARGET_PROJECT="
 set "TB_FILTER="
@@ -109,6 +110,12 @@ if defined TB_FILTER (
     call :queue_all_tbs
 ) else (
     call :interactive_select_tbs
+    set "SELECT_RC=!errorlevel!"
+    if "!SELECT_RC!"=="%USER_CANCEL_RC%" exit /b %USER_CANCEL_RC%
+    if not "!SELECT_RC!"=="0" (
+        if "%NO_PAUSE%"=="0" pause
+        exit /b !SELECT_RC!
+    )
 )
 
 if %SEL_COUNT% EQU 0 (
@@ -157,7 +164,7 @@ echo Option: A = all, Q = cancel
 set "TB_PICK="
 set /p "TB_PICK=Select TB numbers: "
 if "!TB_PICK!"=="" goto interactive_prompt
-if /i "!TB_PICK!"=="Q" exit /b 1
+if /i "!TB_PICK!"=="Q" exit /b %USER_CANCEL_RC%
 if /i "!TB_PICK!"=="A" (
     call :queue_all_tbs
     exit /b 0

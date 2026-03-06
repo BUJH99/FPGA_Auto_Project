@@ -174,15 +174,15 @@ flowchart LR
    - **Usage**: Run the script and select the module containing your FSM logic.
 
 5. **Generate Presentation** (`contexts\reporting\adapters\bat\report_generate_presentation.bat`)
-   - Converts module documentation blocks and SVG assets into a Slidev deck source (`slides.md`) plus static HTML build output.
-   - **Usage**: Runs with project context and emits `Presentation\slidev_<project>_<timestamp>.md`, `.json`, and `\index.html` build output directory.
-   - **Preview**: Open decks through `MAIN.bat -> 18. Open Slidev Viewer` (`contexts\reporting\adapters\bat\report_open_slidev_viewer.bat`) to ensure editor/source mapping works reliably.
+   - Generates a single HTML presentation from module metadata, TB scaffold files, and report artifacts.
+   - **Usage**: Runs with project context and emits `Presentation\presentation_<project>_<timestamp>.html`.
+   - **Preview**: Open the latest generated HTML through `MAIN.bat -> 18. Open Latest Presentation HTML` (`contexts\reporting\adapters\bat\report_open_latest_presentation_html.bat`).
 
 #### 🕹️ [ Simulation ]
 
 6. **Run Vivado Simulation** (`contexts\simulation\adapters\bat\sim_run_vivado.bat`)
-   - Launches Vivado xsim for RTL simulation. The terminal 2-step picker allows testbench (TB) and top module selection.
-   - **Usage**: Select your project, then your testbench file. The Vivado GUI will open with waveform panels.
+   - Launches Vivado xsim for RTL simulation. After waveform setup is loaded (or initialized), it automatically executes `restart` and `run all`.
+   - **Usage**: Select your project and testbench file. Once the Vivado GUI waveform view is ready, one automatic replay run starts to provide a clean log.
 
 7. **Auto Sim + Report** (`contexts\simulation\adapters\bat\sim_run_auto_report.bat`)
    - Fully automated validation loop: runs simulation silently and passes VCD/logs directly to the report generator.
@@ -206,7 +206,7 @@ flowchart LR
     - Consolidates complex Vivado synthesis/implementation logs into a readable HTML digest.
     - **Usage**: Run post-build to aggregate the `.log` and `.rpt` files into the `output/FINALReport/` directory.
 
-12. **Legacy Docs Generator** (`contexts\reporting\adapters\bat\report_generate_legacy_docs.bat`)
+12. **Docs Generator** (`contexts\reporting\adapters\bat\report_generate_docs.bat`)
     - Parses source module declarations (`.v`, `.sv`) into unified markdown/HTML manual structures.
     - **Usage**: Run at any time to generate updated Markdown and HTML documentation from your code comments.
 
@@ -242,7 +242,7 @@ The toolkit provides extensive capabilities around the SystemVerilog (SV) standa
 
 * **Intelligent Hierarchy Parsing**: The analysis backend seamlessly scans `module`, `program`, `interface`, `class`, `checker`, and `package` declarations, mapping them properly without misidentifying keywords like `automatic` or `static`.
 * **Flexible Testbench Handling**: Easily inspects complex Simulation TB hierarchies mapping dependencies correctly against RTL blocks.
-* **Resilient Auto-Documentation**: The legacy docs system actively parses `.sv` extensions, bridging modules and producing `report.md/html`.
+* **Resilient Auto-Documentation**: The docs generator actively parses `.sv` extensions, bridging modules and producing `report.md/html`.
 * **AST Strict Gates**: The canonical indexing backend optionally falls back from `tree-sitter` strict AST mode to a heuristic Regex parser if the native binary dependencies aren't compiled for your local architecture.
 * *Note on general limits*: Advanced OOP testbenches should lean heavily on Vivado Simulation routes rather than Icarus Verilog (`iverilog`), which limits `class` and `mailbox` feature sets.
 
@@ -268,8 +268,8 @@ Project/
 
 ### ❓ Troubleshooting
 - **`netlistsvg not found`**: Ensure you have successfully run `npm install` inside the `templates/` folder.
-- **`Slidev CLI not found`** during presentation generation: run `cd templates && npm install` to install `@slidev/cli`.
-- **Slidev `Show editor` pane is blank**: Use `MAIN.bat -> 18. Open Slidev Viewer` instead of running `npx slidev <Project\...\Presentation\*.md>` directly.
+- **Presentation generation failed**: verify Python and Jinja2 are available (`python -m pip install jinja2`).
+- **Cannot open latest presentation**: use `MAIN.bat -> 18. Open Latest Presentation HTML` after generation.
 - **`vivado not found`** or **`yosys not found`**: Make sure the binary paths for these applications are explicitly added to your system's Environment Variables (`PATH`).
 - **Missing File errors during sim**: Verify that the project correctly contains the `fpga_auto.yml` structure.
 - **Setup script failed**: Check setup logs under `templates\output\setup\toolkit_setup_*.log`.
@@ -437,15 +437,15 @@ flowchart LR
    - **사용 방법**: 스크립트를 실행하고 FSM 로직이 포함되어있는 구조 모듈을 선택합니다.
 
 5. **Generate Presentation** (`contexts\reporting\adapters\bat\report_generate_presentation.bat`)
-   - 코드 주석(`MODULE_INFO`)과 SVG 자산을 Slidev 발표 소스(`.md`)와 정적 HTML 산출물로 변환합니다.
-   - **사용 방법**: 실행 시 `Presentation\\slidev_<project>_<timestamp>.md`, `.json`, 그리고 `index.html`이 포함된 빌드 폴더를 생성합니다.
-   - **미리보기**: `MAIN.bat -> 18. Open Slidev Viewer` (`contexts\reporting\adapters\bat\report_open_slidev_viewer.bat`)로 열어야 편집기/소스 매핑이 안정적으로 동작합니다.
+   - 모듈 메타데이터, TB scaffold, 리포트 산출물을 기반으로 단일 HTML 발표자료를 생성합니다.
+   - **사용 방법**: 실행 시 `Presentation\\presentation_<project>_<timestamp>.html` 파일을 생성합니다.
+   - **미리보기**: `MAIN.bat -> 18. Open Latest Presentation HTML` (`contexts\reporting\adapters\bat\report_open_latest_presentation_html.bat`)로 최신 HTML을 엽니다.
 
 #### 🕹️ [ Simulation (시뮬레이션 구동 및 파형 분석) ]
 
 6. **Run Vivado Simulation** (`contexts\simulation\adapters\bat\sim_run_vivado.bat`)
-   - 테스트벤치 터미널 피커(Picker)를 걸쳐 Vivado Simulator (xsim) 기반 시뮬레이션 파형 뷰어를 시작합니다.
-   - **사용 방법**: 프로젝트와 실행할 테스트벤치를 선택하면, 즉시 파형 창과 함께 Vivado GUI가 열립니다.
+   - 테스트벤치 선택 후 Vivado xsim GUI를 열고, 웨이브폼 설정 로드(또는 초기화) 직후 자동으로 `restart`와 `run all`을 실행합니다.
+   - **사용 방법**: 프로젝트와 TB를 선택하면 파형 창 표시 후 자동 재실행이 1회 수행되어 초기 상태 기준 로그를 바로 확인할 수 있습니다.
 
 7. **Auto Sim + Report** (`contexts\simulation\adapters\bat\sim_run_auto_report.bat`)
    - 시뮬레이션 직후 추출된 VCD 파형과 검증 로그를 HTML 문서화 프로세스에 자동으로 넘겨 문서 형태로 기록합니다.
@@ -469,7 +469,7 @@ flowchart LR
     - 흩어져있는 Vivado GUI 에러/합성/구현 로그들을 하나로 모아 보기 편한 통합 HTML 리포트로 구워냅니다.
     - **사용 방법**: Vivado 빌드를 한 번 마친 후 실행하여 `output/FINALReport/` 디렉토리에 요약본을 생성합니다.
 
-12. **Legacy Docs Generator** (`contexts\reporting\adapters\bat\report_generate_legacy_docs.bat`)
+12. **Docs Generator** (`contexts\reporting\adapters\bat\report_generate_docs.bat`)
     - 전통적 방식의 레거시 모듈 코드 분석기가 각 스크립트를 파싱해 마크다운 및 HTML 명세서를 산출합니다.
     - **사용 방법**: 코딩 및 주석 작성을 마친 후 언제든지 실행하여 API 컴포넌트 백과사전 문서처럼 활용합니다.
 
@@ -531,8 +531,8 @@ Project/
 
 ### ❓ 문제 해결 (Troubleshooting)
 - **`netlistsvg not found` 오류**: 초기 설정 단계인 `templates` 디렉토리 속에서 `npm install` 과정을 실행했는지 확인합니다.
-- **발표 생성 시 `Slidev CLI not found` 오류**: `cd templates && npm install`을 실행해 `@slidev/cli`를 설치하세요.
-- **Slidev `Show editor` 패널이 비어 보이는 경우**: `npx slidev <Project\...\Presentation\*.md>` 직접 실행 대신 `MAIN.bat -> 18. Open Slidev Viewer`를 사용하세요.
+- **발표 생성 실패**: Python/Jinja2 설치 상태를 확인하세요 (`python -m pip install jinja2`).
+- **최신 발표자료 열기 실패**: 먼저 발표 생성 후 `MAIN.bat -> 18. Open Latest Presentation HTML`를 사용하세요.
 - **`vivado is not recognized...` 혹은 `yosys` 오류**: 해당 소프트웨어들의 실행 경로(`.exe` 나 `bin` 폴더)가 Windows 시스템 환경 변수인 `PATH`에 명시적으로 연결되어 있는지 점검합니다.
 - **시뮬레이션에서 파일이 없다는 오류 발생 시**: 대상 프로젝트 폴더 내부에 올바른 모델링 파일 구조와 기준점인 `fpga_auto.yml` 이 존재하는지 확인하세요.
 - **초기 설정 BAT 실패 시**: `templates\output\setup\toolkit_setup_*.log` 로그를 확인하세요.

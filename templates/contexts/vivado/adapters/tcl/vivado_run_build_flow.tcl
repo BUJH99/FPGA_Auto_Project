@@ -35,6 +35,15 @@ proc print_error {msg} {
     puts "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
 }
 
+proc update_stage_status {status_file stage detail} {
+    if {$status_file eq ""} { return }
+    catch { file mkdir [file dirname $status_file] }
+    set fh [open $status_file w]
+    puts $fh "STAGE=$stage"
+    puts $fh "DETAIL=$detail"
+    close $fh
+}
+
 proc read_manifest_list {list_file project_root} {
     set out {}
     if {$list_file eq ""} { return $out }
@@ -80,6 +89,13 @@ set project_root [pwd]
 set src_list_file ""
 set xdc_list_file ""
 set inc_list_file ""
+set build_strategy "Default"
+set requested_top_module ""
+set requested_part_number ""
+set requested_project_name ""
+set requested_build_strategy ""
+set requested_power_limit ""
+set stage_status_file ""
 if {[llength $argv] >= 1} {
     set a0 [string trim [lindex $argv 0]]
     if {$a0 ne ""} { set project_root [file normalize $a0] }
@@ -96,6 +112,30 @@ if {[llength $argv] >= 4} {
     set a3 [string trim [lindex $argv 3]]
     if {$a3 ne ""} { set inc_list_file [file normalize $a3] }
 }
+if {[llength $argv] >= 5} {
+    set a4 [string trim [lindex $argv 4]]
+    if {$a4 ne ""} { set requested_top_module $a4 }
+}
+if {[llength $argv] >= 6} {
+    set a5 [string trim [lindex $argv 5]]
+    if {$a5 ne ""} { set requested_part_number $a5 }
+}
+if {[llength $argv] >= 7} {
+    set a6 [string trim [lindex $argv 6]]
+    if {$a6 ne ""} { set requested_project_name $a6 }
+}
+if {[llength $argv] >= 8} {
+    set a7 [string trim [lindex $argv 7]]
+    if {$a7 ne ""} { set requested_build_strategy $a7 }
+}
+if {[llength $argv] >= 9} {
+    set a8 [string trim [lindex $argv 8]]
+    if {$a8 ne ""} { set requested_power_limit $a8 }
+}
+if {[llength $argv] >= 10} {
+    set a9 [string trim [lindex $argv 9]]
+    if {$a9 ne ""} { set stage_status_file [file normalize $a9] }
+}
 
 set base_output   [file join $project_root "output"]
 set dcp_dir       "$base_output/checkpoints"
@@ -111,6 +151,24 @@ if {[file exists $config_file]} {
     source $config_file
 }
 
+if {$requested_top_module ne ""} {
+    set top_module $requested_top_module
+}
+if {$requested_part_number ne ""} {
+    set part_number $requested_part_number
+}
+if {$requested_project_name ne ""} {
+    set project_name $requested_project_name
+}
+if {$requested_build_strategy ne ""} {
+    set build_strategy $requested_build_strategy
+}
+if {$requested_power_limit ne ""} {
+    set power_limit $requested_power_limit
+}
+
+print_info "Build request: top=$top_module part=$part_number strategy=$build_strategy power_limit=${power_limit}W"
+
 # Ensure an in-memory project exists so IP generation uses the correct part
 if {[llength [get_projects -quiet]] == 0} {
     create_project -in_memory -part $part_number
@@ -122,6 +180,9 @@ if {[llength [get_projects -quiet]] == 0} {
 file mkdir $base_output
 file mkdir $dcp_dir
 file mkdir $rpt_dir
+if {$stage_status_file ne ""} {
+    catch { file delete -force $stage_status_file }
+}
 
 # -----------------------------------------------------------------
 # 2. Loading Source Files
@@ -226,6 +287,7 @@ if {[llength $ip_files] > 0} {
 # -----------------------------------------------------------------
 # 3. Synthesis
 # -----------------------------------------------------------------
+update_stage_status $stage_status_file "SYNTHESIS" "synth_design -> post_synth checkpoint"
 print_header 2 "Running Synthesis"
 if {[catch {
     synth_design -top $top_module -part $part_number -flatten_hierarchy rebuilt
@@ -240,6 +302,7 @@ print_info "Synthesis completed successfully."
 # -----------------------------------------------------------------
 # 4. Logic Optimization
 # -----------------------------------------------------------------
+update_stage_status $stage_status_file "IMPLEMENTATION" "opt_design -> place_design -> route_design"
 print_header 3 "Optimizing Design"
 opt_design
 print_info "Optimization completed."
@@ -350,6 +413,7 @@ if {[catch {report_cdc -file $rpt_dir/cdc_report.rpt} msg]} {
 print_header 9 "Final Verification & Bitstream"
 
 if { $power_status == "PASS" && $timing_status == "PASS" } {
+    update_stage_status $stage_status_file "BITSTREAM" "power/timing validation passed -> write_bitstream"
     puts " \[SUCCESS\] All design requirements met."
     puts " \[ACTION\] Generating Bitstream..."
     

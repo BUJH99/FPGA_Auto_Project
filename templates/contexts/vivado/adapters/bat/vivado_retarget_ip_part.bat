@@ -2,6 +2,7 @@
 setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
@@ -33,6 +34,9 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+call :prompt_run_or_cancel
+if errorlevel %USER_CANCEL_RC% exit /b %USER_CANCEL_RC%
+
 echo [INFO] Retargeting IP to project_build_config.tcl part...
 vivado -mode batch -source "%TEMPLATES_ROOT%\contexts\vivado\adapters\tcl\vivado_retarget_ip_part.tcl" -notrace -log "%RETARGET_LOG%" -journal "%RETARGET_JOU%"
 set "RETARGET_RC=%errorlevel%"
@@ -53,4 +57,11 @@ for %%F in (vivado.log vivado.jou vivado.pb vivado.str) do (
 for %%F in (*.backup.log *.backup.jou *.backup.str) do (
     if exist "%%F" move /y "%%F" "%LOG_DIR%\" >nul 2>&1
 )
+exit /b 0
+
+:prompt_run_or_cancel
+echo.
+set "RUN_INPUT="
+set /p "RUN_INPUT=Press Enter to continue, or Q to return to menu: "
+if /i "%RUN_INPUT%"=="Q" exit /b %USER_CANCEL_RC%
 exit /b 0

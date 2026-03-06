@@ -2,6 +2,7 @@
 setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
@@ -26,6 +27,9 @@ if not exist "%FLOW_BAT%" (
     exit /b 1
 )
 
+call :prompt_run_or_cancel
+if errorlevel %USER_CANCEL_RC% exit /b %USER_CANCEL_RC%
+
 echo ===============================================================================
 echo  [AUTO] Build ^+ Program Device
 echo  Target: %TARGET_PROJECT%
@@ -34,6 +38,8 @@ echo.
 
 call "%FLOW_BAT%" "%TARGET_PROJECT%" --auto-program --no-pause
 set "FLOW_RC=%errorlevel%"
+
+if "%FLOW_RC%"=="%USER_CANCEL_RC%" exit /b %USER_CANCEL_RC%
 
 if %FLOW_RC% neq 0 (
     echo.
@@ -44,4 +50,11 @@ if %FLOW_RC% neq 0 (
 
 echo.
 echo [SUCCESS] Build and device programming completed.
+exit /b 0
+
+:prompt_run_or_cancel
+echo.
+set "RUN_INPUT="
+set /p "RUN_INPUT=Press Enter to continue, or Q to return to menu: "
+if /i "%RUN_INPUT%"=="Q" exit /b %USER_CANCEL_RC%
 exit /b 0

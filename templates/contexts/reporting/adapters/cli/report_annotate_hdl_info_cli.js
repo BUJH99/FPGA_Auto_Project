@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { loadStrictManifestContext } = require('../../../manifest/application/strict_manifest_loader');
+const { loadStrictManifestContext } = require('../../../../shared/application/manifest_contract_loader');
 
 function usageAndExit() {
     console.error('Usage: node annotate_hdl_info.js <ProjectDir> --manifest-json <path> [--include-legacy]');

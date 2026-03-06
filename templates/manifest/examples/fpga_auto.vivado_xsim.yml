@@ -1,4 +1,4 @@
-version: "0"
+version: "1"
 project:
   name: "vivado_xsim_example"
 hdl:

@@ -10,7 +10,7 @@
 ## Current Alternatives
 - Use legacy report/documentation scripts if needed:
   - Canonical: `templates\contexts\reporting\adapters\bat\report_generate_legacy_html.bat`
-  - Canonical: `templates\contexts\reporting\adapters\bat\report_generate_legacy_docs.bat`
+  - Canonical: `templates\contexts\reporting\adapters\bat\report_generate_docs.bat`
 - Use simulation/build outputs directly under each project:
   - `output/`
   - `log/`

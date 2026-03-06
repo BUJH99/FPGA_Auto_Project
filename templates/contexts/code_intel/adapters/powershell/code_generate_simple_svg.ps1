@@ -45,8 +45,64 @@ function Get-DynamicBoxWidth {
   return [Math]::Max($minWidth, [Math]::Min($maxWidth, [int]$requiredWidth))
 }
 
-# Parse Verilog module to extract module name and ports
-$content = Get-Content $VerilogFile -Raw
+function Remove-HdlComments {
+  Param([string]$Text)
+
+  if ($null -eq $Text) {
+    return ""
+  }
+
+  $withoutBlock = [regex]::Replace($Text, '/\*[\s\S]*?\*/', '')
+  return [regex]::Replace($withoutBlock, '//.*$', '', [System.Text.RegularExpressions.RegexOptions]::Multiline)
+}
+
+function Get-PortNamesFromDeclaration {
+  Param(
+    [string]$Line,
+    [string]$Direction
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Line)) {
+    return @()
+  }
+
+  $decl = [regex]::Replace($Line, "^\s*$Direction\b", "", [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+  $decl = $decl.Trim().TrimEnd(",").TrimEnd(";")
+  if ([string]::IsNullOrWhiteSpace($decl)) {
+    return @()
+  }
+
+  $packedDims = @([regex]::Matches($decl, '\[[^\]]+\]') | ForEach-Object { $_.Value })
+  $widthSuffix = if ($packedDims.Count -gt 0) { $packedDims -join "" } else { "" }
+  $decl = [regex]::Replace($decl, '\[[^\]]+\]', ' ')
+  $decl = [regex]::Replace(
+    $decl,
+    '\b(?:wire|reg|logic|var|signed|unsigned|bit|byte|shortint|int|longint|integer|time|shortreal|real|realtime|string|tri|tri0|tri1|supply0|supply1|wand|wor|uwire)\b',
+    ' ',
+    [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+  )
+
+  $ports = @()
+  foreach ($part in ($decl -split ',')) {
+    $candidate = ($part -split '=')[0].Trim()
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+      continue
+    }
+
+    if ($candidate -match '([A-Za-z_][A-Za-z0-9_$]*)') {
+      $portName = $Matches[1]
+      if (-not [string]::IsNullOrWhiteSpace($widthSuffix)) {
+        $portName += $widthSuffix
+      }
+      $ports += $portName
+    }
+  }
+
+  return @($ports)
+}
+
+# Parse Verilog/SystemVerilog module to extract module name and ports
+$content = Remove-HdlComments -Text (Get-Content $VerilogFile -Raw)
 
 # Extract module name
 if ($content -match 'module\s+(\w+)\s*[\(#]') {
@@ -64,25 +120,14 @@ $outputPorts = @()
 # Find all input/output declarations
 $content -split "`n" | ForEach-Object {
   $line = $_.Trim()
-    
-  # Match input declarations
-  if ($line -match '^\s*input\s+(?:wire\s+)?(?:reg\s+)?(?:\[[\d:]+\]\s+)?(\w+)') {
-    $portName = $Matches[1]
-    # Extract bit width if present
-    if ($line -match '\[(\d+):(\d+)\]') {
-      $portName += "[" + $Matches[1] + ":" + $Matches[2] + "]"
+  if (-not [string]::IsNullOrWhiteSpace($line)) {
+    if ($line -match '^\s*input\b') {
+      $inputPorts += Get-PortNamesFromDeclaration -Line $line -Direction "input"
     }
-    $inputPorts += $portName
-  }
-    
-  # Match output declarations
-  if ($line -match '^\s*output\s+(?:wire\s+)?(?:reg\s+)?(?:\[[\d:]+\]\s+)?(\w+)') {
-    $portName = $Matches[1]
-    # Extract bit width if present  
-    if ($line -match '\[(\d+):(\d+)\]') {
-      $portName += "[" + $Matches[1] + ":" + $Matches[2] + "]"
+
+    if ($line -match '^\s*output\b') {
+      $outputPorts += Get-PortNamesFromDeclaration -Line $line -Direction "output"
     }
-    $outputPorts += $portName
   }
 }
 

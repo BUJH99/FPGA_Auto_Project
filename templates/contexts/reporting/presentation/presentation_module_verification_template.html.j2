@@ -1,0 +1,1349 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Module Verification Presentation</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&display=swap');
+
+    :root {
+      --ui-scale: 1.25;
+      font-size: calc(16px * var(--ui-scale));
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    body {
+      font-family: 'Pretendard', sans-serif;
+      background-color: #f1f5f9;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      color: #334155;
+    }
+
+    #presentation-area {
+      width: 1920px;
+      height: 1080px;
+      background-color: #ffffff;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+      position: relative;
+      overflow: hidden;
+      border-radius: 8px;
+    }
+
+    #slide-container {
+      width: 100%;
+      height: 100%;
+    }
+
+    .slide {
+      display: none;
+      width: 100%;
+      height: 100%;
+      padding: calc(48px * var(--ui-scale)) calc(64px * var(--ui-scale));
+      box-sizing: border-box;
+      flex-direction: column;
+      animation: fadeIn 0.3s ease-in-out;
+    }
+
+    .slide.active {
+      display: flex;
+    }
+
+    .slide-header {
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: calc(12px * var(--ui-scale));
+      margin-bottom: calc(16px * var(--ui-scale));
+    }
+
+    .bg-pattern {
+      background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    #controls {
+      position: absolute;
+      bottom: calc(24px * var(--ui-scale));
+      right: calc(32px * var(--ui-scale));
+      display: flex;
+      align-items: center;
+      gap: calc(16px * var(--ui-scale));
+      color: #94a3b8;
+      z-index: 50;
+    }
+
+    .nav-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #64748b;
+      padding: calc(8px * var(--ui-scale));
+      border-radius: 50%;
+      transition: all 0.2s;
+    }
+
+    .nav-btn:hover {
+      background-color: #f1f5f9;
+      color: #0f172a;
+    }
+
+    .mono {
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    #presentation-area .text-\[10px\] { font-size: calc(10px * var(--ui-scale)) !important; }
+    #presentation-area .text-\[11px\] { font-size: calc(11px * var(--ui-scale)) !important; }
+
+    .thin-scroll {
+      overflow-y: auto;
+      padding-right: 6px;
+    }
+
+    .thin-scroll::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .thin-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 8px;
+    }
+
+    @media print {
+      :root {
+        --ui-scale: 1.25 !important;
+        font-size: calc(16px * var(--ui-scale)) !important;
+      }
+
+      @page {
+        size: 1920px 1080px;
+        margin: 0;
+      }
+
+      body.pdf-export {
+        background: #ffffff !important;
+        display: block !important;
+        width: 1920px !important;
+        margin: 0 !important;
+        min-height: auto !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      body.pdf-export #controls {
+        display: none !important;
+      }
+
+      body.pdf-export #presentation-area {
+        width: 1920px !important;
+        height: 1080px !important;
+        overflow: visible !important;
+      }
+
+      body.pdf-export #slide-container {
+        width: 100% !important;
+        height: 100% !important;
+      }
+
+      body.pdf-export .slide {
+        display: flex !important;
+        width: 100% !important;
+        height: 100% !important;
+        margin: 0 !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        animation: none !important;
+      }
+
+      body.pdf-export .slide:last-child {
+        page-break-after: auto !important;
+        break-after: auto !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="presentation-area">
+    <div id="slide-container"></div>
+    <div id="controls">
+      <span id="slide-counter" class="font-mono text-sm font-semibold">1 / 1</span>
+      <button class="nav-btn" onclick="savePdfSlides()" title="Save PDF"><i class="ph ph-file-pdf text-2xl"></i></button>
+      <button class="nav-btn" onclick="prevSlide()" title="Previous (Left Arrow)"><i class="ph ph-caret-left text-2xl"></i></button>
+      <button class="nav-btn" onclick="nextSlide()" title="Next (Right Arrow)"><i class="ph ph-caret-right text-2xl"></i></button>
+    </div>
+  </div>
+
+  <script>
+    const projectData = {{ project_data_json }};
+
+    const asArray = (v) => (Array.isArray(v) ? v : []);
+    const esc = (v) =>
+      String(v ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    const escAttr = (v) =>
+      String(v ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+
+    const scoreTone = (value) => {
+      const n = Number(value) || 0;
+      if (n >= 100) return "green";
+      if (n >= 90) return "blue";
+      return "yellow";
+    };
+
+    const scenarioTone = (name) => {
+      const map = {
+        blue: "#3b82f6",
+        green: "#22c55e",
+        amber: "#f59e0b",
+        yellow: "#f59e0b",
+        purple: "#a855f7",
+        teal: "#14b8a6",
+        rose: "#f43f5e",
+        red: "#ef4444",
+        slate: "#64748b"
+      };
+      return map[String(name || "").toLowerCase()] || "#3b82f6";
+    };
+
+    const card = (title, body, cls = "") => `
+      <div class="bg-white p-5 border border-slate-200 rounded-xl shadow-sm flex flex-col ${cls}">
+        ${title ? `<h3 class="font-bold text-slate-800 mb-3 flex items-center gap-2">${title}</h3>` : ""}
+        <div class="${title ? "flex-1 min-h-0 flex flex-col" : "min-h-0 flex flex-col"}">${body}</div>
+      </div>
+    `;
+
+    const table = (headers, rows) => `
+      <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-auto h-full min-h-0">
+        <table class="w-full text-sm text-left table-fixed">
+          <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+            <tr>${headers.map((h) => `<th class="px-4 py-2 border border-slate-200 whitespace-normal break-words">${esc(h)}</th>`).join("")}</tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `<tr class="border-b border-slate-100 last:border-none">${row.map((c) => `<td class="px-4 py-2 border border-slate-200 whitespace-normal break-words">${c}</td>`).join("")}</tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    const chips = (items, tone = "blue") => {
+      if (!Array.isArray(items) || items.length === 0) return `<span class="text-xs text-slate-400">N/A</span>`;
+      return items
+        .map(
+          (v) =>
+            `<span class="inline-flex items-center px-2 py-1 rounded-md bg-${tone}-50 text-${tone}-700 border border-${tone}-200 text-[11px] mono">${esc(v)}</span>`
+        )
+        .join("");
+    };
+
+    const imageBox = (path, fallback, options = {}) => {
+      const tight = Boolean(options && options.tight);
+      const padClass = tight ? "p-0" : "p-2";
+      const imgClass = tight
+        ? "block w-auto h-auto max-w-full max-h-full object-contain object-center"
+        : "block w-auto h-auto max-w-full max-h-full object-contain";
+      if (!path) {
+        return `<div class="h-full flex items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-slate-500 text-sm">${esc(fallback)}</div>`;
+      }
+      return `
+        <div class="w-full h-full min-h-0 rounded-xl border border-slate-200 bg-slate-50 ${padClass} overflow-hidden flex items-center justify-center">
+          <img src="${esc(path)}" class="${imgClass}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+          <div style="display:none" class="w-full h-full items-center justify-center text-slate-500 text-sm">${esc(fallback)}<br><span class="mono text-xs">${esc(path)}</span></div>
+        </div>
+      `;
+    };
+
+    const progressBars = (scores, overallIssues) => {
+      const rows = asArray(scores).length > 0 ? asArray(scores) : [{ name: "overall", score: String(overallIssues || "").startsWith("0") ? 100 : 70 }];
+      return `
+        <div class="flex flex-col gap-3">
+          ${rows
+            .map((s) => {
+              const p = Math.max(0, Math.min(100, Number(s.score) || 0));
+              const tone = scoreTone(p);
+              const checked = Number(s.checked) || 0;
+              const errors = Number(s.errors) || 0;
+              const status = String(s.status || (errors > 0 ? "FAIL" : checked > 0 ? "PASS" : "N/A")).toUpperCase();
+              const reason = String(s.reason || "").trim();
+              const summaryLine = `Status: ${status} | Checked: ${checked} | Errors: ${errors}${reason ? ` | Reason: ${reason}` : ""}`;
+              return `
+                <div class="rounded-lg border border-slate-200 p-2.5 bg-white">
+                  <div class="flex items-center justify-between gap-3 text-sm font-semibold mb-1">
+                    <div class="min-w-0 flex items-center gap-2">
+                      <span class="mono text-slate-800 shrink-0">${esc(s.name)}</span>
+                      <span class="text-[11px] text-slate-600 truncate">${esc(summaryLine)}</span>
+                    </div>
+                    <span class="text-${tone}-600 shrink-0">${p.toFixed(2)}%</span>
+                  </div>
+                  <div class="w-full bg-slate-100 rounded-full h-3"><div class="bg-${tone}-500 h-3 rounded-full" style="width:${p}%"></div></div>
+                </div>
+              `;
+            })
+            .join("")}
+          <div class="pt-3 border-t border-slate-200 text-sm font-semibold">Overall Issues: <span class="${String(overallIssues || "").startsWith("0") ? "text-green-600" : "text-rose-600"}">${esc(overallIssues || "N/A")}</span></div>
+        </div>
+      `;
+    };
+
+    const slides = [];
+
+    const pushSlide = (title, subtitle, body, extraClass = "", attrs = null) => {
+      const header = title
+        ? `<div class="slide-header"><h2 class="text-2xl font-bold text-slate-900">${esc(title)}</h2><p class="text-lg text-slate-500 mt-1">${esc(subtitle || "")}</p></div>`
+        : "";
+      const attrText =
+        attrs && typeof attrs === "object"
+          ? Object.entries(attrs)
+              .filter(([, v]) => v !== undefined && v !== null && String(v) !== "")
+              .map(([k, v]) => ` ${escAttr(k)}="${escAttr(v)}"`)
+              .join("")
+          : "";
+      slides.push(`<div class="slide ${extraClass}"${attrText}>${header}<div class="flex-1 min-h-0 flex gap-6 w-full">${body}</div></div>`);
+    };
+
+    function buildIntro() {
+      const meta = projectData.meta || {};
+      const env = projectData.env || {};
+      const modules = asArray(projectData.modules);
+
+      pushSlide(
+        "",
+        "",
+        `
+        <div class="absolute inset-0 bg-white/85 z-0"></div>
+        <div class="relative z-10 flex-1 flex flex-col items-center justify-center text-center w-full h-full">
+          <div class="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mb-8 shadow-sm"><i class="ph ph-cpu text-5xl text-blue-600"></i></div>
+          <h1 class="text-6xl font-bold text-slate-900 mb-5">${esc(meta.title || "FPGA Module Verification")}</h1>
+          <p class="text-2xl text-slate-500 mb-10">${esc(meta.subtitle || "")}</p>
+          <div class="bg-white px-10 py-6 rounded-2xl shadow-sm border border-slate-100 text-lg text-slate-700 space-y-2">
+            <p><strong>Author:</strong> ${esc(meta.author || "-")}</p>
+            <p><strong>Date:</strong> ${esc(meta.date || "-")}</p>
+            <p><strong>Top:</strong> ${esc(env.top || "-")}</p>
+          </div>
+        </div>
+      `,
+        "bg-pattern relative"
+      );
+
+      pushSlide(
+        "Table of Contents",
+        "Intro -> Module Spec -> Verification -> Outro",
+        `
+        <div class="w-full min-w-0">
+          <div class="flex flex-col gap-6 px-10 justify-center h-full">
+            <div class="flex items-center gap-6 p-4 rounded-xl hover:bg-slate-50 transition">
+              <div class="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-2xl font-bold">1</div>
+              <div><h3 class="text-2xl font-semibold text-slate-800">Overview</h3></div>
+            </div>
+            <div class="flex items-center gap-6 p-4 rounded-xl hover:bg-slate-50 transition">
+              <div class="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-2xl font-bold">2</div>
+              <div><h3 class="text-2xl font-semibold text-slate-800">Environment</h3></div>
+            </div>
+            <div class="flex items-center gap-6 p-4 rounded-xl bg-blue-50 shadow-sm border border-blue-100">
+              <div class="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl font-bold">3</div>
+              <div><h3 class="text-2xl font-bold text-blue-900">Module SPEC & Verification</h3></div>
+            </div>
+            <div class="flex items-center gap-6 p-4 rounded-xl hover:bg-slate-50 transition">
+              <div class="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-2xl font-bold">4</div>
+              <div><h3 class="text-2xl font-semibold text-slate-800">Trouble / Conclusion</h3></div>
+            </div>
+          </div>
+        </div>
+      `
+      );
+
+      pushSlide(
+        "Environment",
+        "Project runtime context",
+        `
+        <div class="w-full h-full flex flex-col gap-6">
+          <div class="flex-1 min-h-0 flex gap-6">
+            <div class="w-1/2 min-h-0">${card("<i class='ph ph-desktop text-blue-500'></i> Environment", `
+              <ul class="space-y-4 text-slate-700">
+                <li class="flex flex-col"><span class="text-sm text-slate-400 font-semibold mb-1">OS</span><span class="bg-slate-50 px-3 py-2 rounded border border-slate-100">Windows11</span></li>
+                <li class="flex flex-col"><span class="text-sm text-slate-400 font-semibold mb-1">Tool / Language</span><span class="bg-slate-50 px-3 py-2 rounded border border-slate-100">${esc(env.tools || "-")}</span></li>
+              </ul>
+            `, "h-full")}</div>
+            <div class="w-1/2 min-h-0">
+              <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col justify-center items-center text-center h-full">
+                <div class="flex items-center gap-3 mb-4"><i class="ph ph-circuitry text-4xl text-green-500"></i><h3 class="text-2xl font-bold">Board</h3></div>
+                <div class="bg-green-50 text-green-800 text-xl font-bold py-6 px-8 rounded-lg border border-green-200 w-full">Basys3</div>
+              </div>
+            </div>
+          </div>
+          <div class="flex-1 min-h-0">${card("<i class='ph ph-users text-purple-500'></i> Roles", `
+            <div class="grid grid-cols-2 gap-6">
+              <div class="p-4 bg-purple-50 rounded-lg border border-purple-100 flex items-start gap-4">
+                <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center text-purple-500 font-bold shadow-sm shrink-0">1</div>
+                <div><h4 class="font-bold text-slate-800">Generator</h4><p class="text-sm text-slate-600 mt-1">RTL/TB scan, scaffold mapping, artifact parsing</p></div>
+              </div>
+              <div class="p-4 bg-purple-50 rounded-lg border border-purple-100 flex items-start gap-4">
+                <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center text-purple-500 font-bold shadow-sm shrink-0">2</div>
+                <div><h4 class="font-bold text-slate-800">Presentation</h4><p class="text-sm text-slate-600 mt-1">Template rendering, visualized verification report</p></div>
+              </div>
+            </div>
+          `, "h-full")}</div>
+        </div>
+      `
+      );
+
+      const topModule =
+        modules.find((m) => String(m.type || "").toLowerCase() === "top") ||
+        modules[0] ||
+        null;
+      const topDetailedPath = topModule
+        ? ((topModule.assets && topModule.assets.detailedDiagramSvg) ||
+           `../output/Diagram/Detailed/${topModule.name}_detailed.svg`)
+        : "";
+
+      pushSlide(
+        "Top Detailed Flow",
+        "Top Detailed.svg",
+        `
+        <div class="w-full min-h-0">
+          ${card(
+            topModule ? `${esc(topModule.name)} Detailed Diagram` : "Top Detailed Diagram",
+            imageBox(
+              topDetailedPath,
+              topModule
+                ? `${topModule.name} detailed diagram not found`
+                : "Top module not found",
+              { tight: true }
+            ),
+            "h-full min-h-0"
+          )}
+        </div>
+      `
+      );
+    }
+
+    function buildModuleSpec(m, idx) {
+      const rawIoPorts = asArray(m.ioPorts);
+      const sortedIoPorts = rawIoPorts
+        .map((p, i) => ({ p, i }))
+        .sort((a, b) => {
+          const rank = { input: 0, output: 1, inout: 2 };
+          const ra = rank[String(a.p?.dir || "").toLowerCase()] ?? 9;
+          const rb = rank[String(b.p?.dir || "").toLowerCase()] ?? 9;
+          if (ra !== rb) return ra - rb;
+          return a.i - b.i;
+        })
+        .map((x) => x.p);
+
+      const widthToBits = (w) => {
+        const raw = String(w || "").trim();
+        if (!raw || raw === "1") return 1;
+        const colon = raw.match(/^\[\s*(-?\d+)\s*:\s*(-?\d+)\s*\]$/);
+        if (colon) {
+          const msb = Number(colon[1]);
+          const lsb = Number(colon[2]);
+          if (Number.isFinite(msb) && Number.isFinite(lsb)) return Math.abs(msb - lsb) + 1;
+        }
+        const single = raw.match(/^\[\s*(\d+)\s*\]$/);
+        if (single) {
+          const n = Number(single[1]);
+          if (Number.isFinite(n)) return n + 1;
+        }
+        const justNum = raw.match(/^(\d+)$/);
+        if (justNum) return Number(justNum[1]) || 1;
+        return 1;
+      };
+
+      const rawInternals = asArray(m.internalSignals);
+      const internals = rawInternals.map((s) => [
+        `<span class="mono text-blue-700">${esc(s.name || "-")}</span>`,
+        esc(s.type || "-"),
+        esc(s.purpose || "-")
+      ]);
+
+      const hierarchyNodes = asArray(m.hierarchy);
+      const childNames = hierarchyNodes.map((h) => h.name || "").filter(Boolean);
+      const fsm = asArray(m.fsmStates);
+      const assets = m.assets || {};
+      const dirCounts = rawIoPorts.reduce(
+        (acc, p) => {
+          const key = String(p?.dir || "").toLowerCase();
+          if (key === "input") acc.input += 1;
+          else if (key === "output") acc.output += 1;
+          else if (key === "inout") acc.inout += 1;
+          return acc;
+        },
+        { input: 0, output: 0, inout: 0 }
+      );
+      const maxIoWidth = rawIoPorts.reduce((acc, p) => Math.max(acc, widthToBits(p?.width)), 1);
+      const busPorts = sortedIoPorts.filter((p) => widthToBits(p?.width) > 1);
+      const inferActiveLevel = (name) => {
+        const n = String(name || "").toLowerCase();
+        const lowHit =
+          /^n(?:clk|clock|rst|reset)/.test(n) ||
+          /(rst_n|reset_n|clk_n|clock_n|nrst|nreset|nclk|nclock)/.test(n) ||
+          /(clk|clock|rst|reset)(?:_n|n|_b|_bar|_l|_low)$/.test(n);
+        return lowHit ? "active-low" : "active-high";
+      };
+      const inferClockFreq = (name) => {
+        const n = String(name || "").toLowerCase();
+        let m = n.match(/(\d+(?:\.\d+)?)\s*(ghz|mhz|khz|hz)\b/);
+        if (m) return `${m[1]}${m[2].toUpperCase()}`;
+        m = n.match(/(\d+(?:\.\d+)?)(g|m|k)(?![a-z])/);
+        if (m) {
+          const unitMap = { g: "GHz", m: "MHz", k: "kHz" };
+          return `${m[1]}${unitMap[m[2]] || ""}`;
+        }
+        return "N/A";
+      };
+      const clockPortsMeta = sortedIoPorts
+        .filter((p) => /(clk|clock)/i.test(String(p?.name || "")))
+        .map((p) => ({
+          name: p.name || "-",
+          freq: inferClockFreq(p?.name),
+        }))
+        .slice(0, 6);
+      const resetPortsMeta = sortedIoPorts
+        .filter((p) => /(rst|reset)/i.test(String(p?.name || "")))
+        .map((p) => ({
+          name: p.name || "-",
+          active: inferActiveLevel(p?.name),
+        }))
+        .slice(0, 6);
+      const clockPrimary = clockPortsMeta[0] || { name: "No clock port", freq: "-" };
+      const resetPrimary = resetPortsMeta[0] || { name: "No reset port", active: "-" };
+      const clockExtraCount = Math.max(clockPortsMeta.length - 1, 0);
+      const resetExtraCount = Math.max(resetPortsMeta.length - 1, 0);
+      // Resolve display frequency: use clkFreqLabel from Python if port-name parse gives N/A
+      const clkFreqDisplay = (clockPrimary.freq && clockPrimary.freq !== "N/A")
+        ? clockPrimary.freq
+        : (m.clkFreqLabel || "N/A");
+      const handshakePorts = sortedIoPorts
+        .filter((p) => /(valid|ready|ack|req|en|done|cmd|mode)/i.test(String(p?.name || "")))
+        .map((p) => p.name);
+      // widest bus port info for Data Buses badge
+      const widestBusPort = busPorts.reduce((best, p) => {
+        return (!best || widthToBits(p?.width) > widthToBits(best?.width)) ? p : best;
+      }, null);
+      const widestBusLabel = widestBusPort ? `${widestBusPort.name} ${widestBusPort.width || ""}`.trim() : "-";
+      const internalTypeCounts = rawInternals.reduce(
+        (acc, s) => {
+          const key = String(s?.type || "").toLowerCase();
+          if (key === "wire") acc.wire += 1;
+          else if (key === "reg") acc.reg += 1;
+          else if (key === "logic") acc.logic += 1;
+          else acc.other += 1;
+          return acc;
+        },
+        { wire: 0, reg: 0, logic: 0, other: 0 }
+      );
+      const specKind = String(
+        m.specKind ||
+          (hierarchy.length ? "type1" : (fsm.length ? "type3" : "type2"))
+      ).toLowerCase();
+      const specAttrs = (page) => ({
+        "data-module": m.name || `module-${idx}`,
+        "data-spec-kind": specKind,
+        "data-spec-page": String(page)
+      });
+      const specTitle = `3.${idx}. ${m.name} Source SPEC`;
+
+      pushSlide(
+        specTitle,
+        "Overview & I/O",
+        `
+        <div class="w-1/2 min-h-0 flex flex-col gap-4">
+          <div class="h-[58%] min-h-0">
+            ${card(
+              "Module Diagram",
+              `<div class="flex-1 min-h-0">${imageBox(assets.simpleDiagramSvg || "", "Simple diagram not found", { tight: true })}</div>`,
+              "h-full min-h-0 flex flex-col"
+            )}
+          </div>
+          <div class="h-[42%] min-h-0">
+            ${card("I/O Dashboard", `
+              <div class="h-full min-h-0 flex flex-col gap-2">
+                <div class="grid grid-cols-4 gap-2">
+                  <div class="rounded border border-slate-200 bg-slate-50 p-2">
+                    <div class="text-[10px] text-slate-500 font-semibold">Input Ports</div>
+                    <div class="text-base font-bold text-blue-700 mono">${dirCounts.input}</div>
+                  </div>
+                  <div class="rounded border border-slate-200 bg-slate-50 p-2">
+                    <div class="text-[10px] text-slate-500 font-semibold">Output Ports</div>
+                    <div class="text-base font-bold text-green-700 mono">${dirCounts.output}</div>
+                  </div>
+                  <div class="rounded border border-slate-200 bg-slate-50 p-2">
+                    <div class="text-[10px] text-slate-500 font-semibold">Max Width</div>
+                    <div class="text-base font-bold text-slate-800 mono">${maxIoWidth}</div>
+                  </div>
+                  <div class="rounded border border-slate-200 bg-slate-50 p-2">
+                    <div class="text-[10px] text-slate-500 font-semibold">Bus Ports</div>
+                    <div class="text-base font-bold text-slate-800 mono">${busPorts.length}</div>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2 min-h-0 flex-1">
+                  <div class="rounded border border-blue-200 bg-blue-50 p-2 min-h-0 flex flex-col">
+                    <div class="text-[10px] text-blue-700 font-semibold mb-1">Clock / Reset</div>
+                    <div class="grid grid-rows-2 gap-1 flex-1 min-h-0">
+                      <div class="rounded border border-blue-200 bg-white p-1 min-h-0 flex flex-col justify-center">
+                        <div class="text-[11px] leading-tight min-w-0 break-all">
+                          <span class="font-semibold text-slate-600">CLK :</span>
+                          <span class="mono text-blue-700">${esc(clockPrimary.name)}</span>
+                          <span class="text-slate-600"> | ${esc(clkFreqDisplay)}</span>
+                          ${clockExtraCount > 0 ? `<span class="text-slate-400"> (+${clockExtraCount})</span>` : ""}
+                        </div>
+                      </div>
+                      <div class="rounded border border-blue-200 bg-white p-1 min-h-0 flex flex-col justify-center">
+                        <div class="text-[11px] leading-tight min-w-0 break-all">
+                          <span class="font-semibold text-slate-600">RST :</span>
+                          <span class="mono text-blue-700">${esc(resetPrimary.name)}</span>
+                          <span class="text-slate-600"> | ${esc(resetPrimary.active)}</span>
+                          ${resetExtraCount > 0 ? `<span class="text-slate-400"> (+${resetExtraCount})</span>` : ""}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="rounded border border-teal-200 bg-teal-50 p-2 min-h-0 flex flex-col">
+                    <div class="text-[10px] text-teal-700 font-semibold mb-1">Handshake / Control</div>
+                    <div class="rounded border border-teal-200 bg-white p-1.5 flex-1 min-h-0 overflow-y-auto thin-scroll">
+                      ${
+                        handshakePorts.length
+                          ? `<div class="flex flex-wrap gap-1 content-start">${handshakePorts
+                              .map(
+                                (h) =>
+                                  `<span class="inline-flex items-center px-1.5 py-0.5 rounded border border-teal-200 bg-teal-50 text-teal-700 text-[9px] mono">${esc(h)}</span>`
+                              )
+                              .join("")}</div>`
+                          : `<div class="text-[10px] text-slate-400">N/A</div>`
+                      }
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `, "h-full min-h-0")}
+          </div>
+        </div>
+        <div class="w-1/2 min-h-0">
+          ${card("Overview", `<div class="h-full min-h-0"><p class="text-sm text-slate-600 leading-relaxed">${esc(m.description || "No description")}</p></div>`, "h-full min-h-0")}
+        </div>
+      `,
+        "",
+        specAttrs(1)
+      );
+
+      if (specKind === "type1") {
+        pushSlide(
+          specTitle,
+          "Internal / Infographic",
+          `
+          <div class="w-full min-h-0 flex flex-col gap-4">
+            <div class="h-[42%] min-h-0 flex gap-4">
+              <div class="w-2/3 min-h-0">${card("INFOGRAPHIC", `
+                <div class="thin-scroll h-full flex flex-col gap-3">
+                  <div class="grid grid-cols-2 gap-3 flex-1 min-h-0">
+                    <div class="rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-3 shadow-sm flex flex-col justify-center items-center relative overflow-hidden">
+                      <div class="absolute -right-3 -bottom-3 opacity-[0.07]"><i class="ph ph-squares-four text-7xl text-indigo-600"></i></div>
+                      <div class="text-[10px] text-indigo-600 font-bold tracking-wider mb-1 uppercase z-10">Sub Modules</div>
+                      <div class="text-3xl font-black text-indigo-900 z-10">${childNames.length}</div>
+                    </div>
+                    
+                    <div class="rounded-xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-3 shadow-sm flex flex-col justify-center items-center relative overflow-hidden">
+                      <div class="absolute -right-3 -bottom-3 opacity-[0.07]"><i class="ph ph-graph text-7xl text-emerald-600"></i></div>
+                      <div class="text-[10px] text-emerald-600 font-bold tracking-wider mb-1 uppercase z-10">Data Buses</div>
+                      <div class="flex flex-col items-center gap-0.5 z-10">
+                        <div class="text-3xl leading-none font-black text-emerald-900">${busPorts.length}</div>
+                        <div class="text-[10px] font-bold text-emerald-700 bg-emerald-100/50 px-1.5 py-0.5 rounded border border-emerald-200/50 mono truncate max-w-full" title="Widest port">${esc(widestBusLabel)}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm flex flex-col justify-center">
+                    <div class="flex justify-between items-center mb-2">
+                      <div class="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1.5"><i class="ph ph-chart-bar text-slate-400"></i> Signal Mix</div>
+                      <div class="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">Total: ${rawInternals.length}</div>
+                    </div>
+                    
+                    ${(() => {
+                        const total = rawInternals.length || 1;
+                        const wPct = (internalTypeCounts.wire / total) * 100;
+                        const rPct = (internalTypeCounts.reg / total) * 100;
+                        const lPct = (internalTypeCounts.logic / total) * 100;
+                        const oPct = (internalTypeCounts.other / total) * 100;
+                        return `
+                          <div class="w-full h-2.5 bg-slate-100 rounded-full flex overflow-hidden mb-2">
+                            ${wPct > 0 ? `<div style="width: ${wPct}%" class="bg-blue-500" title="Wire: ${internalTypeCounts.wire}"></div>` : ''}
+                            ${rPct > 0 ? `<div style="width: ${rPct}%" class="bg-rose-500" title="Reg: ${internalTypeCounts.reg}"></div>` : ''}
+                            ${lPct > 0 ? `<div style="width: ${lPct}%" class="bg-amber-500" title="Logic: ${internalTypeCounts.logic}"></div>` : ''}
+                            ${oPct > 0 ? `<div style="width: ${oPct}%" class="bg-slate-400" title="Other: ${internalTypeCounts.other}"></div>` : ''}
+                          </div>
+                          <div class="grid grid-cols-4 gap-1 text-center text-[9px] font-semibold">
+                            <div class="flex flex-col items-center"><div class="w-1.5 h-1.5 rounded-full bg-blue-500 mb-0.5"></div><span class="text-slate-500">Wire</span><span class="text-slate-800 text-xs mono mt-0.5">${internalTypeCounts.wire}</span></div>
+                            <div class="flex flex-col items-center"><div class="w-1.5 h-1.5 rounded-full bg-rose-500 mb-0.5"></div><span class="text-slate-500">Reg</span><span class="text-slate-800 text-xs mono mt-0.5">${internalTypeCounts.reg}</span></div>
+                            <div class="flex flex-col items-center"><div class="w-1.5 h-1.5 rounded-full bg-amber-500 mb-0.5"></div><span class="text-slate-500">Logic</span><span class="text-slate-800 text-xs mono mt-0.5">${internalTypeCounts.logic}</span></div>
+                            <div class="flex flex-col items-center"><div class="w-1.5 h-1.5 rounded-full bg-slate-400 mb-0.5"></div><span class="text-slate-500">Other</span><span class="text-slate-800 text-xs mono mt-0.5">${internalTypeCounts.other}</span></div>
+                          </div>
+                        `;
+                    })()}
+                  </div>
+                </div>
+              `, "h-full min-h-0")}</div>
+              <div class="w-1/3 min-h-0">${card("Hierarchy", `
+                <div class="thin-scroll h-full">
+                  <div class="flex flex-wrap gap-2">
+                    ${(childNames.length ? childNames.slice(0, 40) : ["No child module"])
+                      .map((name) => `<span class="inline-flex items-center px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-xs mono">${esc(name)}</span>`)
+                      .join("")}
+                  </div>
+                </div>
+              `, "h-full min-h-0")}</div>
+            </div>
+            <div class="h-[58%] min-h-0">${card("VISUAL DIAGRAM", `
+              <div class="h-full min-h-0">${imageBox(assets.detailedDiagramSvg || assets.simpleDiagramSvg || "", "Visual diagram not found", { tight: true })}</div>
+            `, "h-full min-h-0")}</div>
+          </div>
+        `,
+          "",
+          specAttrs(2)
+        );
+
+        pushSlide(
+          specTitle,
+          "Timing",
+          `
+          <div class="w-full min-h-0">${card("Timing Diagram", imageBox(assets.timingDiagramSvg || "", "Timing diagram not found", { tight: true }), "h-full")}</div>
+        `,
+          "",
+          specAttrs(3)
+        );
+        return;
+      }
+
+      if (specKind === "type3") {
+        pushSlide(
+          specTitle,
+          "Internal / FSM",
+          `
+          <div class="w-1/2 min-h-0">${card("FSM TIMING DIAGRAM", imageBox(assets.timingDiagramSvg || assets.fsmDiagramSvg || "", "FSM timing diagram not found", { tight: true }), "h-full min-h-0")}</div>
+          <div class="w-1/2 min-h-0 flex flex-col gap-4">
+            ${card("FSM Diagram", imageBox(assets.fsmDiagramSvg || "", "FSM diagram not found", { tight: true }), "h-[58%] min-h-0")}
+            ${card("FSM States", fsm.length ? `<div class="thin-scroll h-full"><ul class="list-disc list-inside text-sm text-slate-700 space-y-1">${fsm.map((s) => `<li>${typeof s === "string" ? esc(s) : esc(s.name || s.title || JSON.stringify(s))}</li>`).join("")}</ul></div>` : `<div class="text-sm text-slate-500">FSM states not detected.</div>`, "h-[42%] min-h-0")}
+          </div>
+        `,
+          "",
+          specAttrs(2)
+        );
+        return;
+      }
+
+      pushSlide(
+        specTitle,
+        "Internal / Detail / Timing",
+        `
+        <div class="w-full min-h-0 flex flex-col gap-4">
+          ${card("INTERNAL LOGIC ARCHITECTURE", `
+            <div class="h-full min-h-0 thin-scroll flex flex-col gap-3">
+              <div class="rounded-lg border border-indigo-200 bg-indigo-50/50 p-3 shadow-sm flex flex-col gap-2 flex-1 min-h-0">
+                <div class="flex items-center gap-1.5 border-b border-indigo-100 pb-2 shrink-0">
+                  <i class="ph ph-cpu text-indigo-600 text-lg"></i>
+                  <div class="text-[11px] text-indigo-800 font-bold uppercase tracking-wider">Functional Overview</div>
+                </div>
+                <div class="text-[11.5px] text-slate-700 leading-relaxed font-medium break-words overflow-y-auto thin-scroll pr-1 pl-1">${m.role ? '<div class="mb-2"><span class="font-bold text-indigo-900 border-b border-indigo-200 pb-0.5">Role:</span> ' + esc(m.role) + '</div>' : ''}${esc(m.description || "No logic description available.")}</div>
+              </div>
+            </div>
+          `, "h-[45%] min-h-0")}
+          ${card("VISUAL DIAGRAM", `
+            <div class="h-full min-h-0">${imageBox(assets.detailedDiagramSvg || assets.simpleDiagramSvg || "", "Visual diagram not found", { tight: true })}</div>
+          `, "h-[55%] min-h-0")}
+        </div>
+      `,
+        "",
+        specAttrs(2)
+      );
+
+      pushSlide(
+        specTitle,
+        "Timing",
+        `
+        <div class="w-full min-h-0">${card("Timing Diagram", imageBox(assets.timingDiagramSvg || "", "Timing diagram not found", { tight: true }), "h-full min-h-0")}</div>
+      `,
+        "",
+        specAttrs(3)
+      );
+      return;
+    }
+
+    function buildModuleVerification(m, idx) {
+      const v = m.verification || {};
+      const tb = v.tb || {};
+      const env = projectData.env || {};
+      const scenarios = asArray(v.scenarios);
+      const coverageDetail = v.coverageDetail || {};
+      const scb = v.scbAssert || {};
+      const results = v.results || {};
+      const envTest = v.envTest || {};
+      const envForkJoin = envTest.envForkJoin || {};
+      const testInheritance = envTest.testInheritance || {};
+      const scenarioRows = scenarios.length
+        ? scenarios
+        : [{ name: "no_test_found", desc: "No scenario", constraints: "N/A", expected: "N/A", border: "slate" }];
+      const coverpointRows = asArray(coverageDetail.coverpoints);
+      const crossRows = asArray(coverageDetail.crosses);
+      const illegalRows = asArray(coverageDetail.illegalBins);
+      const envThreads = asArray(envForkJoin.threads);
+      const derivedTests = asArray(testInheritance.derived);
+
+      const transFlow = asArray(tb.genFlowNodes).length
+        ? asArray(tb.genFlowNodes)
+        : [
+            { title: "Transaction", body: `${asArray(tb.txIn).length} inputs / ${asArray(tb.txOut).length} outputs` },
+            { title: "Generator", body: tb.genFile || "generator.svh" },
+            { title: "Directed", body: asArray(tb.genDirected).join(", ") || "No directed task" },
+            { title: "Random", body: tb.genRandom || "No random policy" },
+            { title: "Mailbox", body: "mbx_gen2drv.put(tx_item)" }
+          ];
+
+      const driverFlow = asArray(tb.driverMonFlowNodes).length
+        ? asArray(tb.driverMonFlowNodes)
+        : [
+            { title: "Driver Idle", body: "Initialize all interface pins to idle state." },
+            { title: "Driver Apply", body: "Pop transaction and drive on active edge." },
+            { title: "Sampling", body: "Observe DUT response on clock edge." },
+            { title: "Monitor Capture", body: "Capture input/output transaction bundle." },
+            { title: "Fanout", body: "Send cloned item to scoreboard/coverage." }
+          ];
+
+      const defaultScbFlow = [
+        { title: "1. Transaction Pop", body: "Retrieve captured IO transaction from mbx_mon2scb.", icon: "ph-download-simple", color: "blue" },
+        { title: "2. Golden Model Process", body: "Calculate expected outputs internally based on input stimulus.", icon: "ph-cpu", color: "indigo" },
+        { title: "3. Vector Compare", body: "Match observed DUT outputs against expected outputs.", icon: "ph-scales", color: "violet" },
+        { title: "4. Report / Error", body: "Flag errors on mismatch, record pass on match.", icon: "ph-flag-banner", color: "emerald" }
+      ];
+
+      const scbFlow = asArray(scb.scbFlow).length ? asArray(scb.scbFlow) : defaultScbFlow;
+
+      const assertions = (asArray(scb.assertions).length ? asArray(scb.assertions) : [scb.assertText || "No assertion summary"]).map((a, i) => {
+        if (typeof a === "string") return { name: `assert_${i + 1}`, rule: a, cond: "-" };
+        return {
+          name: a.name || `assert_${i + 1}`,
+          rule: a.rule || a.body || "property check",
+          cond: a.cond || "-"
+        };
+      });
+
+      const codeRefs = asArray(scb.codeRefs).length ? asArray(scb.codeRefs) : asArray(scb.refs);
+      const tbRefs = [tb.txFile, tb.genFile, tb.drvFile, tb.monFile, tb.envFile].filter(Boolean);
+      const scoreRows = asArray(results.scenarioScores).length
+        ? asArray(results.scenarioScores)
+        : [{ name: "overall", score: String(results.overallIssues || "").startsWith("0") ? 100 : 70, checked: 0, errors: 0 }];
+      const svComponentSvgPath = env.svComponentSvg || "";
+
+      pushSlide(
+        `4.${idx}. ${m.name} Verification`,
+        "5-1. Verification Architecture",
+        `
+        <div class="w-1/2 min-h-0">${card("SV Verification Components SVG", imageBox(svComponentSvgPath, "SV Component.svg not found", { tight: true }), "h-full min-h-0")}</div>
+        <div class="w-1/2 min-h-0">${card("Component Responsibilities", `
+          <ul class="space-y-2 text-sm text-slate-700">
+            <li><strong class="text-blue-700">Test</strong>: Selects scenario classes and executes verification campaign.</li>
+            <li><strong class="text-blue-700">Env</strong>: Builds mailbox channels and starts verification workers.</li>
+            <li><strong class="text-blue-700">Transaction</strong>: Carries abstract input/output sample bundle.</li>
+            <li><strong class="text-teal-700">Generator</strong>: Produces directed or random transactions.</li>
+            <li><strong class="text-purple-700">Driver</strong>: Drives DUT interface pins from transactions.</li>
+            <li><strong class="text-purple-700">Monitor</strong>: Samples DUT behavior and forwards observations.</li>
+            <li><strong class="text-green-700">Scoreboard</strong>: Compares expected model with observed outputs.</li>
+            <li><strong class="text-rose-700">Assertions</strong>: Guards protocol/timing illegal behavior checks.</li>
+            <li><strong class="text-blue-700">Coverage</strong>: Tracks coverpoint/cross closure status.</li>
+          </ul>
+          <div class="mt-4 text-xs text-slate-500">References: ${esc(tbRefs.join(" | ") || "N/A")}</div>
+        `, "h-full min-h-0")}</div>
+      `
+      );
+
+      pushSlide(
+        `4.${idx}. ${m.name} Verification`,
+        "5-2. Scenarios",
+        `
+        <div class="w-full min-h-0">${card("Scenario Matrix", `
+          <div class="grid grid-cols-3 gap-3 thin-scroll h-full">
+            ${scenarioRows
+              .map(
+                (s) => `
+                <div class="bg-white border border-slate-200 rounded-lg p-3 border-t-4" style="border-top-color:${scenarioTone(s.border)};">
+                  <div class="mono text-xs font-bold text-slate-800">${esc(s.name || "scenario")}</div>
+                  <div class="text-xs text-slate-500 mt-1">${esc(s.desc || "-")}</div>
+                  <div class="text-xs mt-2"><strong>Constraints:</strong> ${esc(s.constraints || "N/A")}</div>
+                  <div class="text-xs"><strong>Expected:</strong> ${esc(s.expected || "N/A")}</div>
+                </div>
+              `
+              )
+              .join("")}
+          </div>
+        `, "h-full min-h-0")}</div>
+      `
+      );
+
+      pushSlide(
+        `4.${idx}. ${m.name} Verification`,
+        "5-3. Transaction / Generator",
+        `
+        <div class="w-1/2 min-h-0">${card("Trans/Gen Flow", `
+          <div class="space-y-2 thin-scroll h-full">
+            ${transFlow.map((n, i) => `
+              <div class="w-full bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-3">
+                <div class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold shrink-0">${i + 1}</div>
+                <div class="min-w-0">
+                  <div class="text-xs font-bold text-blue-700 mb-1">${esc(n.title || `STEP${i + 1}`)}</div>
+                  <div class="text-[11px] text-slate-700 leading-tight break-words">${esc(n.body || "-")}</div>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        `, "h-full min-h-0")}</div>
+        <div class="w-1/2 min-h-0">${card("Trans/Gen Detail", `
+          <div class="flex flex-col h-full min-h-0 gap-3 thin-scroll">
+            <div class="bg-indigo-50 border border-indigo-100 rounded-lg p-3 flex flex-col min-h-0 flex-1">
+              <div class="flex items-center gap-2 mb-2 text-indigo-700 shrink-0"><i class="ph ph-target text-lg"></i><span class="text-[11px] font-bold uppercase tracking-wider">Directed Tasks</span></div>
+              ${(() => {
+                const split = tb.genDirectedSplit || {};
+                const helperT = asArray(split.helperTasks);
+                const scenarioT = asArray(split.scenarioTasks);
+                return `
+                <div class="grid grid-cols-2 gap-2.5 flex-1 min-h-0">
+                  <div class="flex flex-col min-h-0 bg-white/60 rounded border border-indigo-200/60 p-2">
+                    <div class="text-[9.5px] font-bold text-indigo-800 border-b border-indigo-200/60 pb-1 mb-1.5 shrink-0 flex items-center gap-1"><i class="ph ph-list-numbers"></i> Task를 위한 1차 Task</div>
+                    <div class="overflow-y-auto thin-scroll flex-1 pr-1 space-y-1.5">
+                      ${(helperT.length ? helperT : ["No helper task"]).map((t, i) => `
+                        <div class="flex items-start gap-1 group">
+                          <div class="text-[8px] font-bold text-slate-400 bg-slate-100 rounded px-1 mt-0.5 shrink-0">${i+1}</div>
+                          <div class="mono text-[9.5px] font-bold text-slate-700 break-words leading-tight group-hover:text-indigo-600 transition-colors">${esc(t)}</div>
+                        </div>
+                      `).join("")}
+                    </div>
+                  </div>
+                  <div class="flex flex-col min-h-0 bg-white/60 rounded border border-blue-200/60 p-2">
+                    <div class="text-[9.5px] font-bold text-blue-800 border-b border-blue-200/80 pb-1 mb-1.5 shrink-0 flex items-center gap-1"><i class="ph ph-play-circle text-blue-500"></i> 실제로 시나리오에쓰이는 Task</div>
+                    <div class="overflow-y-auto thin-scroll flex-1 pr-1 space-y-1.5">
+                      ${(scenarioT.length ? scenarioT : ["(None)"]).map((t, i) => `
+                        <div class="flex items-start gap-1 group">
+                          <div class="text-[8px] font-bold text-blue-500 bg-blue-100/50 rounded px-1 mt-0.5 shrink-0">${i+1}</div>
+                          <div class="mono text-[10px] font-bold text-blue-900 break-words leading-tight group-hover:text-blue-600 transition-colors">${esc(t)}</div>
+                        </div>
+                      `).join("")}
+                    </div>
+                  </div>
+                </div>
+                `;
+              })()}
+            </div>
+            <div class="bg-purple-50 border border-purple-100 rounded-lg p-3">
+              <div class="flex items-center gap-2 mb-2 text-purple-700"><i class="ph ph-dice-five text-lg"></i><span class="text-xs font-bold uppercase tracking-wider">Random Policy</span></div>
+              <div class="text-xs font-semibold text-purple-900 mono break-words bg-white/60 p-2.5 rounded border border-purple-200/50">${esc(tb.genRandom || "No random policy")}</div>
+            </div>
+            ${asArray(tb.genNotes).length ? `
+            <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 mt-auto">
+              <div class="flex items-center gap-2 mb-2 text-slate-600"><i class="ph ph-note-pencil text-lg"></i><span class="text-xs font-bold uppercase tracking-wider">Notes</span></div>
+              <ul class="space-y-1 text-xs text-slate-600">${asArray(tb.genNotes).map((n) => `<li class="flex items-start gap-1.5"><div class="w-1 h-1 rounded-full bg-slate-400 mt-1.5 shrink-0"></div><span class="break-words">${esc(n)}</span></li>`).join("")}</ul>
+            </div>` : ""}
+          </div>
+        `, "h-full min-h-0")}</div>
+      `
+      );
+
+      pushSlide(
+        `4.${idx}. ${m.name} Verification`,
+        "5-4. Driver / Monitor",
+        `
+        <div class="w-1/2 min-h-0">${card("Driver/Monitor Flow", `
+          <div class="space-y-2 thin-scroll h-full">
+            ${driverFlow.map((n, i) => `
+              <div class="w-full bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-start gap-3">
+                <div class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-purple-600 text-white text-[10px] font-bold shrink-0">${i + 1}</div>
+                <div class="min-w-0">
+                  <div class="text-xs font-bold text-purple-700 mb-1">${esc(n.title || `STEP${i + 1}`)}</div>
+                  <div class="text-[11px] text-slate-700 leading-tight break-words">${esc(n.body || "-")}</div>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+          <div class="mt-3 text-xs text-slate-500">${esc(tb.driveStyle || "wait reset deassert -> drive -> sample")}</div>
+        `, "h-full min-h-0")}</div>
+        <div class="w-1/2 min-h-0">${card("Pins / Fanout", `
+          <div class="flex flex-col h-full min-h-0 gap-3 thin-scroll">
+            <div class="bg-violet-50 border border-violet-100 rounded-lg p-3">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2 text-violet-700"><i class="ph ph-plug-charging text-lg"></i><span class="text-xs font-bold uppercase tracking-wider">Driver Pins</span></div>
+                <div class="text-[10px] font-bold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">${asArray(tb.driverPins).length}</div>
+              </div>
+              <div class="flex flex-wrap gap-1.5">${chips(asArray(tb.driverPins), "violet")}</div>
+            </div>
+            <div class="bg-cyan-50 border border-cyan-100 rounded-lg p-3">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2 text-cyan-700"><i class="ph ph-eye text-lg"></i><span class="text-xs font-bold uppercase tracking-wider">Monitor Pins</span></div>
+                <div class="text-[10px] font-bold bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded-full">${asArray(tb.monitorPins).length}</div>
+              </div>
+              <div class="flex flex-wrap gap-1.5">${chips(asArray(tb.monitorPins), "cyan")}</div>
+            </div>
+            <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 mt-auto">
+              <div class="flex items-center gap-2 text-slate-600 mb-1.5"><i class="ph ph-share-network text-lg"></i><span class="text-xs font-bold uppercase tracking-wider">Mailbox Fanout</span></div>
+              <div class="text-[11px] font-semibold text-slate-700 mono bg-white p-2.5 rounded border border-slate-200 break-words leading-relaxed">mbx_mon2scb.put(tx.clone())<br>mbx_mon2cov.put(tx.clone())</div>
+            </div>
+          </div>
+        `, "h-full min-h-0")}</div>
+      `
+      );
+
+      pushSlide(
+        `4.${idx}. ${m.name} Verification`,
+        "5-5. Scoreboard / Assertion",
+        `
+        <div class="w-1/2 min-h-0">${card("Scoreboard Golden Flow", `
+          <div class="flex flex-col h-full min-h-0">
+            <div class="space-y-2.5 thin-scroll flex-1 min-h-0 relative pl-6 pr-1">
+              <div class="absolute left-2.5 top-3 bottom-3 w-0.5 bg-slate-100 rounded-full"></div>
+              ${scbFlow.map((n, i) => {
+                const color = n.color || (i===0 ? 'blue' : i===1 ? 'indigo' : i===2 ? 'violet' : 'emerald');
+                const icon = n.icon || (i===0 ? 'ph-arrow-fat-lines-down' : i===scbFlow.length-1 ? 'ph-flag' : 'ph-gear');
+                return '<div class="w-full bg-white border border-' + color + '-100 shadow-sm rounded-lg p-2.5 relative group hover:border-' + color + '-300 transition-colors"><div class="absolute -left-[23px] top-3 w-4 h-4 rounded-full border-[3px] border-white bg-' + color + '-500 z-10 shadow-sm"></div><div class="flex items-center gap-1.5 mb-1.5"><i class="ph ' + icon + ' text-' + color + '-500 text-lg"></i><div class="text-[11px] font-bold text-' + color + '-800">' + esc(n.title || ('STEP ' + (i + 1))) + '</div></div><div class="text-[10px] font-medium text-slate-600 leading-snug break-words bg-' + color + '-50 p-2 rounded border border-' + color + '-100/50">' + esc(n.body || "-") + '</div></div>';
+              }).join("")}
+            </div>
+            <div class="mt-3 pt-3 border-t border-slate-100 shrink-0">
+              <div class="bg-amber-50 border border-amber-100 rounded-lg p-2.5 shadow-sm">
+                <div class="text-[10px] font-bold text-amber-700 uppercase tracking-widest flex items-center gap-1.5 mb-1.5"><i class="ph ph-crown text-lg"></i> Golden Model Basis</div>
+                <div class="text-[11px] font-medium text-slate-500 italic leading-relaxed min-h-[28px] bg-white/70 rounded border border-amber-100 px-2 py-1">${esc(scb.goldenBasis || "(입력값으로부터의 기댓값 산출 근거 — 수동 기재)")}</div>
+              </div>
+            </div>
+          </div>
+        `, "h-full min-h-0")}</div>
+        <div class="w-1/2 min-h-0">${card("Assertion Directives", `
+          <div class="flex flex-col h-full min-h-0">
+            <div class="space-y-1.5 thin-scroll flex-1 min-h-0 pr-1">
+              ${assertions.map((a, i) => {
+                const hasDisableIff = (a.cond && a.cond !== "-");
+                const propLabel = a.prop ? esc(a.prop) : '';
+                const ruleShort = String(a.rule || a.body || "").replace(/^@\s*\(posedge[^)]+\)\s*/, '').replace(/^disable\s+iff\s*\([^)]+\)\s*/, '').trim();
+                return '<div class="w-full bg-white border border-rose-100 shadow-sm rounded overflow-hidden flex items-stretch hover:border-rose-300 transition-colors" style="min-height:2.4rem">' +
+                  '<div class="bg-gradient-to-b from-rose-50 to-white px-2 py-1 flex flex-col items-center justify-center shrink-0 border-r border-rose-100 w-7">' +
+                    '<i class="ph ph-shield-check text-rose-500 text-sm"></i>' +
+                    '<span class="text-[8px] font-bold text-rose-500 mt-0.5">P' + (i+1) + '</span>' +
+                  '</div>' +
+                  '<div class="flex-1 min-w-0 px-2 py-1 flex flex-col justify-center gap-0.5">' +
+                    '<div class="flex items-center gap-1.5 min-w-0">' +
+                      '<span class="mono text-[10px] font-bold text-rose-900 truncate flex-1" title="' + esc(a.name) + '">' + esc(a.name) + '</span>' +
+                      (propLabel ? '<span class="text-[9px] text-slate-400 shrink-0 mono">→ ' + propLabel + '</span>' : '') +
+                      (hasDisableIff ? '<span class="text-[9px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1 rounded shrink-0">iff ' + esc(a.cond) + '</span>' : '') +
+                    '</div>' +
+                    '<div class="mono text-[9.5px] text-green-300 bg-slate-800 px-2 py-0.5 rounded leading-snug truncate" title="' + esc(ruleShort) + '">' + esc(ruleShort) + '</div>' +
+                  '</div>' +
+                '</div>';
+              }).join("")}
+            </div>
+            ${codeRefs.length ? '<div class="mt-2 pt-2 border-t border-slate-100 shrink-0"><div class="flex items-center gap-2 text-[10px] bg-slate-50 px-2 py-1.5 rounded border border-slate-200 shadow-sm"><i class="ph ph-file-code text-slate-400"></i><span class="break-words mono text-slate-600 font-semibold">' + esc(codeRefs.join(" | ")) + '</span></div></div>' : ""}
+          </div>
+        `, "h-full min-h-0")}</div>
+      `
+      );
+
+      pushSlide(
+        `4.${idx}. ${m.name} Verification`,
+        "5-6. Coverage",
+        `
+        <div class="w-[12%] min-h-0">${card("Coverage Meta", `
+          <div class="space-y-3">
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div class="text-xs text-blue-700 font-semibold">Coverpoints</div>
+              <div class="text-2xl font-bold text-blue-900">${coverpointRows.filter(c => (c.name || String(c)).includes('cp_')).length}</div>
+            </div>
+            <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+              <div class="text-xs text-indigo-700 font-semibold">Cross Coverage</div>
+              <div class="text-2xl font-bold text-indigo-900">${crossRows.length}</div>
+            </div>
+            <div class="bg-rose-50 border border-rose-200 rounded-lg p-3">
+              <div class="text-xs text-rose-700 font-semibold">Illegal Bins</div>
+              <div class="text-2xl font-bold text-rose-900">${illegalRows.length}</div>
+            </div>
+          </div>
+        `, "h-full")}</div>
+        <div class="w-[88%] min-h-0 flex flex-col">${card("Coverage Detail (Coverpoint / Cross / Illegal)", `
+          <div class="grid grid-cols-12 gap-2 h-full min-h-0">
+            <div class="col-span-2 bg-white border border-blue-100 shadow-sm rounded-lg flex flex-col min-h-0 h-full overflow-hidden">
+              <div class="bg-blue-50 border-b border-blue-100 flex items-center gap-2 p-1.5 shrink-0">
+                <i class="ph ph-list-bullets text-blue-600"></i><span class="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Coverpoint List</span>
+              </div>
+              <div class="p-1 thin-scroll flex-1 min-h-0">
+                <ul class="space-y-0.5 text-[11px] leading-snug">
+                  ${(coverpointRows.filter(c => (c.name || String(c)).includes('cp_')).length ? coverpointRows.filter(c => (c.name || String(c)).includes('cp_')) : ["No coverpoint detected"]).map((cp, i) => {
+                    let cpName = cp.name || cp;
+                    let baseSig = cpName.replace(/^cp_/, '');
+                    return `
+                    <li class="flex text-slate-700 bg-blue-50/30 px-1 py-0.5 rounded border border-blue-100 shadow-sm hover:border-blue-300 transition-colors">
+                      <div class="flex items-center gap-1 w-full min-w-0">
+                        <span class="font-bold text-blue-500 shrink-0 w-3 text-right text-[10.5px]">${i + 1}.</span>
+                        <span class="mono font-bold text-blue-900 text-[10.5px] truncate max-w-[45%]">${esc(cpName)}</span>
+                        <span class="text-blue-200 shrink-0 text-[10px]">|</span>
+                        <span class="mono text-[9.5px] text-slate-600 truncate flex items-center gap-1"><i class="ph ph-potted-plant text-blue-400"></i> <span class="bg-white px-1 font-semibold">${esc(baseSig)}</span></span>
+                      </div>
+                    </li>`;
+                  }).join("")}
+                </ul>
+              </div>
+            </div>
+            <div class="col-span-6 bg-white border border-indigo-100 shadow-sm rounded-lg flex flex-col min-h-0 h-full overflow-hidden">
+              <div class="bg-indigo-50 border-b border-indigo-100 flex items-center gap-2 p-1.5 shrink-0">
+                <i class="ph ph-intersect text-indigo-600 text-lg"></i><span class="text-[10px] font-bold text-indigo-800 uppercase tracking-wider">Cross Coverage List</span>
+              </div>
+              <div class="p-1 thin-scroll flex-1 min-h-0">
+                <ul class="space-y-1 text-sm leading-snug">
+                  ${(crossRows.length ? crossRows : ["No cross coverage detected"]).map((cx, i) => {
+                    let rawStr = typeof cx === 'object' ? (cx.name || JSON.stringify(cx)) : String(cx);
+                    let displayTitle = rawStr;
+                    let bodyLogic = "";
+                    
+                    const braceIdx = rawStr.indexOf('{');
+                    if (braceIdx !== -1) {
+                      bodyLogic = rawStr.substring(braceIdx);
+                      displayTitle = rawStr.substring(0, braceIdx).trim();
+                    }
+                    
+                    const iffIdx = displayTitle.indexOf(' iff ');
+                    let condition = "";
+                    if (iffIdx !== -1) {
+                      condition = displayTitle.substring(iffIdx + 5).trim();
+                      displayTitle = displayTitle.substring(0, iffIdx).trim();
+                    }
+                
+                    let crossVars = displayTitle.replace(/^cx_/, '').split(/_cross_|,/).map(s => s.trim()).filter(Boolean).join(' × ');
+
+                    return `
+                    <li class="flex flex-col text-slate-700 bg-slate-50 border border-slate-200 px-2 py-1.5 rounded shadow-sm hover:border-indigo-300 transition-colors">
+                      <div class="flex items-center gap-1.5 w-full min-w-0">
+                        <span class="font-bold text-indigo-400 shrink-0 w-4 text-right text-[11px]">${i + 1}.</span>
+                        <span class="mono font-bold text-indigo-900 text-sm truncate flex-1" title="${esc(displayTitle)}">${esc(displayTitle)}</span>
+                        <span class="mono text-[11px] text-slate-600 shrink-0 flex items-center gap-1"><i class="ph ph-math-operations text-indigo-500"></i><span class="bg-white px-1 font-semibold text-slate-700">cross ${esc(crossVars)}</span></span>
+                        ${condition ? `<span class="mono text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0 border border-amber-200"><span class="font-semibold">iff ${esc(condition)}</span></span>` : ''}
+                      </div>
+                      ${bodyLogic ? `<div class="mt-1 ml-6 text-[10px] mono text-slate-400 bg-slate-800 px-2 py-1 rounded shadow-inner break-words whitespace-pre-wrap leading-tight max-h-12 overflow-y-auto thin-scroll">${esc(bodyLogic)}</div>` : ''}
+                    </li>`;
+                  }).join("")}
+                </ul>
+              </div>
+            </div>
+            <div class="col-span-4 bg-white border border-rose-100 shadow-sm rounded-lg flex flex-col min-h-0 h-full overflow-hidden">
+              <div class="bg-rose-50 border-b border-rose-100 flex items-center gap-2 p-1.5 shrink-0">
+                <i class="ph ph-warning-octagon text-rose-600"></i><span class="text-[10px] font-bold text-rose-800 uppercase tracking-wider">Illegal Bin List</span>
+              </div>
+              <div class="p-1 thin-scroll flex-1 min-h-0">
+                <ul class="space-y-1 text-[11px] leading-snug">
+                  ${(illegalRows.length ? illegalRows : ["No illegal bins detected"]).map((ib, i) => `<li class="flex items-start gap-1 text-slate-700"><span class="font-bold text-rose-400 shrink-0 w-3 text-right text-[10px]">${i + 1}.</span><span class="mono font-semibold break-words bg-rose-50 px-1 rounded text-rose-800 text-[9.5px] inline-block w-full border border-rose-100">${esc(ib)}</span></li>`).join("")}
+                </ul>
+              </div>
+            </div>
+          </div>
+        `, "h-full min-h-0")}</div>
+      `
+      );
+
+      pushSlide(
+        `4.${idx}. ${m.name} Verification`,
+        "5-7. Env / Test",
+        `
+        <div class="w-1/2 min-h-0">${card("Env Fork / Join Thread Plan", `
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <div class="text-xs text-slate-500">ENV file: <span class="mono">${esc(tb.envFile || "N/A")}</span></div>
+            <div class="text-xs font-semibold px-2 py-1 rounded border border-teal-200 bg-teal-50 text-teal-700">${esc(envForkJoin.joinType || "join")}</div>
+          </div>
+          <div class="text-xs text-slate-600 mb-2">Fork statement: <span class="mono">${esc(envForkJoin.rawFork || "fork ... join")}</span></div>
+          ${asArray(envForkJoin.mailboxes).length ? `<div class="mb-2 flex flex-wrap gap-1">${asArray(envForkJoin.mailboxes).map(mbx => `<span class="inline-flex items-center px-1.5 py-0.5 rounded border border-blue-100 bg-blue-50 text-blue-700 text-[9px] mono"><i class="ph ph-envelope-simple text-blue-500 mr-0.5"></i>${esc(mbx)}</span>`).join("")}</div>` : ''}
+          <div class="space-y-1.5 thin-scroll flex-1 min-h-0">
+            ${(envThreads.length ? envThreads : [{ name: "Thread", instance: "-", className: "-", role: "No thread plan detected." }]).map((t) => `
+              <div class="bg-teal-50 border border-teal-200 rounded-lg p-2">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="text-xs font-bold text-teal-700">${esc(t.name || "Thread")}</div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-[10px] mono text-indigo-600 font-bold bg-white border border-indigo-100 px-1 rounded">${esc(t.className || "-")}</span>
+                    <span class="text-[10px] mono text-slate-700">${esc(t.instance || "-")}</span>
+                  </div>
+                </div>
+                <div class="text-[10px] text-slate-600 mt-0.5">${esc(t.role || "-")}</div>
+              </div>
+            `).join("")}
+          </div>
+        `, "h-full")}</div>
+        <div class="w-1/2 min-h-0 flex flex-col">${card("Test Inheritance Structure", `
+          <div class="flex flex-col h-full overflow-hidden">
+            <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 shadow-sm rounded-lg p-3 relative flex flex-col gap-1 shrink-0">
+              <div class="text-[10px] font-bold text-blue-600 uppercase tracking-widest flex items-center gap-1.5"><i class="ph ph-cube"></i> Base Test</div>
+              <div class="text-sm font-black text-blue-900 mono">${esc(testInheritance.baseClass || "base_test class not found")}</div>
+              ${asArray(testInheritance.baseMethods).length ? `<div class="flex flex-wrap gap-1 mt-1">${asArray(testInheritance.baseMethods).map(fn => `<span class="inline-flex items-center px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-700 text-[9px] mono">${esc(fn)}()</span>`).join("")}</div>` : ''}
+            </div>
+            
+            <div class="flex-1 min-h-0 flex flex-col mt-3">
+              <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-2 ml-2 shrink-0">
+                <i class="ph ph-git-branch text-[14px] text-slate-400"></i> Derived tests
+              </div>
+              <div class="flex-1 overflow-y-auto thin-scroll relative ml-5 mr-1 pr-2">
+                <!-- Tree Line -->
+                <div class="absolute -left-[14px] top-0 bottom-2 w-px bg-slate-200"></div>
+                <div class="flex flex-wrap gap-2 items-start content-start py-0.5">
+                  ${(derivedTests.length ? derivedTests : [{ name: "N/A", parent: "N/A", file: "N/A", overrides: [], cfgSummary: "" }]).map((d) => `
+                    <div class="relative bg-white border border-slate-200 shadow-sm rounded p-1.5 flex-1 min-w-[170px] hover:border-blue-300 transition-colors group flex flex-col">
+                      <div class="absolute -left-[14px] top-3 w-[13px] h-px bg-slate-200 group-hover:bg-blue-300 transition-colors"></div>
+                      <div class="text-[11.5px] font-bold text-slate-800 mono truncate" title="${esc(d.name || "N/A")}">${esc(d.name || "N/A")}</div>
+                      <div class="flex flex-col gap-0.5 mt-1 flex-grow">
+                        <div class="text-[9px] text-slate-500 flex items-center gap-1 truncate"><i class="ph ph-arrow-elbow-up-right text-slate-400"></i> extends <span class="mono font-semibold text-slate-600 truncate bg-slate-50 px-1 rounded border border-slate-100">${esc(d.parent || "-")}</span></div>
+                        <div class="text-[9px] text-slate-400 flex items-center gap-1 truncate"><i class="ph ph-file-code"></i> <span class="mono truncate">${esc(d.file || "-")}</span></div>
+                        ${asArray(d.overrides).length ? `<div class="flex flex-wrap gap-0.5 mt-0.5">${asArray(d.overrides).map(fn => `<span class="text-[8px] font-bold bg-indigo-50 border border-indigo-100 text-indigo-600 px-1 rounded mono">${esc(fn)}↺</span>`).join("")}</div>` : ''}
+                        ${d.cfgSummary ? `<div class="text-[9px] mono text-teal-700 bg-teal-50 px-1 py-0.5 rounded border border-teal-100 mt-0.5 truncate" title="${esc(d.cfgSummary)}">${esc(d.cfgSummary)}</div>` : ''}
+                      </div>
+                    </div>
+                  `).join("")}
+                </div>
+              </div>
+            </div>
+          </div>
+        `, "h-full min-h-0")}</div>
+      `
+      );
+
+      pushSlide(
+        `4.${idx}. ${m.name} Verification`,
+        "5-8. Results",
+        `
+        <div class="w-2/5 min-h-0">${card("Simulation Log", imageBox((m.assets && m.assets.simulationLogImage) || "", "Simulation log image not found", { tight: true }), "h-full")}</div>
+        <div class="w-3/5 min-h-0">${card("Scenario Score", progressBars(scoreRows, results.overallIssues), "h-full thin-scroll")}</div>
+      `
+      );
+    }
+
+    function buildOutro() {
+      const trouble = projectData.trouble || {};
+      const conclusion = projectData.conclusion || {};
+      const conclusionList = asArray(conclusion).map((x) => (typeof x === "string" ? x : x.text)).filter(Boolean);
+      const fallbackConclusion = [];
+      if (conclusion.summary) fallbackConclusion.push(conclusion.summary);
+      if (conclusion.nextSteps) fallbackConclusion.push(conclusion.nextSteps);
+
+      pushSlide(
+        "5. Trouble Shooting",
+        "Issue / Cause / Resolution",
+        `
+        <div class="w-full h-full flex flex-col gap-5">
+          ${card("Issue", `<p class="text-lg text-rose-800">${esc(trouble.issue || "No major blocker")}</p>`, "border-rose-200 bg-rose-50")}
+          ${card("Cause", `<p class="text-lg text-amber-800">${esc(trouble.cause || "N/A")}</p>`, "border-amber-200 bg-amber-50")}
+          ${card("Resolution", `<p class="text-lg text-green-800">${esc(trouble.solution || "N/A")}</p>`, "border-green-200 bg-green-50")}
+        </div>
+      `
+      );
+
+      pushSlide(
+        "6. Conclusion",
+        "Final Summary",
+        `
+        <div class="w-1/2">${card("Takeaways", `
+          <ul class="space-y-3 text-slate-700">
+            ${(conclusionList.length ? conclusionList : fallbackConclusion.length ? fallbackConclusion : ["Verification artifacts were generated successfully."]).map((line) => `<li class="flex items-start gap-2"><i class="ph ph-check-circle text-green-600 mt-0.5"></i><span>${esc(line)}</span></li>`).join("")}
+          </ul>
+        `, "h-full")}</div>
+        <div class="w-1/2">${card("Project Snapshot", `
+          <div class="space-y-2 text-slate-700">
+            <div class="p-3 rounded border border-slate-200 bg-slate-50"><strong>Title:</strong> ${esc((projectData.meta || {}).title || "-")}</div>
+            <div class="p-3 rounded border border-slate-200 bg-slate-50"><strong>Top:</strong> ${esc((projectData.env || {}).top || "-")}</div>
+            <div class="p-3 rounded border border-slate-200 bg-slate-50"><strong>Modules:</strong> ${asArray(projectData.modules).length}</div>
+            <div class="p-3 rounded border border-slate-200 bg-slate-50"><strong>Date:</strong> ${esc((projectData.meta || {}).date || "-")}</div>
+          </div>
+        `, "h-full")}</div>
+      `
+      );
+    }
+
+    function buildPresentation() {
+      try {
+        slides.length = 0;
+        buildIntro();
+        asArray(projectData.modules).forEach((m, i) => {
+          buildModuleSpec(m, i + 1);
+          const tb = (((m || {}).verification || {}).tb || {});
+          if (tb.hasScaffold) {
+            buildModuleVerification(m, i + 1);
+          }
+        });
+        buildOutro();
+      } catch (e) {
+        slides.length = 0;
+        pushSlide(
+          "Rendering Error",
+          "Template execution failed",
+          `<div class="w-full">${card("Error", `<div class="text-rose-700 mono">${esc(e && e.stack ? e.stack : String(e))}</div>`)}</div>`
+        );
+      }
+
+      document.getElementById("slide-container").innerHTML = slides.join("\n");
+      const all = document.querySelectorAll(".slide");
+      all.forEach((s, i) => {
+        s.id = `slide-${i + 1}`;
+      });
+      if (all.length > 0) all[0].classList.add("active");
+      return all.length || 1;
+    }
+
+    let currentSlide = 1;
+    let totalSlides = buildPresentation();
+
+    function updateSlide() {
+      document.querySelectorAll(".slide").forEach((s) => s.classList.remove("active"));
+      const target = document.getElementById(`slide-${currentSlide}`);
+      if (target) target.classList.add("active");
+      document.getElementById("slide-counter").innerText = `${currentSlide} / ${totalSlides}`;
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides) {
+        currentSlide++;
+        updateSlide();
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 1) {
+        currentSlide--;
+        updateSlide();
+      }
+    }
+
+    function savePdfSlides() {
+      const prev = currentSlide;
+      const cleanup = () => {
+        document.body.classList.remove("pdf-export");
+        currentSlide = prev;
+        updateSlide();
+        window.removeEventListener("afterprint", cleanup);
+      };
+
+      document.body.classList.add("pdf-export");
+      window.addEventListener("afterprint", cleanup);
+      setTimeout(() => window.print(), 50);
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight" || e.key === " ") nextSlide();
+      else if (e.key === "ArrowLeft") prevSlide();
+    });
+
+    updateSlide();
+  </script>
+</body>
+</html>

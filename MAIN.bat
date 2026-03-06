@@ -17,6 +17,7 @@ set "Cyan=%ESC%[96m"
 set "White=%ESC%[97m"
 set "Reset=%ESC%[0m"
 set "Gray=%ESC%[90m"
+set "USER_CANCEL_RC=99"
 
 :MASTER_MENU
 cls
@@ -132,8 +133,8 @@ set "CMD_8=contexts\simulation\adapters\bat\sim_convert_vcd_svg.bat"
 set "CMD_9=contexts\simulation\adapters\bat\sim_convert_vcd_wavedrom.bat"
 set "CMD_19=contexts\simulation\adapters\bat\sim_create_dut_tb_scaffold.bat"
 set "CMD_10=contexts\reporting\adapters\bat\report_generate_legacy_html.bat"
-set "CMD_11=contexts\reporting\adapters\bat\report_generate_legacy_docs.bat"
-set "CMD_18=contexts\reporting\adapters\bat\report_open_slidev_viewer.bat"
+set "CMD_11=contexts\reporting\adapters\bat\report_generate_docs.bat"
+set "CMD_18=contexts\reporting\adapters\bat\report_open_latest_presentation_html.bat"
 set "CMD_12=contexts\vivado\adapters\bat\vivado_launch_ipi_gui.bat"
 set "CMD_13=contexts\vivado\adapters\bat\vivado_run_build_flow.bat"
 set "CMD_14=contexts\vivado\adapters\bat\vivado_finalize_block_design.bat"
@@ -159,8 +160,8 @@ echo.
 
 echo %Yellow%[Report ^(Vivado HTML / Docs^) ]%Reset%
 echo  10. Report Generator [!CMD_10!]
-echo  11. Legacy Docs Generator [!CMD_11!]
-echo  18. Open Slidev Viewer [!CMD_18!]
+echo  11. Docs Generator [!CMD_11!]
+echo  18. Open Latest Presentation HTML [!CMD_18!]
 echo.
 
 echo %Yellow%[ Vivado Flow ^& FPGA ]%Reset%
@@ -212,10 +213,18 @@ echo.
 echo %Green%[RUN] !TARGET_NAME! (Target: !TARGET_PROJECT!)%Reset%
 echo %Cyan%===============================================================================%Reset%
 cmd /c ""!TARGET_BAT!" "!TARGET_PROJECT_ABS!""
+set "CHILD_RC=!errorlevel!"
 call :ROUTE_VIVADO_ARTIFACTS "!TARGET_PROJECT_ABS!" "%CD%"
 call :ROUTE_VIVADO_ARTIFACTS "!TARGET_PROJECT_ABS!" "!TARGET_PROJECT_ABS!"
 call :ROUTE_VIVADO_ARTIFACTS "!TARGET_PROJECT_ABS!" "!TARGET_PROJECT_ABS!\work"
+if "!CHILD_RC!"=="%USER_CANCEL_RC%" goto :PROJECT_MENU
 echo %Cyan%===============================================================================%Reset%
+if not "!CHILD_RC!"=="0" (
+    echo %Red%[FAIL] !TARGET_NAME! exited with code !CHILD_RC!%Reset%
+    echo.
+    pause
+    goto :PROJECT_MENU
+)
 echo %Green%[DONE] !TARGET_NAME!%Reset%
 echo.
 pause

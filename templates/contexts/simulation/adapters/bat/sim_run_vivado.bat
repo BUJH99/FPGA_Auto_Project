@@ -2,6 +2,7 @@
 setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
@@ -53,6 +54,7 @@ set "PS_RC=%errorlevel%"
 
 del "%PS_FILE%" >nul 2>nul
 
+if %PS_RC% equ %USER_CANCEL_RC% exit /b %USER_CANCEL_RC%
 if %PS_RC% neq 0 (
     echo.
     echo [FAILURE] Vivado simulation launch failed.
@@ -222,6 +224,7 @@ Write-Host "      Vivado GUI Simulation Launcher" -ForegroundColor Cyan
 Write-Host "-----------------------------------------------------------" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Select TB Folder:" -ForegroundColor Yellow
+Write-Host "[INFO] Enter Q to return to menu." -ForegroundColor DarkGray
 
 for ($i = 0; $i -lt $folderEntries.Count; $i++) {
     $folder = $folderEntries[$i]
@@ -231,6 +234,9 @@ for ($i = 0; $i -lt $folderEntries.Count; $i++) {
 $folderSelection = 0
 while ($true) {
     $folderRaw = Read-Host " Folder >"
+    if ($folderRaw -match '^(?i)q$') {
+        exit 99
+    }
     if ($folderRaw -notmatch "^\d+$") {
         Write-Host "[WARN] Enter a valid folder number." -ForegroundColor DarkYellow
         continue
@@ -257,6 +263,7 @@ if ($tbSelectList.Count -eq 0) {
 Write-Host ""
 Write-Host ("Selected folder: {0}" -f $selectedFolder.Name) -ForegroundColor Green
 Write-Host "Select Testbench Top Source:" -ForegroundColor Yellow
+Write-Host "[INFO] Enter Q to return to menu." -ForegroundColor DarkGray
 
 for ($i = 0; $i -lt $tbSelectList.Count; $i++) {
     $entry = $tbSelectList[$i]
@@ -271,6 +278,9 @@ for ($i = 0; $i -lt $tbSelectList.Count; $i++) {
 $tbSelection = 0
 while ($true) {
     $tbRaw = Read-Host " TB file >"
+    if ($tbRaw -match '^(?i)q$') {
+        exit 99
+    }
     if ($tbRaw -notmatch "^\d+$") {
         Write-Host "[WARN] Enter a valid TB file number." -ForegroundColor DarkYellow
         continue
@@ -292,27 +302,107 @@ if ([string]::IsNullOrWhiteSpace($tbTop)) {
 }
 $selectedRel = $selectedEntry.FileDisplay
 $simMoreOptions = "-testplusarg TESTNAME=all"
+$selectedTbLogDir = $selectedTb.DirectoryName
+if (-not (Test-Path $selectedTbLogDir)) {
+    New-Item -ItemType Directory -Path $selectedTbLogDir -Force | Out-Null
+}
+$SimLogDir = $selectedTbLogDir
+$tbLogStem = [System.IO.Path]::GetFileNameWithoutExtension($selectedTb.Name)
+$tbLogStemSafe = [regex]::Replace($tbLogStem, "[^A-Za-z0-9_.-]", "_")
+if ([string]::IsNullOrWhiteSpace($tbLogStemSafe)) {
+    $tbLogStemSafe = "tb"
+}
+$vivadoLogFile = Join-Path $SimLogDir ("vivado_sim_" + $tbLogStemSafe + ".log")
+$vivadoJournalFile = Join-Path $SimLogDir ("vivado_sim_" + $tbLogStemSafe + ".jou")
+
+# Re-route any existing vivado artifacts to the selected TB log directory.
+Move-VivadoArtifacts -RootDir $VivadoRoot -DstDir $SimLogDir
+Move-VivadoArtifacts -RootDir $ProjectRoot -DstDir $SimLogDir
+if (-not [string]::IsNullOrWhiteSpace($CallerCwd)) {
+    Move-VivadoArtifacts -RootDir $CallerCwd -DstDir $SimLogDir
+}
+
+$promptSessionId = [Guid]::NewGuid().ToString("N")
+$promptIpcDir = Join-Path $SimLogDir ("close_prompt_" + $promptSessionId)
+$promptRequestFile = Join-Path $promptIpcDir "request.flag"
+$promptCloseFile = Join-Path $promptIpcDir "close.flag"
+$promptKeepFile = Join-Path $promptIpcDir "keep.flag"
+$promptArgMarker = "__PROMPT_IPC__"
+New-Item -ItemType Directory -Path $promptIpcDir -Force | Out-Null
 
 Write-Host ""
 Write-Host ("[INFO] Selected TB file : {0}" -f $selectedRel) -ForegroundColor Green
 Write-Host ("[INFO] Simulation top   : {0}" -f $tbTop) -ForegroundColor Green
 Write-Host ("[INFO] TB compile scope : {0}" -f $selectedTb.DirectoryName) -ForegroundColor Green
 Write-Host ("[INFO] xsim.more_options: {0}" -f $simMoreOptions) -ForegroundColor Green
+Write-Host "[INFO] After run all completes, this terminal will ask whether to close Vivado GUI." -ForegroundColor Green
 Write-Host "[INFO] Launching Vivado GUI and simulation..." -ForegroundColor Green
 Write-Host ("[INFO] Vivado workspace : {0}" -f $VivadoRoot) -ForegroundColor Green
-Write-Host ("[INFO] Vivado logs      : {0}" -f $SimLogDir) -ForegroundColor Green
+Write-Host ("[INFO] Vivado log file  : {0}" -f $vivadoLogFile) -ForegroundColor Green
+Write-Host ("[INFO] Vivado journal   : {0}" -f $vivadoJournalFile) -ForegroundColor Green
 
 $vivadoArgs = @(
     "-mode", "gui",
     "-source", $TclScript,
-    "-tclargs", $ProjectRoot, $tbTop, $VivadoRoot, $ManifestSrcList, $ManifestTbList, $ManifestIncList, $selectedTb.FullName, $simMoreOptions,
-    "-log", (Join-Path $SimLogDir "vivado_sim.log"),
-    "-journal", (Join-Path $SimLogDir "vivado_sim.jou"),
+    "-tclargs", $ProjectRoot, $tbTop, $VivadoRoot, $ManifestSrcList, $ManifestTbList, $ManifestIncList, $selectedTb.FullName, $simMoreOptions, $promptArgMarker, $promptRequestFile, $promptCloseFile, $promptKeepFile,
+    "-log", $vivadoLogFile,
+    "-journal", $vivadoJournalFile,
     "-notrace"
 )
 
-& vivado @vivadoArgs
-$rc = $LASTEXITCODE
+$vivadoProc = $null
+try {
+    $vivadoProc = Start-Process -FilePath "vivado" -ArgumentList $vivadoArgs -WorkingDirectory $VivadoRoot -NoNewWindow -PassThru
+} catch {
+    Write-Host ("[ERROR] Failed to start Vivado process: {0}" -f $_.Exception.Message) -ForegroundColor Red
+    Remove-Item -Path $promptIpcDir -Recurse -Force -ErrorAction SilentlyContinue
+    exit 1
+}
+
+$askedClosePrompt = $false
+while ($true) {
+    if ($vivadoProc.HasExited) {
+        break
+    }
+
+    if ((-not $askedClosePrompt) -and (Test-Path $promptRequestFile)) {
+        $askedClosePrompt = $true
+        $closeNow = $false
+        while ($true) {
+            $closeRaw = Read-Host " Auto replay completed. Close Vivado GUI now? (y/N) >"
+            if ([string]::IsNullOrWhiteSpace($closeRaw)) {
+                $closeNow = $false
+                break
+            }
+
+            $closeNorm = $closeRaw.Trim().ToLower()
+            if ($closeNorm -in @("y", "yes", "1")) {
+                $closeNow = $true
+                break
+            }
+            if ($closeNorm -in @("n", "no", "0")) {
+                $closeNow = $false
+                break
+            }
+
+            Write-Host "[WARN] Enter y or n." -ForegroundColor DarkYellow
+        }
+
+        if ($closeNow) {
+            New-Item -ItemType File -Path $promptCloseFile -Force | Out-Null
+            Write-Host "[INFO] Close request sent to Vivado." -ForegroundColor Green
+        } else {
+            New-Item -ItemType File -Path $promptKeepFile -Force | Out-Null
+            Write-Host "[INFO] Keeping Vivado GUI open by user choice." -ForegroundColor Green
+        }
+    }
+
+    Start-Sleep -Milliseconds 250
+    $vivadoProc.Refresh()
+}
+
+$rc = $vivadoProc.ExitCode
+Remove-Item -Path $promptIpcDir -Recurse -Force -ErrorAction SilentlyContinue
 Move-VivadoArtifacts -RootDir $VivadoRoot -DstDir $SimLogDir
 Move-VivadoArtifacts -RootDir $ProjectRoot -DstDir $SimLogDir
 if (-not [string]::IsNullOrWhiteSpace($CallerCwd)) {

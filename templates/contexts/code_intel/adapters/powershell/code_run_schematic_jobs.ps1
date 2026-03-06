@@ -81,7 +81,8 @@ function Strip-HdlComments {
 function Try-LoadModuleEntriesFromIndexer {
   param(
     [string]$ProjectPath,
-    [string]$HdlIndexerPath
+    [string]$HdlIndexerPath,
+    [string]$ManifestJson = ""
   )
 
   $entries = @()
@@ -90,7 +91,11 @@ function Try-LoadModuleEntriesFromIndexer {
   if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return $entries }
 
   try {
-    $json = & node $HdlIndexerPath $ProjectPath --pretty 2>$null
+    $cmdArgs = @($HdlIndexerPath, $ProjectPath, "--pretty")
+    if (-not [string]::IsNullOrWhiteSpace($ManifestJson)) {
+      $cmdArgs += @("--manifest-json", $ManifestJson)
+    }
+    $json = & node @cmdArgs 2>$null
     if (-not $json) { return $entries }
     $idx = ($json -join "`n") | ConvertFrom-Json
     if (-not $idx.files) { return $entries }
@@ -233,7 +238,7 @@ foreach ($incEntry in $incEntries) {
 $includeDirs += $srcFiles | Select-Object -ExpandProperty DirectoryName
 $includeDirs = @($includeDirs | Sort-Object -Unique)
 
-$moduleEntries = Try-LoadModuleEntriesFromIndexer -ProjectPath $ProjectPath -HdlIndexerPath $HdlIndexerPath
+$moduleEntries = Try-LoadModuleEntriesFromIndexer -ProjectPath $ProjectPath -HdlIndexerPath $HdlIndexerPath -ManifestJson $ManifestJson
 if ($moduleEntries.Count -eq 0) {
   Write-Host "[ERROR] hdl_indexer failed or returned no module entries. Strict mode does not allow fallback scanning."
   exit 1

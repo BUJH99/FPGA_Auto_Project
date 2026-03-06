@@ -1,4 +1,4 @@
-version: "0"
+version: "1"
 project:
   name: "__PROJECT_NAME__"
 hdl:
@@ -17,3 +17,13 @@ hdl:
   xdc_globs:
     - "constrs/**/*.xdc"
   exclude_globs: []
+sim:
+  tool: "xsim"
+  timescale: "1ns/1ps"
+vivado:
+  part: "xc7a35tcpg236-1"
+  strategy: "Default"
+  power_limit_w: 2.5
+report:
+  enable: true
+  format: "html"

@@ -10,6 +10,8 @@
 !/templates/vcd2sgv/**
 !/tests/
 !/tests/**
+!/Telegram/
+!/Telegram/**
 !/Project/
 /Project/*
 !/Project/.gitkeep
@@ -21,9 +23,7 @@
 # Do not keep generated sample outputs in templates
 /templates/output/**
 !/templates/output/.gitkeep
-
-# Do not keep Slidev runtime bridge entries
-/templates/node_modules/.cache/fpga_auto_slidev_runtime/**
+/templates/node_modules/.cache/**
 
 # Ignore common OS files (just in case they end up in templates)
 thumbs.db

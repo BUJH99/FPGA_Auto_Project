@@ -21,6 +21,7 @@ from vcd2svg import make_svg
 
 PROFILE_DIRNAME = "svg_profiles"
 VALID_RADIX = ("hex", "dec", "bin")
+USER_CANCEL_RC = 99
 
 
 def _tokenize(spec: str) -> List[str]:
@@ -405,7 +406,7 @@ def _ask_bus_radix(selected_signals, default_fmt: str, default_overrides: Dict[s
     return base_fmt, overrides
 
 
-def _configure_one_vcd(project_dir: str, vcd_path: str) -> bool:
+def _configure_one_vcd(project_dir: str, vcd_path: str) -> Optional[bool]:
     base_name = os.path.splitext(os.path.basename(vcd_path))[0]
     profile_path = _profile_path(project_dir, base_name)
     profile: Dict[str, str] = {}
@@ -428,7 +429,7 @@ def _configure_one_vcd(project_dir: str, vcd_path: str) -> bool:
                 break
             if mode in ("q", "quit", "c", "cancel"):
                 print("[INFO] Cancelled by user.")
-                return False
+                return None
             print("Invalid input. Enter Y/E/N/Q.")
     else:
         print(f"[INFO] No profile yet. New profile will be created: {profile_path}")
@@ -590,7 +591,7 @@ def main() -> int:
     vcd_paths = _choose_vcds(vcd_dir)
     if not vcd_paths:
         print("[INFO] Cancelled.")
-        return 1
+        return USER_CANCEL_RC
 
     print(f"\n[INFO] Selected VCD count: {len(vcd_paths)}")
     ok_count = 0
@@ -606,6 +607,9 @@ def main() -> int:
             print(f"[ERROR] Unexpected failure: {ex}")
             ok = False
 
+        if ok is None:
+            print("[INFO] Cancelled.")
+            return USER_CANCEL_RC
         if ok:
             ok_count += 1
         else:

@@ -22,6 +22,7 @@ from vcd2wavedrom import _make_html, _sample_wave
 from vcd_parser import find_last_timestamp, parse_events, parse_header, resolve_signals
 
 PROFILE_DIRNAME = "svg_profiles"
+USER_CANCEL_RC = 99
 
 
 def _tokenize(spec: str) -> List[str]:
@@ -604,13 +605,11 @@ def main() -> int:
     vcd_paths = _choose_vcds(vcd_dir)
     if not vcd_paths:
         print("[INFO] Cancelled.")
-        return 1
+        return USER_CANCEL_RC
 
     print(f"\n[INFO] Selected VCD count: {len(vcd_paths)}")
     ok_count = 0
     fail_count = 0
-    skip_count = 0
-
     for i, vcd_path in enumerate(vcd_paths, start=1):
         print("\n" + "=" * 79)
         print(f"[VCD {i}/{len(vcd_paths)}] {vcd_path}")
@@ -628,14 +627,15 @@ def main() -> int:
             result = False
 
         if result is None:
-            skip_count += 1
-        elif result:
+            print("[INFO] Cancelled.")
+            return USER_CANCEL_RC
+        if result:
             ok_count += 1
         else:
             fail_count += 1
 
     print("\n" + "=" * 79)
-    print(f"[DONE] total={len(vcd_paths)} ok={ok_count} skip={skip_count} fail={fail_count}")
+    print(f"[DONE] total={len(vcd_paths)} ok={ok_count} fail={fail_count}")
     return 0 if fail_count == 0 else 1
 
 
