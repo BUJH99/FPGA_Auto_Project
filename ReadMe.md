@@ -191,6 +191,10 @@ flowchart LR
    - Launches Vivado xsim for RTL simulation. After waveform setup is loaded (or initialized), it automatically executes `restart` and `run all`.
    - **Usage**: Select your project and testbench file. This remains the manual GUI path for waveform inspection.
 
+19. **Create DUT TB Scaffold** (`contexts\simulation\adapters\bat\sim_create_dut_tb_scaffold.bat`)
+   - Scaffolds a foundational SystemVerilog testbench layout for a specified Design Under Test (DUT).
+   - **Usage**: Select the target DUT module, and a boilerplate `.sv` testbench will be generated in your `tb/` folder.
+
 20. **NO GUI Run Vivado Simulation** (`contexts\simulation\adapters\bat\sim_run_vivado_nogui.bat`)
    - Runs the same Vivado replay flow in batch mode without opening the GUI, then stores the selected TB log/journal in the intended TB folder.
    - **Usage**: Select the TB folder and TB file. The script executes `restart` + `run all` silently and updates `output/run_summary.json`.
@@ -464,6 +468,10 @@ flowchart LR
 6. **Run Vivado Simulation** (`contexts\simulation\adapters\bat\sim_run_vivado.bat`)
    - 테스트벤치 선택 후 Vivado xsim GUI를 열고, 웨이브폼 설정 로드(또는 초기화) 직후 자동으로 `restart`와 `run all`을 실행합니다.
    - **사용 방법**: 프로젝트와 TB를 선택하면 파형 창 표시 후 자동 재실행이 1회 수행됩니다. 이 경로는 GUI 수동 확인용으로 유지됩니다.
+
+19. **Create DUT TB Scaffold** (`contexts\simulation\adapters\bat\sim_create_dut_tb_scaffold.bat`)
+   - 선택한 대상(DUT, Design Under Test) 모듈의 인터페이스를 분석하여 기본 뼈대를 갖춘 SystemVerilog 테스트벤치(Scaffold) 파일을 자동 생성합니다.
+   - **사용 방법**: 대상 DUT 모듈을 선택하면, 시뮬레이션 코드 작성을 바로 시작할 수 있는 최적화된 `.sv` 파일이 `tb/` 폴더 내부에 준비됩니다.
 
 20. **NO GUI Run Vivado Simulation** (`contexts\simulation\adapters\bat\sim_run_vivado_nogui.bat`)
    - GUI 없이 Vivado batch 모드로 동일한 `restart` + `run all` 흐름을 수행하고, 선택한 TB 기준 로그/저널과 `output/run_summary.json`을 갱신합니다.
