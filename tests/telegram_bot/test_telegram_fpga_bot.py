@@ -106,6 +106,88 @@ class TelegramBotTests(unittest.TestCase):
             candidates = BOT.extract_hierarchy_log_candidates_from_run_log(temp_root / "telegram_fpga_hierarchy.log")
             self.assertIn(hinted_log, candidates)
 
+    def test_extract_hierarchy_log_candidates_from_summary_marker_reads_summary_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            project_root = temp_root / "Project"
+            hinted_log = project_root / "log" / "hierarchy" / "hierarchy_20260306_123456_001.log"
+            summary_path = project_root / "output" / "history" / "hierarchy_view" / "r1" / "run_summary.json"
+            write_text(hinted_log, "+-- TOP\n")
+            write_text(
+                summary_path,
+                '{\n'
+                '  "projectRoot": "' + project_root.as_posix() + '",\n'
+                '  "details": {"logPath": "log/hierarchy/hierarchy_20260306_123456_001.log"}\n'
+                '}\n',
+            )
+            write_text(
+                temp_root / "telegram_fpga_hierarchy.log",
+                f"[INFO] Hierarchy summary: {summary_path}\n",
+            )
+
+            candidates = BOT.extract_hierarchy_log_candidates_from_run_log(temp_root / "telegram_fpga_hierarchy.log")
+            self.assertIn(hinted_log, candidates)
+            self.assertNotIn(summary_path, candidates)
+
+    def test_extract_vivado_log_candidates_from_summary_marker_reads_summary_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            project_root = temp_root / "Project"
+            hinted_log = project_root / "tb" / "smoke" / "vivado_sim_tb_smoke.log"
+            summary_path = project_root / "output" / "history" / "vivado_sim_nogui" / "r1" / "run_summary.json"
+            write_text(hinted_log, "[INFO] Auto replay completed\n")
+            write_text(
+                summary_path,
+                '{\n'
+                '  "projectRoot": "' + project_root.as_posix() + '",\n'
+                '  "details": {"vivadoLogPath": "tb/smoke/vivado_sim_tb_smoke.log"}\n'
+                '}\n',
+            )
+            write_text(
+                temp_root / "telegram_fpga_vivado.log",
+                f"[INFO] Vivado summary: {summary_path}\n",
+            )
+
+            candidates = BOT.extract_vivado_log_candidates_from_run_log(temp_root / "telegram_fpga_vivado.log")
+            self.assertIn(hinted_log, candidates)
+            self.assertNotIn(summary_path, candidates)
+
+    def test_extract_vivado_log_candidates_from_run_summary_marker_reads_summary_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            project_root = temp_root / "Project"
+            hinted_log = project_root / "custom_logs" / "vivado_sim_tb_smoke.log"
+            summary_path = project_root / "output" / "history" / "vivado_sim_nogui" / "r1" / "run_summary.json"
+            write_text(hinted_log, "[INFO] Auto replay completed\n")
+            write_text(
+                summary_path,
+                '{\n'
+                '  "projectRoot": "' + project_root.as_posix() + '",\n'
+                '  "details": {"vivadoLogPath": "custom_logs/vivado_sim_tb_smoke.log"}\n'
+                '}\n',
+            )
+            write_text(
+                temp_root / "telegram_fpga_vivado.log",
+                f"[INFO] run_summary={summary_path.as_posix()}\n",
+            )
+
+            candidates = BOT.extract_vivado_log_candidates_from_run_log(temp_root / "telegram_fpga_vivado.log")
+            self.assertIn(hinted_log, candidates)
+            self.assertNotIn(summary_path, candidates)
+
+    def test_extract_vivado_log_candidates_from_resolved_log_line(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            hinted_log = temp_root / "Project" / "vivado_project" / "vivado.log"
+            write_text(hinted_log, "[INFO] Auto replay run all completed.\n")
+            write_text(
+                temp_root / "telegram_fpga_vivado.log",
+                f"[INFO] Resolved Vivado log file: {hinted_log}\n",
+            )
+
+            candidates = BOT.extract_vivado_log_candidates_from_run_log(temp_root / "telegram_fpga_vivado.log")
+            self.assertIn(hinted_log, candidates)
+
     def test_find_recent_hierarchy_log_prefers_current_run_log(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
@@ -140,9 +222,114 @@ class TelegramBotTests(unittest.TestCase):
             found = BOT.find_recent_hierarchy_log(job, started_ts=now, run_log=run_log, require_fresh=True)
             self.assertEqual(current_log, found)
 
+    def test_find_recent_vivado_sim_log_prefers_current_run_summary_hint(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            project_root, project_path = self.create_project_root(temp_root)
+            tb_log_root = project_path / "tb" / "smoke"
+            tb_log_root.mkdir(parents=True, exist_ok=True)
+
+            old_log = tb_log_root / "vivado_sim.log"
+            current_log = project_path / "custom_logs" / "vivado_sim_tb_smoke.log"
+            summary_path = project_path / "output" / "history" / "vivado_sim_nogui" / "r1" / "run_summary.json"
+
+            write_text(old_log, "old log\n")
+            write_text(current_log, "[INFO] Auto replay run all completed.\n")
+            write_text(
+                summary_path,
+                '{\n'
+                '  "projectRoot": "' + project_root.as_posix() + '",\n'
+                '  "details": {"vivadoLogPath": "Demo/custom_logs/vivado_sim_tb_smoke.log"}\n'
+                '}\n',
+            )
+
+            now = time.time()
+            os.utime(old_log, (now - 600, now - 600))
+            os.utime(current_log, (now, now))
+
+            run_log = temp_root / "telegram_fpga_vivado.log"
+            write_text(run_log, f"[INFO] run_summary={summary_path.as_posix()}\n")
+
+            job = BOT.JobRequest(
+                command_name="sim_vivado",
+                command_id="sim_vivado",
+                menu_no=20,
+                project_name=project_path.name,
+                script_path=REPO_ROOT / "templates" / "contexts" / "simulation" / "adapters" / "bat" / "sim_run_vivado_nogui.bat",
+                cwd=REPO_ROOT,
+                cmd=("cmd.exe", "/c", "sim_run_vivado_nogui.bat", str(project_path)),
+                stdin_text="1\r\n1\r\n",
+                artifact_paths=(project_path / "tb", project_path / "log", project_path / "output"),
+                sim_vivado_close_gui=None,
+            )
+
+            found = BOT.find_recent_vivado_sim_log(job, started_ts=now, run_log=run_log, require_fresh=True)
+            self.assertEqual(current_log, found)
+
+    def test_send_sim_vivado_result_summary_restores_parsed_case_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root, _ = self.create_project_root(Path(temp_dir))
+            config = self.make_config(project_root)
+            result = BOT.ExecutionResult(
+                command_id="sim_vivado",
+                status="success",
+                return_code=0,
+                structured_payload={
+                    "vivado_log_path": str(Path(temp_dir) / "vivado_sim_tb_smoke.log"),
+                    "vivado_log_excerpt": [
+                        "[INFO] Auto replay: restart + run all",
+                        "[TB][INFO] RUN CASE 1 / 1",
+                        "[TB][INFO] Selected TESTNAME=SMOKE",
+                        "[TB][INFO] ENV report: checked=128 errors=2 coverage=97.5%",
+                        "[INFO] Auto replay run all completed.",
+                    ],
+                    "vivado_log_excerpt_marker_found": True,
+                    "vivado_log_excerpt_truncated": False,
+                },
+            )
+
+            with mock.patch.object(BOT, "safe_send_text") as send_text_mock:
+                BOT.send_sim_vivado_result_summary(config, 1001, result)
+
+            sent_text = send_text_mock.call_args.args[2]
+            self.assertIn("[SIM_VIVADO_SUMMARY]", sent_text)
+            self.assertIn("Case Results", sent_text)
+            self.assertIn("SMOKE", sent_text)
+            self.assertIn("97.5", sent_text)
+            self.assertIn("errs=<code>2</code>", sent_text)
+
+    def test_send_sim_vivado_result_summary_parses_env_report_without_run_case(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root, _ = self.create_project_root(Path(temp_dir))
+            config = self.make_config(project_root)
+            result = BOT.ExecutionResult(
+                command_id="sim_vivado",
+                status="success",
+                return_code=0,
+                structured_payload={
+                    "vivado_log_path": str(Path(temp_dir) / "vivado_sim_tb_smoke.log"),
+                    "vivado_log_excerpt": [
+                        "[TB][INFO] Selected TESTNAME=SMOKE",
+                        "[TB][INFO] ENV report: checked=64 errors=0",
+                        "$finish called at time : 100 ns",
+                    ],
+                    "vivado_log_excerpt_marker_found": False,
+                    "vivado_log_excerpt_truncated": False,
+                },
+            )
+
+            with mock.patch.object(BOT, "safe_send_text") as send_text_mock:
+                BOT.send_sim_vivado_result_summary(config, 1001, result)
+
+            sent_text = send_text_mock.call_args.args[2]
+            self.assertIn("Case Results", sent_text)
+            self.assertIn("SMOKE", sent_text)
+            self.assertIn("errs=<code>0</code>", sent_text)
+            self.assertIn("cov=<code>-%</code>", sent_text)
+
     def test_parse_main_menu_registry_covers_main_menu(self) -> None:
         registry = BOT.parse_main_menu_registry(REPO_ROOT / "MAIN.bat", REPO_ROOT / "templates")
-        self.assertEqual(set(range(1, 20)), set(registry))
+        self.assertEqual(set(range(1, 21)), set(registry))
         self.assertTrue(
             registry[5].script_path.as_posix().endswith("templates/contexts/simulation/adapters/bat/sim_run_vivado.bat")
         )
@@ -151,6 +338,18 @@ class TelegramBotTests(unittest.TestCase):
             .script_path.as_posix()
             .endswith("templates/contexts/simulation/adapters/bat/sim_create_dut_tb_scaffold.bat")
         )
+        self.assertTrue(
+            registry[20]
+            .script_path.as_posix()
+            .endswith("templates/contexts/simulation/adapters/bat/sim_run_vivado_nogui.bat")
+        )
+
+    def test_make_execution_service_returns_layered_service(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root, _ = self.create_project_root(Path(temp_dir))
+            config = self.make_config(project_root)
+            service = BOT.make_execution_service(config)
+            self.assertIsInstance(service, BOT.LayeredExecutionService)
 
     def test_build_menu_invocation_matches_batch_contracts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -166,11 +365,11 @@ class TelegramBotTests(unittest.TestCase):
                     None,
                 ),
                 (
-                    5,
-                    ["1", "2", "--keep-gui"],
+                    20,
+                    ["1", "2"],
                     [str(project_path)],
                     "1\r\n2\r\n",
-                    False,
+                    None,
                 ),
                 (
                     6,
@@ -310,7 +509,7 @@ class TelegramBotTests(unittest.TestCase):
                 mock.patch.object(BOT, "answer_callback_query"):
                 BOT.process_callback_query(
                     config,
-                    {"id": "q1", "data": "wiz_act_5", "from": {"id": 1}, "message": {"chat": {"id": 10}, "message_id": 20}},
+                    {"id": "q1", "data": "wiz_act_20", "from": {"id": 1}, "message": {"chat": {"id": 10}, "message_id": 20}},
                 )
                 reply_markup = edit_mock.call_args.kwargs["reply_markup"]
                 self.assertEqual("wiz_vsimf_1", reply_markup["inline_keyboard"][0][0]["callback_data"])
@@ -324,23 +523,14 @@ class TelegramBotTests(unittest.TestCase):
                 reply_markup = edit_mock.call_args.kwargs["reply_markup"]
                 self.assertEqual("wiz_vsimt_1_2", reply_markup["inline_keyboard"][0][1]["callback_data"])
 
-            with mock.patch.object(BOT, "edit_message_text") as edit_mock, \
-                mock.patch.object(BOT, "answer_callback_query"):
-                BOT.process_callback_query(
-                    config,
-                    {"id": "q3", "data": "wiz_vsimt_1_2", "from": {"id": 1}, "message": {"chat": {"id": 10}, "message_id": 20}},
-                )
-                reply_markup = edit_mock.call_args.kwargs["reply_markup"]
-                self.assertEqual("wiz_gui_keep", reply_markup["inline_keyboard"][0][0]["callback_data"])
-
             with mock.patch.object(BOT, "process_message") as process_mock, \
                 mock.patch.object(BOT, "edit_message_text"), \
                 mock.patch.object(BOT, "answer_callback_query"):
                 BOT.process_callback_query(
                     config,
-                    {"id": "q4", "data": "wiz_gui_keep", "from": {"id": 1}, "message": {"chat": {"id": 10}, "message_id": 20}},
+                    {"id": "q3", "data": "wiz_vsimt_1_2", "from": {"id": 1}, "message": {"chat": {"id": 10}, "message_id": 20}},
                 )
-                self.assertEqual("/sim_vivado Demo 1 2 --keep-gui", process_mock.call_args.args[1]["text"])
+                self.assertEqual("/sim_vivado Demo 1 2", process_mock.call_args.args[1]["text"])
 
     def test_process_callback_query_drives_dynamic_auto_report_flow(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

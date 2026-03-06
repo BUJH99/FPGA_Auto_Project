@@ -10,6 +10,7 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -17,12 +18,35 @@ import urllib.error
 import urllib.request
 import urllib.parse
 import uuid
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 BOT_REPO_ROOT = SCRIPT_DIR.parent
+if str(BOT_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(BOT_REPO_ROOT))
+
+from Telegram.bot.adapters.batch_executor import BatchExecutor as LayeredBatchExecutor
+from Telegram.bot.adapters.filesystem_evidence_reader import (
+    FilesystemEvidenceReader as LayeredFilesystemEvidenceReader,
+)
+from Telegram.bot.adapters.telegram_presenter import TelegramPresenter as LayeredTelegramPresenter
+from Telegram.bot.application.command_resolver import CommandResolver as LayeredCommandResolver
+from Telegram.bot.application.execution_service import ExecutionService as LayeredExecutionService
+from Telegram.bot.application.result_collectors import (
+    ResultCollectorRegistry as LayeredResultCollectorRegistry,
+    extract_hierarchy_lines as collector_extract_hierarchy_lines,
+    extract_hierarchy_log_candidates_from_run_log as collector_extract_hierarchy_log_candidates_from_run_log,
+    extract_replay_log_excerpt as collector_extract_replay_log_excerpt,
+    extract_vivado_log_candidates_from_run_log as collector_extract_vivado_log_candidates_from_run_log,
+    find_recent_hierarchy_log as collector_find_recent_hierarchy_log,
+    find_recent_vivado_sim_log as collector_find_recent_vivado_sim_log,
+    list_recent_hierarchy_logs as collector_list_recent_hierarchy_logs,
+    list_recent_vivado_sim_logs as collector_list_recent_vivado_sim_logs,
+    parse_replay_state_from_lines as collector_parse_replay_state_from_lines,
+)
+from Telegram.bot.domain.models import Config, ExecutionRequest, ExecutionResult, JobRequest, MenuEntry
+
 DEFAULT_AUTOMATION_REPO_ROOT = BOT_REPO_ROOT
 DEFAULT_ENV_PATH = SCRIPT_DIR / "telegram_fpga_bot.env"
 DEFAULT_SECRET_PATH = BOT_REPO_ROOT.parent / "MOBILE_AGENT_TOKEN" / "TELEGRAMTOKEN_ID.txt"
@@ -30,52 +54,7 @@ LOCK_PATH = Path(tempfile.gettempdir()) / "telegram_fpga_bot.lock"
 LOCK_HANDLE = None
 VIVADO_LOG_FRESH_SLACK_SEC = 60.0
 HIERARCHY_LOG_FRESH_SLACK_SEC = 30.0
-SIM_VIVADO_PROMPT_TIMEOUT_SEC = 180
 REPORT_ARTIFACT_RECENT_SLACK_SEC = 5.0
-
-
-@dataclass(frozen=True)
-class MenuEntry:
-    menu_no: int
-    script_rel: str
-    script_path: Path
-
-
-@dataclass
-class Config:
-    bot_token: str
-    allowed_user_ids: set[int]
-    allowed_usernames: set[str]
-    allowed_chat_ids: set[int]
-    automation_repo_root: Path
-    automation_templates_root: Path
-    main_bat_path: Path
-    menu_registry: dict[int, MenuEntry]
-    project_root: Path
-    poll_timeout_sec: int
-    command_timeout_sec: int
-    skip_pending_updates: bool
-    auto_delete_webhook_on_start: bool
-    progress_interval_sec: int
-    send_diagrams: bool
-    max_diagram_files: int
-    sim_vivado_log_lines: int
-    sim_vivado_send_log_file: bool
-    sim_vivado_auto_complete_on_replay: bool
-    sim_vivado_replay_check_sec: int
-
-
-@dataclass(frozen=True)
-class JobRequest:
-    command_name: str
-    menu_no: int | None
-    project_name: str | None
-    script_path: Path
-    cwd: Path
-    cmd: tuple[str, ...]
-    stdin_text: str | None
-    artifact_paths: tuple[Path, ...]
-    sim_vivado_close_gui: bool | None
 
 
 class RuntimeState:
@@ -84,7 +63,6 @@ class RuntimeState:
         self.current_job: dict[str, object] | None = None
         self.last_job: dict[str, object] | None = None
         self.user_states: dict[int, dict[str, object]] = {}
-        self.sim_vivado_prompts: dict[str, dict[str, object]] = {}
 
     def try_start_job(self, job: dict[str, object]) -> bool:
         with self._lock:
@@ -121,32 +99,33 @@ class RuntimeState:
             if user_id in self.user_states:
                 self.user_states.pop(user_id)
 
-    def register_sim_vivado_prompt(self, token: str, payload: dict[str, object]) -> None:
-        with self._lock:
-            self.sim_vivado_prompts[token] = payload
-
-    def get_sim_vivado_prompt(self, token: str) -> dict[str, object] | None:
-        with self._lock:
-            return self.sim_vivado_prompts.get(token)
-
-    def resolve_sim_vivado_prompt(self, token: str, decision: str) -> bool:
-        with self._lock:
-            prompt = self.sim_vivado_prompts.get(token)
-            if prompt is None:
-                return False
-            prompt["decision"] = decision
-            prompt["resolved"] = True
-            event_obj = prompt.get("event")
-            if isinstance(event_obj, threading.Event):
-                event_obj.set()
-            return True
-
-    def pop_sim_vivado_prompt(self, token: str) -> None:
-        with self._lock:
-            self.sim_vivado_prompts.pop(token, None)
-
 
 STATE = RuntimeState()
+FILESYSTEM_READER = LayeredFilesystemEvidenceReader()
+RESULT_COLLECTOR_REGISTRY = LayeredResultCollectorRegistry(FILESYSTEM_READER)
+TELEGRAM_PRESENTER = LayeredTelegramPresenter()
+
+
+def make_command_resolver(config: Config) -> LayeredCommandResolver:
+    return LayeredCommandResolver(
+        config,
+        parse_module_selection=parse_module_selection,
+        parse_positive_int=parse_positive_int,
+        parse_yes_no_token=parse_yes_no_token,
+        parse_sim_vivado_close_choice=parse_sim_vivado_close_choice,
+        format_stdin=format_stdin,
+    )
+
+
+def make_execution_service(config: Config) -> LayeredExecutionService:
+    return LayeredExecutionService(
+        batch_executor=LayeredBatchExecutor(tail_line_limit=200),
+        collectors=RESULT_COLLECTOR_REGISTRY,
+        progress_interval_sec=config.progress_interval_sec,
+        default_timeout_sec=config.command_timeout_sec,
+        sim_vivado_auto_complete_on_replay=config.sim_vivado_auto_complete_on_replay,
+        sim_vivado_replay_check_sec=config.sim_vivado_replay_check_sec,
+    )
 
 
 MENU_USAGE: dict[int, str] = {
@@ -169,6 +148,7 @@ MENU_USAGE: dict[int, str] = {
     17: "Usage: /task 17 <project>",
     18: "Usage: /task 18 <project>",
     19: "Usage: /task 19 <project> (--all | --dut <name>) [--force]",
+    20: "Usage: /task 20 <project> <folder_idx> <tb_idx>",
 }
 
 HIERARCHY_SCOPE_ALIASES: dict[str, str] = {
@@ -438,7 +418,7 @@ def parse_main_menu_registry(main_bat_path: Path, templates_root: Path) -> dict[
         script_path = (templates_root / script_rel.replace("\\", "/")).resolve()
         registry[menu_no] = MenuEntry(menu_no=menu_no, script_rel=script_rel, script_path=script_path)
 
-    missing = sorted(set(range(1, 20)) - set(registry.keys()))
+    missing = sorted(set(range(1, 21)) - set(registry.keys()))
     if missing:
         raise RuntimeError(f"MAIN.bat menu map is incomplete. Missing CMD entries: {missing}")
 
@@ -835,8 +815,6 @@ def format_status(current: dict[str, object] | None, last: dict[str, object] | N
             lines.append(f"🔹 <i>Menu:</i> <code>{current.get('menu_no')}</code>")
         if current.get("project"):
             lines.append(f"🔹 <i>Project:</i> <code>{html_escape(current.get('project'))}</code>")
-        if current.get("menu_no") == 5 and current.get("sim_vivado_close_gui") is not None:
-            lines.append(f"🔹 <i>close_gui:</i> <code>{current.get('sim_vivado_close_gui')}</code>")
         lines.append(f"⏱ <i>Elapsed:</i> <code>{elapsed}s</code>")
 
     if last is None:
@@ -887,7 +865,7 @@ def build_help(category: str = "core") -> tuple[str, dict[str, object]]:
             "🔸 /projects - <i>list valid projects</i>",
             "🔸 /status - <i>show running status</i>",
             "🔸 /last - <i>show last job result</i>",
-            "🔸 /task &lt;menu_no&gt; &lt;proj&gt; [args] - <i>run MAIN menu (1~19)</i>",
+            "🔸 /task &lt;menu_no&gt; &lt;proj&gt; [args] - <i>run MAIN menu (1~20)</i>",
             "🔸 /setup_project &lt;name&gt; [v|sv] - <i>run setup</i>",
             "🔸 /help - <i>show this help</i>",
         ])
@@ -902,11 +880,9 @@ def build_help(category: str = "core") -> tuple[str, dict[str, object]]:
         text = "\n".join([
             "🏃 <b>Simulation & Test:</b>",
             "🔹 /run - <i>Interactive Wizard 🪄</i>",
-            "🔹 /sim_vivado &lt;proj&gt; &lt;f_idx&gt; &lt;tb_idx&gt; [--close-gui|--keep-gui]",
+            "🔹 /sim_vivado &lt;proj&gt; &lt;f_idx&gt; &lt;tb_idx&gt;",
             "🔹 /sim_auto_report &lt;proj&gt; &lt;tb_idx&gt;",
             "🔹 /sim_iverilog &lt;proj&gt; (--all | --tb &lt;name&gt;)",
-            "",
-            "💡 <i>Tip: sim_vivado default is <code>--close-gui</code></i>"
         ])
     else: # docs
         text = "\n".join([
@@ -1241,38 +1217,7 @@ def send_report_artifacts(config: Config, chat_id: int, job: JobRequest, started
 
 
 def extract_hierarchy_log_candidates_from_run_log(run_log: Path) -> list[Path]:
-    if not run_log.exists():
-        return []
-
-    lines = read_log_tail_lines(run_log, max_bytes=400_000)
-    if not lines:
-        return []
-
-    out: list[Path] = []
-    seen: set[Path] = set()
-    file_re = re.compile(r"^\[INFO\]\s+Hierarchy log file\s*:\s*(.+?)\s*$", re.IGNORECASE)
-    dir_re = re.compile(r"^\[INFO\]\s+Hierarchy logs?\s*:\s*(.+?)\s*$", re.IGNORECASE)
-
-    for raw in lines:
-        line = raw.strip()
-        m_file = file_re.match(line)
-        if m_file:
-            path = Path(m_file.group(1).strip().strip('"'))
-            if path not in seen:
-                seen.add(path)
-                out.append(path)
-            continue
-
-        m_dir = dir_re.match(line)
-        if m_dir:
-            directory = Path(m_dir.group(1).strip().strip('"'))
-            for path in sorted(directory.glob("hierarchy*.log")):
-                if path in seen:
-                    continue
-                seen.add(path)
-                out.append(path)
-
-    return out
+    return collector_extract_hierarchy_log_candidates_from_run_log(run_log, FILESYSTEM_READER)
 
 
 def list_recent_hierarchy_logs(
@@ -1281,51 +1226,13 @@ def list_recent_hierarchy_logs(
     run_log: Path | None = None,
     require_fresh: bool = False,
 ) -> list[Path]:
-    candidates: list[Path] = []
-    seen: set[Path] = set()
-    hinted_set: set[Path] = set()
-
-    if run_log is not None:
-        for path in extract_hierarchy_log_candidates_from_run_log(run_log):
-            if path in seen:
-                continue
-            seen.add(path)
-            hinted_set.add(path)
-            candidates.append(path)
-
-    for root in job.artifact_paths:
-        if root.name.lower() != "log":
-            continue
-        hierarchy_root = root / "hierarchy"
-        if not hierarchy_root.exists():
-            continue
-        for path in sorted(hierarchy_root.glob("hierarchy*.log")):
-            if path in seen:
-                continue
-            seen.add(path)
-            candidates.append(path)
-
-    if not candidates:
-        return []
-
-    scored: list[tuple[int, int, float, Path]] = []
-    for path in candidates:
-        try:
-            mtime = path.stat().st_mtime
-        except OSError:
-            continue
-
-        hinted = 1 if path in hinted_set else 0
-        fresh = 1 if mtime >= (started_ts - HIERARCHY_LOG_FRESH_SLACK_SEC) else 0
-        if require_fresh and fresh == 0 and hinted == 0:
-            continue
-        scored.append((hinted, fresh, mtime, path))
-
-    if not scored:
-        return []
-
-    scored.sort(key=lambda item: (item[0], item[1], item[2]), reverse=True)
-    return [item[3] for item in scored]
+    return collector_list_recent_hierarchy_logs(
+        job.to_command_spec(),
+        started_ts,
+        run_log=run_log,
+        require_fresh=require_fresh,
+        reader=FILESYSTEM_READER,
+    )
 
 
 def find_recent_hierarchy_log(
@@ -1334,41 +1241,17 @@ def find_recent_hierarchy_log(
     run_log: Path | None = None,
     require_fresh: bool = False,
 ) -> Path | None:
-    logs = list_recent_hierarchy_logs(job, started_ts, run_log=run_log, require_fresh=require_fresh)
-    return logs[0] if logs else None
+    return collector_find_recent_hierarchy_log(
+        job.to_command_spec(),
+        started_ts,
+        run_log=run_log,
+        require_fresh=require_fresh,
+        reader=FILESYSTEM_READER,
+    )
 
 
 def extract_vivado_log_candidates_from_run_log(run_log: Path) -> list[Path]:
-    if not run_log.exists():
-        return []
-    lines = read_log_tail_lines(run_log, max_bytes=400_000)
-    if not lines:
-        return []
-
-    out: list[Path] = []
-    seen: set[Path] = set()
-    file_re = re.compile(r"^\[INFO\]\s+Vivado log file\s*:\s*(.+?)\s*$", re.IGNORECASE)
-    dir_re = re.compile(r"^\[INFO\]\s+Vivado logs?\s*:\s*(.+?)\s*$", re.IGNORECASE)
-
-    for raw in lines:
-        line = raw.strip()
-        m_file = file_re.match(line)
-        if m_file:
-            p = Path(m_file.group(1).strip().strip('"'))
-            if p not in seen:
-                seen.add(p)
-                out.append(p)
-            continue
-
-        m_dir = dir_re.match(line)
-        if m_dir:
-            d = Path(m_dir.group(1).strip().strip('"'))
-            for name in ("vivado_sim.log", "vivado.log"):
-                p = d / name
-                if p not in seen:
-                    seen.add(p)
-                    out.append(p)
-    return out
+    return collector_extract_vivado_log_candidates_from_run_log(run_log, FILESYSTEM_READER)
 
 
 def is_log_fresh_for_run(log_path: Path, started_ts: float, slack_sec: float = VIVADO_LOG_FRESH_SLACK_SEC) -> bool:
@@ -1384,71 +1267,16 @@ def list_recent_vivado_sim_logs(
     started_ts: float,
     run_log: Path | None = None,
     require_fresh: bool = False,
+    lookup_ts: float | None = None,
 ) -> list[Path]:
-    candidates: list[Path] = []
-    seen: set[Path] = set()
-    hinted_set: set[Path] = set()
-
-    if run_log is not None:
-        hinted = extract_vivado_log_candidates_from_run_log(run_log)
-        for path in hinted:
-            if path in seen:
-                continue
-            seen.add(path)
-            hinted_set.add(path)
-            candidates.append(path)
-
-    for root in job.artifact_paths:
-        root_name = root.name.lower()
-        if root_name not in {"log", "vivado_sim", "tb"}:
-            continue
-        if not root.exists():
-            continue
-
-        search_root = root / "vivado_sim" if root_name == "log" else root
-        if not search_root.exists():
-            continue
-
-        preferred = search_root / "vivado_sim.log"
-        if preferred.is_file() and preferred not in seen:
-            seen.add(preferred)
-            candidates.append(preferred)
-
-        if root_name == "tb":
-            for path in sorted(search_root.rglob("vivado_sim*.log")):
-                if not path.is_file() or path in seen:
-                    continue
-                seen.add(path)
-                candidates.append(path)
-            continue
-
-        for path in sorted(search_root.glob("*.log")):
-            if not path.is_file() or path in seen:
-                continue
-            seen.add(path)
-            candidates.append(path)
-
-    if not candidates:
-        return []
-
-    scored: list[tuple[int, int, int, float, Path]] = []
-    for path in candidates:
-        try:
-            mtime = path.stat().st_mtime
-        except OSError:
-            continue
-        fresh = 1 if mtime >= (started_ts - VIVADO_LOG_FRESH_SLACK_SEC) else 0
-        if require_fresh and fresh == 0 and path not in hinted_set:
-            continue
-        hinted = 1 if path in hinted_set else 0
-        name = path.name.lower()
-        priority = 2 if name == "vivado_sim.log" else 1 if name.startswith("vivado_sim") else 0
-        scored.append((fresh, hinted, priority, mtime, path))
-
-    if not scored:
-        return []
-    scored.sort(key=lambda item: (item[0], item[1], item[2], item[3]), reverse=True)
-    return [item[4] for item in scored]
+    return collector_list_recent_vivado_sim_logs(
+        job.to_command_spec(),
+        started_ts,
+        run_log=run_log,
+        require_fresh=require_fresh,
+        lookup_ts=lookup_ts,
+        reader=FILESYSTEM_READER,
+    )
 
 
 def find_recent_vivado_sim_log(
@@ -1456,14 +1284,16 @@ def find_recent_vivado_sim_log(
     started_ts: float,
     run_log: Path | None = None,
     require_fresh: bool = False,
+    lookup_ts: float | None = None,
 ) -> Path | None:
-    logs = list_recent_vivado_sim_logs(
-        job,
+    return collector_find_recent_vivado_sim_log(
+        job.to_command_spec(),
         started_ts,
         run_log=run_log,
         require_fresh=require_fresh,
+        lookup_ts=lookup_ts,
+        reader=FILESYSTEM_READER,
     )
-    return logs[0] if logs else None
 
 
 def read_log_tail_lines(log_path: Path, max_bytes: int = 1_000_000) -> list[str]:
@@ -1485,90 +1315,15 @@ def read_log_tail_lines(log_path: Path, max_bytes: int = 1_000_000) -> list[str]
 
 
 def extract_hierarchy_lines(log_path: Path) -> list[str]:
-    lines = read_log_tail_lines(log_path)
-    if not lines:
-        return []
-
-    hier_lines: list[str] = []
-    capture = False
-    start_markers = (
-        "+--",
-        "\\--",
-        "[SV Declarations]",
-        "[TB Folders]",
-        "[TB Folder]",
-        "No modules found.",
-        "No TB folders found.",
-        "No TB top modules/programs found.",
-    )
-
-    for raw in lines:
-        clean_line = raw.rstrip("\r\n")
-        stripped = clean_line.strip()
-
-        if not capture and any(marker in clean_line for marker in start_markers):
-            capture = True
-
-        if not capture:
-            continue
-
-        if (
-            "------------------------------------------------------------" in clean_line
-            or stripped.startswith("Command")
-            or stripped.startswith("**********************")
-            or stripped.startswith("Transcript started")
-            or stripped.startswith("Transcript stopped")
-        ):
-            break
-
-        hier_lines.append(html_escape(clean_line))
-
-    while hier_lines and not hier_lines[-1].strip():
-        hier_lines.pop()
-    return hier_lines
+    return collector_extract_hierarchy_lines(log_path, FILESYSTEM_READER)
 
 
 def extract_replay_log_excerpt(log_path: Path, max_lines: int) -> tuple[list[str], bool, bool]:
-    lines = read_log_tail_lines(log_path)
-    if not lines:
-        return [], False, False
-
-    marker_idx = -1
-    for idx, line in enumerate(lines):
-        if "Auto replay: restart + run all" in line:
-            marker_idx = idx
-
-    if marker_idx < 0:
-        for idx, line in enumerate(lines):
-            lower = line.lower()
-            if "restart" in lower and "run all" in lower:
-                marker_idx = idx
-
-    excerpt = lines[marker_idx:] if marker_idx >= 0 else lines
-    truncated = False
-    if max_lines > 0 and len(excerpt) > max_lines:
-        excerpt = excerpt[-max_lines:]
-        truncated = True
-
-    return excerpt, marker_idx >= 0, truncated
+    return collector_extract_replay_log_excerpt(log_path, max_lines, FILESYSTEM_READER)
 
 
 def parse_replay_state_from_lines(lines: list[str]) -> str | None:
-    for line in reversed(lines):
-        lower = line.lower()
-        if "auto replay completed" in lower:
-            return "success"
-        if "run all completed" in lower and "auto replay" in lower:
-            return "success"
-        if "run all failed" in lower and "auto replay" in lower:
-            return "fail"
-        if "restart failed" in lower and "auto replay" in lower:
-            return "fail"
-        if "keeping vivado gui open by user choice" in lower:
-            return "success"
-        if "close request sent to vivado" in lower:
-            return "success"
-    return None
+    return collector_parse_replay_state_from_lines(lines)
 
 
 def filter_sim_vivado_key_lines(lines: list[str], max_lines: int = 80) -> list[str]:
@@ -1608,7 +1363,7 @@ def build_sim_vivado_summary_text(log_path: Path, excerpt_lines: list[str], mark
     run_case_re = re.compile(r"\[TB\]\[INFO\]\s+RUN CASE\s+(\d+)\s*/\s*(\d+)", re.IGNORECASE)
     test_re = re.compile(r"\[TB\]\[INFO\]\s+Selected TESTNAME=([^\s]+)", re.IGNORECASE)
     env_re = re.compile(
-        r"\[TB\]\[INFO\]\s+ENV report:\s+checked=(\d+)\s+errors=(\d+)\s+coverage=([0-9.]+)%",
+        r"\[TB\]\[INFO\]\s+ENV report:\s+checked=(\d+)\s+errors=(\d+)(?:\s+coverage=([0-9.]+)%)?",
         re.IGNORECASE,
     )
 
@@ -1618,6 +1373,19 @@ def build_sim_vivado_summary_text(log_path: Path, excerpt_lines: list[str], mark
     warnings: list[str] = []
     errors: list[str] = []
     finish_line = ""
+    current_test = "?"
+
+    def append_case_row(test_name: str = "?") -> dict[str, str]:
+        row = {
+            "idx": str(len(case_rows) + 1),
+            "total": str(len(case_rows) + 1),
+            "test": test_name or "?",
+            "checked": "-",
+            "errors": "-",
+            "coverage": "-",
+        }
+        case_rows.append(row)
+        return row
 
     for line in cleaned:
         lower = line.lower()
@@ -1639,7 +1407,7 @@ def build_sim_vivado_summary_text(log_path: Path, excerpt_lines: list[str], mark
                 {
                     "idx": m_case.group(1),
                     "total": m_case.group(2),
-                    "test": "?",
+                    "test": current_test,
                     "checked": "-",
                     "errors": "-",
                     "coverage": "-",
@@ -1648,15 +1416,25 @@ def build_sim_vivado_summary_text(log_path: Path, excerpt_lines: list[str], mark
             continue
 
         m_test = test_re.search(line)
-        if m_test and case_rows:
-            case_rows[-1]["test"] = m_test.group(1)
+        if m_test:
+            current_test = m_test.group(1)
+            if not case_rows:
+                append_case_row(current_test)
+            elif case_rows[-1]["test"] in {"", "?"} and case_rows[-1]["checked"] == "-":
+                case_rows[-1]["test"] = current_test
+            elif case_rows[-1]["test"] != current_test and case_rows[-1]["checked"] != "-":
+                append_case_row(current_test)
+            else:
+                case_rows[-1]["test"] = current_test
             continue
 
         m_env = env_re.search(line)
-        if m_env and case_rows:
+        if m_env:
+            if not case_rows or case_rows[-1]["checked"] != "-":
+                append_case_row(current_test)
             case_rows[-1]["checked"] = m_env.group(1)
             case_rows[-1]["errors"] = m_env.group(2)
-            case_rows[-1]["coverage"] = m_env.group(3)
+            case_rows[-1]["coverage"] = m_env.group(3) or "-"
 
     lines: list[str] = ["📊 <b>[SIM_VIVADO_SUMMARY]</b>"]
     lines.append(f"📄 <i>log_file:</i> <code>{html_escape(log_path.name)}</code>")
@@ -1735,6 +1513,7 @@ def find_sim_vivado_prompt_ipc_flags(
     started_ts: float,
     run_log: Path | None = None,
 ) -> tuple[Path | None, Path | None, Path | None]:
+    prompt_ipc_stale_slack_sec = 5.0
     search_roots: list[Path] = []
     seen_roots: set[Path] = set()
 
@@ -1783,6 +1562,8 @@ def find_sim_vivado_prompt_ipc_flags(
                 req_mtime = request_flag.stat().st_mtime
             except OSError:
                 req_mtime = 0.0
+            if req_mtime < (started_ts - prompt_ipc_stale_slack_sec):
+                continue
             if req_mtime > best_mtime:
                 best_mtime = req_mtime
                 best_req = request_flag
@@ -1887,257 +1668,11 @@ def build_menu_invocation(
     extra_tokens: list[str],
     command_name: str,
 ) -> tuple[JobRequest | None, str | None]:
-    entry = config.menu_registry.get(menu_no)
-    if entry is None:
-        return None, f"Menu {menu_no} is not available in MAIN.bat mapping."
-
-    if not entry.script_path.exists():
-        return None, f"Mapped script not found for menu {menu_no}: {entry.script_path}"
-
-    script_args: list[str] = [str(project_path)]
-    stdin_lines: list[str] = []
-    tokens = [t for t in extra_tokens if t.strip()]
-    sim_vivado_close_gui: bool | None = None
-
-    usage = MENU_USAGE.get(menu_no, f"Usage: /task {menu_no} <project> [args...]")
-
-    if menu_no in {1, 3}:
-        if not tokens:
-            return None, usage
-        modules, err = parse_module_selection(" ".join(tokens))
-        if err:
-            return None, f"{usage}\n{err}"
-        stdin_lines.extend([modules or "", ""])
-
-    elif menu_no == 2:
-        scope_flag = ""
-        flags: list[str] = []
-
-        for token in tokens:
-            lower = token.lower()
-            normalized_scope = normalize_hierarchy_scope(lower)
-            if normalized_scope:
-                if scope_flag:
-                    return None, f"{usage}\nOnly one scope can be specified."
-                scope_flag = normalized_scope
-            elif lower in {"--once", "--tb-only"}:
-                flags.append(lower)
-            else:
-                return None, usage
-
-        if scope_flag:
-            scope_flag_cli = HIERARCHY_SCOPE_FLAGS.get(scope_flag, "")
-            if scope_flag_cli:
-                flags.append(scope_flag_cli)
-
-        if "--once" not in flags:
-            flags.insert(0, "--once")
-
-        script_args.extend(flags)
-
-    elif menu_no == 4:
-        if len(tokens) > 1:
-            return None, usage
-        if not tokens:
-            script_args.append("N")
-        else:
-            decision = parse_yes_no_token(tokens[0])
-            if decision is None:
-                return None, usage
-            script_args.append("Y" if decision else "N")
-        stdin_lines.append("")
-
-    elif menu_no == 5:
-        if len(tokens) < 2 or len(tokens) > 3:
-            return None, usage
-        folder_idx, err = parse_positive_int(tokens[0], "folder_idx")
-        if err:
-            return None, f"{usage}\n{err}"
-        tb_idx, err = parse_positive_int(tokens[1], "tb_idx")
-        if err:
-            return None, f"{usage}\n{err}"
-        # Default for bot mode: close GUI after replay unless user explicitly keeps it.
-        sim_vivado_close_gui = True
-        if len(tokens) == 3:
-            parsed_choice = parse_sim_vivado_close_choice(tokens[2])
-            if parsed_choice is None:
-                return None, f"{usage}\nclose-gui option must be --close-gui or --keep-gui."
-            sim_vivado_close_gui = parsed_choice
-        # Keep final close prompt undecided until replay completion (Telegram button decision).
-        stdin_lines.extend([str(folder_idx), str(tb_idx)])
-
-    elif menu_no == 6:
-        if len(tokens) != 1:
-            return None, usage
-        tb_idx, err = parse_positive_int(tokens[0], "tb_idx")
-        if err:
-            return None, f"{usage}\n{err}"
-        stdin_lines.extend([str(tb_idx), ""])
-
-    elif menu_no == 7:
-        mode_all = False
-        tb_name = ""
-
-        i = 0
-        while i < len(tokens):
-            token = tokens[i]
-            lower = token.lower()
-            if lower == "--all":
-                mode_all = True
-            elif lower == "--tb":
-                if i + 1 >= len(tokens):
-                    return None, usage
-                tb_name = tokens[i + 1]
-                i += 1
-            elif lower.startswith("--tb="):
-                tb_name = token.split("=", 1)[1].strip()
-            elif lower == "--no-pause":
-                pass
-            else:
-                return None, usage
-            i += 1
-
-        if mode_all and tb_name:
-            return None, f"{usage}\nUse either --all or --tb, not both."
-        if not mode_all and not tb_name:
-            return None, usage
-
-        if mode_all:
-            script_args.append("--all")
-        else:
-            script_args.extend(["--tb", tb_name])
-        script_args.append("--no-pause")
-
-    elif menu_no == 8:
-        if any(t.lower() != "--no-pause" for t in tokens):
-            return None, usage
-        script_args.append("--no-pause")
-
-    elif menu_no == 9:
-        i = 0
-        while i < len(tokens):
-            token = tokens[i]
-            lower = token.lower()
-
-            if lower in {"--html", "--no-html", "--no-pause"}:
-                script_args.append(lower)
-            elif lower in {"--step", "--max-signals"}:
-                if i + 1 >= len(tokens):
-                    return None, usage
-                value, err = parse_positive_int(tokens[i + 1], lower)
-                if err:
-                    return None, f"{usage}\n{err}"
-                script_args.extend([lower, str(value)])
-                i += 1
-            elif lower.startswith("--step="):
-                value, err = parse_positive_int(token.split("=", 1)[1], "--step")
-                if err:
-                    return None, f"{usage}\n{err}"
-                script_args.extend(["--step", str(value)])
-            elif lower.startswith("--max-signals="):
-                value, err = parse_positive_int(token.split("=", 1)[1], "--max-signals")
-                if err:
-                    return None, f"{usage}\n{err}"
-                script_args.extend(["--max-signals", str(value)])
-            else:
-                return None, usage
-            i += 1
-
-        if "--no-pause" not in [a.lower() for a in script_args]:
-            script_args.append("--no-pause")
-
-    elif menu_no in {10, 11, 12, 14, 15, 18}:
-        if tokens:
-            return None, usage
-        stdin_lines.append("")
-
-    elif menu_no == 13:
-        has_auto_program = False
-        for token in tokens:
-            lower = token.lower()
-            if lower == "--auto-program":
-                has_auto_program = True
-                script_args.append("--auto-program")
-            elif lower == "--no-pause":
-                script_args.append("--no-pause")
-            else:
-                return None, usage
-
-        if "--no-pause" not in [a.lower() for a in script_args]:
-            script_args.append("--no-pause")
-        if not has_auto_program:
-            stdin_lines.append("N")
-
-    elif menu_no == 16:
-        if any(t.lower() != "--no-pause" for t in tokens):
-            return None, usage
-        script_args.append("--no-pause")
-
-    elif menu_no == 17:
-        if tokens:
-            return None, usage
-
-    elif menu_no == 19:
-        apply_all = False
-        dut_name = ""
-        force_write = False
-
-        i = 0
-        while i < len(tokens):
-            token = tokens[i]
-            lower = token.lower()
-            if lower == "--all":
-                apply_all = True
-            elif lower == "--dut":
-                if i + 1 >= len(tokens):
-                    return None, usage
-                dut_name = tokens[i + 1]
-                i += 1
-            elif lower.startswith("--dut="):
-                dut_name = token.split("=", 1)[1].strip()
-            elif lower == "--force":
-                force_write = True
-            elif lower == "--no-pause":
-                pass
-            else:
-                return None, usage
-            i += 1
-
-        if apply_all and dut_name:
-            return None, f"{usage}\nUse either --all or --dut, not both."
-        if not apply_all and not dut_name:
-            return None, usage
-
-        if apply_all:
-            script_args.append("--all")
-        else:
-            script_args.extend(["--dut", dut_name])
-        if force_write:
-            script_args.append("--force")
-        script_args.append("--no-pause")
-
-    else:
-        return None, f"Menu {menu_no} is not supported."
-
-    stdin_text = format_stdin(stdin_lines)
-    cmd = tuple(["cmd.exe", "/c", str(entry.script_path), *script_args])
-    artifacts = (project_path / "log", project_path / "output")
-    if menu_no == 5:
-        artifacts = (project_path / "tb",) + artifacts
-
-    return (
-        JobRequest(
-            command_name=command_name,
-            menu_no=menu_no,
-            project_name=project_path.name,
-            script_path=entry.script_path,
-            cwd=config.automation_repo_root,
-            cmd=cmd,
-            stdin_text=stdin_text,
-            artifact_paths=artifacts,
-            sim_vivado_close_gui=sim_vivado_close_gui,
-        ),
-        None,
+    return make_command_resolver(config).build_menu_invocation(
+        menu_no=menu_no,
+        project_path=project_path,
+        extra_tokens=extra_tokens,
+        command_id=command_name,
     )
 
 
@@ -2146,58 +1681,119 @@ def build_setup_project_invocation(
     project_name: str,
     hdl_ext: str,
 ) -> tuple[JobRequest | None, str | None]:
-    name = project_name.strip()
-    if not name:
-        return None, "Usage: /setup_project <name> [v|sv]"
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
-        return None, "Project name can only contain letters, digits, underscore, dot, and dash."
+    return make_command_resolver(config).build_setup_project_invocation(project_name, hdl_ext)
 
-    ext = hdl_ext.strip().lower() if hdl_ext else "v"
-    if ext not in {"v", "sv"}:
-        return None, "Usage: /setup_project <name> [v|sv]"
 
-    script_path = (
-        config.automation_templates_root
-        / "contexts"
-        / "project_bootstrap"
-        / "adapters"
-        / "bat"
-        / "project_create.bat"
-    ).resolve()
-    if not script_path.exists():
-        return None, f"Setup script not found: {script_path}"
-
-    cmd = (
-        "cmd.exe",
-        "/c",
-        str(script_path),
-        name,
-        f"--hdl-ext={ext}",
-        "--no-pause",
+def build_hierarchy_result_markup(config: Config, result: ExecutionResult) -> dict[str, object] | None:
+    project_name = str(result.structured_payload.get("project_name", "")).strip()
+    if result.command_id != "hierarchy" or result.return_code != 0 or not project_name:
+        return None
+    scope_value = str(result.structured_payload.get("hierarchy_scope", "src"))
+    scope = "tb" if scope_value == "tb_only" else "src"
+    s1 = "🟢 [S1] src only" if scope == "src" else "⚪ [S1] src only"
+    s3 = "🟢 [S3] tb only" if scope == "tb" else "⚪ [S3] tb only"
+    markup: dict[str, object] = {
+        "inline_keyboard": [
+            [
+                {"text": s1, "callback_data": f"hier_src_{project_name}"},
+                {"text": s3, "callback_data": f"hier_tb_{project_name}"},
+            ]
+        ]
+    }
+    if scope == "tb":
+        project_path, project_error = resolve_project(config.project_root, project_name)
+        if project_error is None and project_path is not None:
+            tb_folder_targets = find_vivado_tb_targets(config, project_path)
+            folder_buttons: list[dict[str, str]] = []
+            for folder_target in tb_folder_targets:
+                folder_idx = int(folder_target.get("folder_idx", 0))
+                display_name = get_hierarchy_tb_folder_label(folder_target)
+                folder_buttons.append(
+                    {
+                        "text": f"📂 [{folder_idx}] {display_name}",
+                        "callback_data": f"hier_tbf_{folder_idx}_{project_name}",
+                    }
+                )
+            if folder_buttons:
+                markup["inline_keyboard"].extend(
+                    build_inline_keyboard_rows(folder_buttons, row_size=1)["inline_keyboard"]
+                )
+    markup["inline_keyboard"].append(
+        [
+            {"text": "🔄 Refresh", "callback_data": f"hier_ref_{scope}_{project_name}"},
+            {"text": "❌ Quit", "callback_data": "hier_quit"},
+        ]
     )
+    return markup
 
-    return (
-        JobRequest(
-            command_name="setup_project",
-            menu_no=None,
-            project_name=name,
-            script_path=script_path,
-            cwd=config.automation_repo_root,
-            cmd=cmd,
-            stdin_text=None,
-            artifact_paths=(config.project_root / name,),
-            sim_vivado_close_gui=None,
-        ),
-        None,
+
+def send_execution_artifacts(config: Config, chat_id: int, result: ExecutionResult) -> None:
+    seen: set[Path] = set()
+    if result.return_code != 0 and result.run_log_path is not None and result.run_log_path.exists():
+        safe_send_document(config, chat_id, result.run_log_path, f"{result.command_id} | {result.run_log_path.name}")
+
+    for artifact in result.artifacts:
+        path = artifact.path
+        if path in seen or not path.exists() or not path.is_file():
+            continue
+        seen.add(path)
+        if artifact.kind == "diagram" and not config.send_diagrams:
+            continue
+        if artifact.kind == "hierarchy_log":
+            continue
+        suffix = path.suffix.lower()
+        caption = f"{result.command_id} | {artifact.label or path.name}"
+        if suffix in {".png", ".jpg", ".jpeg", ".webp"}:
+            safe_send_photo(config, chat_id, path, caption)
+            continue
+        if suffix == ".svg":
+            preview = render_svg_preview(path)
+            temp_preview: Path | None = None
+            if preview is not None:
+                temp_preview = preview if preview != path.with_suffix(".png") else None
+                safe_send_photo(config, chat_id, preview, f"{result.command_id} | {path.stem}.png")
+            safe_send_document(config, chat_id, path, caption)
+            if temp_preview is not None:
+                try:
+                    temp_preview.unlink(missing_ok=True)
+                except Exception:
+                    pass
+            continue
+        if artifact.kind == "vivado_sim_log" and not config.sim_vivado_send_log_file:
+            continue
+        safe_send_document(config, chat_id, path, caption)
+
+
+def send_sim_vivado_result_summary(config: Config, chat_id: int, result: ExecutionResult) -> None:
+    if result.command_id != "sim_vivado":
+        return
+    excerpt = result.structured_payload.get("vivado_log_excerpt")
+    if not isinstance(excerpt, list) or not excerpt:
+        return
+    log_path: Path | None = None
+    raw_log_path = result.structured_payload.get("vivado_log_path")
+    if isinstance(raw_log_path, str) and raw_log_path.strip():
+        log_path = Path(raw_log_path)
+    else:
+        for artifact in result.artifacts:
+            if artifact.kind == "vivado_sim_log":
+                log_path = artifact.path
+                break
+
+    summary_text = build_sim_vivado_summary_text(
+        log_path=log_path or Path("vivado_sim.log"),
+        excerpt_lines=[str(line) for line in excerpt],
+        marker_found=bool(result.structured_payload.get("vivado_log_excerpt_marker_found")),
+        truncated=bool(result.structured_payload.get("vivado_log_excerpt_truncated")),
     )
+    safe_send_text(config, chat_id, summary_text)
 
 def launch_job_async(config: Config, chat_id: int, job: JobRequest) -> None:
     job_info = {
-        "command": job.command_name,
+        "command": job.command_id or job.command_name,
         "menu_no": job.menu_no,
         "project": job.project_name,
         "started_at": time.time(),
-        "sim_vivado_close_gui": job.sim_vivado_close_gui,
     }
 
     if not STATE.try_start_job(job_info):
@@ -2214,358 +1810,55 @@ def launch_job_async(config: Config, chat_id: int, job: JobRequest) -> None:
 
 
 def run_job_worker(config: Config, chat_id: int, job: JobRequest) -> None:
-    start_ts = time.time()
-    duration = 0
-    result_rc = -1
+    result: ExecutionResult | None = None
     finished_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
-
-    sanitized = re.sub(r"[^A-Za-z0-9_-]", "_", job.command_name)[:40]
-    if not sanitized:
-        sanitized = "task"
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    run_log = Path(tempfile.gettempdir()) / f"telegram_fpga_{sanitized}_{timestamp}.log"
-
-    timed_out = False
-    sim_vivado_replay_state: str | None = None
-    sim_vivado_replay_source: str | None = None
-    sim_vivado_auto_completed = False
-    sim_vivado_controller_detached = False
-    sim_vivado_close_decision: str | None = None
-
     try:
         if os.name != "nt":
             safe_send_text(config, chat_id, "This bot launcher must run on Windows (cmd.exe required).")
             return
-
         if not job.script_path.exists():
             safe_send_text(config, chat_id, f"Script not found: {job.script_path}")
             return
 
-        start_lines = [f"🚀 <b>[START]</b> <i>command=</i><code>{html_escape(job.command_name)}</code>"]
-        if job.menu_no is not None:
-            start_lines.append(f"🔹 <i>menu=</i><code>{job.menu_no}</code>")
-        if job.project_name:
-            start_lines.append(f"🔹 <i>project=</i><code>{html_escape(job.project_name)}</code>")
-        start_lines.append(f"🔹 <i>script=</i><code>{html_escape(job.script_path.name)}</code>")
-        safe_send_text(config, chat_id, "\n".join(start_lines))
+        safe_send_text(
+            config,
+            chat_id,
+            TELEGRAM_PRESENTER.build_start_text(job),
+        )
 
-        with run_log.open("w", encoding="utf-8", errors="replace") as out:
-            proc = subprocess.Popen(
-                list(job.cmd),
-                cwd=str(job.cwd),
-                stdout=out,
-                stderr=subprocess.STDOUT,
-                stdin=subprocess.PIPE if job.stdin_text is not None else None,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                env=os.environ.copy(),
-            )
-
-            sim_vivado_stdin = proc.stdin if (job.menu_no == 5 and proc.stdin is not None) else None
-            if job.stdin_text is not None and proc.stdin is not None:
-                proc.stdin.write(job.stdin_text)
-                proc.stdin.flush()
-                if job.menu_no != 5:
-                    proc.stdin.close()
-
-            last_progress = time.time()
-            last_replay_check = 0.0
-
-            while True:
-                rc = proc.poll()
-                now = time.time()
-                elapsed = int(now - start_ts)
-
-                if rc is not None:
-                    result_rc = int(rc)
-                    break
-
-                if elapsed >= config.command_timeout_sec:
-                    timed_out = True
-                    proc.kill()
-                    try:
-                        proc.wait(timeout=5)
-                    except Exception:
-                        pass
-                    result_rc = 124
-                    break
-
-                if (
-                    job.menu_no == 5
-                    and config.sim_vivado_auto_complete_on_replay
-                    and (now - last_replay_check) >= config.sim_vivado_replay_check_sec
-                ):
-                    last_replay_check = now
-                    replay_state = detect_replay_completion_from_run_log(run_log)
-                    replay_source = "run_log"
-                    replay_log_path: Path | None = run_log
-                    request_flag, close_flag, keep_flag = find_sim_vivado_prompt_ipc_flags(
-                        job,
-                        start_ts,
-                        run_log=run_log,
-                    )
-                    if replay_state is None and request_flag is not None and request_flag.exists():
-                        replay_state = "success"
-                        replay_source = "prompt_ipc"
-                        replay_log_path = request_flag
-                    if replay_state is None:
-                        replay_state, replay_log_path = detect_replay_completion_from_vivado_logs(
-                            job,
-                            start_ts,
-                            run_log=run_log,
-                        )
-                        replay_source = "vivado_log"
-                    if replay_state is not None:
-                        sim_vivado_replay_state = replay_state
-                        sim_vivado_replay_source = replay_source
-                        sim_vivado_auto_completed = True
-                        if replay_state != "success":
-                            safe_send_text(
-                                config,
-                                chat_id,
-                                "\n".join(
-                                    [
-                                        "❌ <b>[INFO]</b> sim_vivado replay failed.",
-                                        f"🔹 <i>source=</i><code>{html_escape(replay_source)}</code>",
-                                        f"📄 <i>log=</i><code>{html_escape(replay_log_path.name if replay_log_path else '(unknown)')}</code>",
-                                    ]
-                                ),
-                            )
-                            result_rc = 1
-                            break
-
-                        if request_flag is None or close_flag is None or keep_flag is None:
-                            request_flag, close_flag, keep_flag = find_sim_vivado_prompt_ipc_flags(
-                                job,
-                                start_ts,
-                                run_log=run_log,
-                            )
-                        prompt_token = uuid.uuid4().hex[:10]
-                        prompt_event = threading.Event()
-                        STATE.register_sim_vivado_prompt(
-                            prompt_token,
-                            {
-                                "event": prompt_event,
-                                "decision": None,
-                                "resolved": False,
-                                "request_flag": request_flag,
-                                "close_flag": close_flag,
-                                "keep_flag": keep_flag,
-                            },
-                        )
-                        prompt_markup = {
-                            "inline_keyboard": [
-                                [
-                                    {"text": "🛑 Close GUI", "callback_data": f"simgui_c_{prompt_token}"},
-                                    {"text": "🖥 Keep GUI", "callback_data": f"simgui_k_{prompt_token}"},
-                                ]
-                            ]
-                        }
-                        safe_send_text(
-                            config,
-                            chat_id,
-                            "\n".join(
-                                [
-                                    "✨ <b>[INFO]</b> run all completed.",
-                                    f"🔹 <i>source=</i><code>{html_escape(replay_source)}</code>",
-                                    f"📄 <i>log=</i><code>{html_escape(replay_log_path.name if replay_log_path else '(unknown)')}</code>",
-                                    "<b>Close Vivado GUI now?</b>",
-                                ]
-                            ),
-                            reply_markup=prompt_markup,
-                        )
-
-                        chosen_decision: str | None = None
-                        if prompt_event.wait(timeout=SIM_VIVADO_PROMPT_TIMEOUT_SEC):
-                            prompt_state = STATE.get_sim_vivado_prompt(prompt_token)
-                            if prompt_state is not None:
-                                raw_decision = str(prompt_state.get("decision", "")).strip().lower()
-                                if raw_decision in {"close", "keep"}:
-                                    chosen_decision = raw_decision
-
-                        if chosen_decision is None:
-                            chosen_decision = "close" if job.sim_vivado_close_gui is not False else "keep"
-                            safe_send_text(
-                                config,
-                                chat_id,
-                                f"ℹ️ <b>[INFO]</b> No button response. Applying default: <code>{chosen_decision}</code>",
-                            )
-
-                        sim_vivado_close_decision = chosen_decision
-                        STATE.pop_sim_vivado_prompt(prompt_token)
-
-                        decision_written = False
-                        if sim_vivado_stdin is not None and not sim_vivado_stdin.closed:
-                            try:
-                                sim_vivado_stdin.write("y\r\n" if chosen_decision == "close" else "n\r\n")
-                                sim_vivado_stdin.flush()
-                                sim_vivado_stdin.close()
-                                decision_written = True
-                            except Exception:
-                                decision_written = False
-
-                        if chosen_decision == "close":
-                            sent_flag = decision_written or touch_signal_file(close_flag)
-                            if not sent_flag:
-                                terminate_process_tree(proc.pid)
-                            try:
-                                proc.wait(timeout=15)
-                            except Exception:
-                                terminate_process_tree(proc.pid)
-                                try:
-                                    proc.wait(timeout=8)
-                                except Exception:
-                                    pass
-                        else:
-                            if not decision_written:
-                                touch_signal_file(keep_flag)
-                            sim_vivado_controller_detached = True
-
-                        result_rc = 0
-                        break
-
-                if (now - last_progress) >= config.progress_interval_sec:
-                    progress_lines = [f"⏳ <b>[PROGRESS]</b> <i>command=</i><code>{html_escape(job.command_name)}</code>", f"⏱ <i>elapsed=</i><code>{elapsed}s</code>"]
-                    if job.menu_no is not None:
-                        progress_lines.append(f"🔹 <i>menu=</i><code>{job.menu_no}</code>")
-                    if job.project_name:
-                        progress_lines.append(f"🔹 <i>project=</i><code>{html_escape(job.project_name)}</code>")
-                    safe_send_text(config, chat_id, "\n".join(progress_lines))
-                    last_progress = now
-
-                time.sleep(1)
-
-        duration = int(time.time() - start_ts)
+        execution_service = make_execution_service(config)
+        request = ExecutionRequest(
+            spec=job.to_command_spec(),
+            env_overrides={},
+            timeout_sec=config.command_timeout_sec,
+            run_label=job.command_id or job.command_name,
+            allow_detach=False,
+        )
+        result = execution_service.execute(
+            request,
+            on_progress=lambda elapsed: safe_send_text(
+                config,
+                chat_id,
+                TELEGRAM_PRESENTER.build_progress_text(job, elapsed),
+            ),
+        )
         finished_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
-        current_command_log: Path | None = None
-        current_command_log_label = "run_log"
-        if job.menu_no == 2:
-            current_command_log = find_recent_hierarchy_log(
-                job,
-                start_ts,
-                run_log=run_log,
-                require_fresh=not timed_out,
-            )
-            if current_command_log is not None:
-                current_command_log_label = "log"
-
-        if timed_out:
-            status_lines = [
-                f"⏰ <b>[TIMEOUT]</b> <i>command=</i><code>{html_escape(job.command_name)}</code>",
-                f"⏱ <i>limit=</i><code>{config.command_timeout_sec}s</code> <i>elapsed=</i><code>{duration}s</code>",
-                f"📄 <i>{html_escape(current_command_log_label)}=</i><code>{html_escape((current_command_log or run_log).name)}</code>",
-            ]
-        else:
-            status = "✅ <b>[SUCCESS]</b>" if result_rc == 0 else "❌ <b>[FAIL]</b>"
-            status_lines = [
-                f"{status} <i>command=</i><code>{html_escape(job.command_name)}</code>",
-                f"🔹 <i>rc=</i><code>{result_rc}</code> ⏱ <i>elapsed=</i><code>{duration}s</code>",
-                f"📄 <i>{html_escape(current_command_log_label)}=</i><code>{html_escape((current_command_log or run_log).name)}</code>",
-            ]
-
-        if job.menu_no is not None:
-            status_lines.append(f"🔹 <i>menu=</i><code>{job.menu_no}</code>")
-        if job.project_name:
-            status_lines.append(f"🔹 <i>project=</i><code>{html_escape(job.project_name)}</code>")
-        if job.menu_no == 5 and job.sim_vivado_close_gui is not None:
-            status_lines.append(f"🔹 <i>close_gui=</i><code>{job.sim_vivado_close_gui}</code>")
-        if job.menu_no == 5 and sim_vivado_close_decision:
-            status_lines.append(f"🔹 <i>close_decision=</i><code>{html_escape(sim_vivado_close_decision)}</code>")
-        if sim_vivado_auto_completed:
-            status_lines.append(f"🔹 <i>sim_vivado_replay=</i><code>{html_escape(str(sim_vivado_replay_state))}</code>")
-            if sim_vivado_replay_source:
-                status_lines.append(f"🔹 <i>sim_vivado_replay_source=</i><code>{html_escape(sim_vivado_replay_source)}</code>")
-            if sim_vivado_controller_detached:
-                status_lines.append("🔹 <i>controller_detached=</i><code>1</code>")
-            status_lines.append("🔹 <i>auto_complete=</i><code>1</code>")
-
-        for path in job.artifact_paths:
-            status_lines.append(f"📎 <i>artifact=</i><code>{html_escape(path.name)}</code>")
-
-        markup = None
-        if not timed_out and result_rc == 0 and job.menu_no == 2 and job.project_name:
-            scope = "src"
-            if "--tb-only" in job.cmd:
-                scope = "tb"
-                
-            s1 = "🟢 [S1] src only" if scope == "src" else "⚪ [S1] src only"
-            s3 = "🟢 [S3] tb only" if scope == "tb" else "⚪ [S3] tb only"
-
-            markup = {
-                "inline_keyboard": [
-                    [
-                        {"text": s1, "callback_data": f"hier_src_{job.project_name}"},
-                        {"text": s3, "callback_data": f"hier_tb_{job.project_name}"}
-                    ],
-                ]
-            }
-
-            if scope == "tb":
-                project_path, project_error = resolve_project(config.project_root, job.project_name)
-                if project_error is None and project_path is not None:
-                    tb_folder_targets = find_vivado_tb_targets(config, project_path)
-                    folder_buttons: list[dict[str, str]] = []
-                    for folder_target in tb_folder_targets:
-                        folder_idx = int(folder_target.get("folder_idx", 0))
-                        display_name = get_hierarchy_tb_folder_label(folder_target)
-                        folder_buttons.append(
-                            {
-                                "text": f"📂 [{folder_idx}] {display_name}",
-                                "callback_data": f"hier_tbf_{folder_idx}_{job.project_name}",
-                            }
-                        )
-                    if folder_buttons:
-                        markup["inline_keyboard"].extend(
-                            build_inline_keyboard_rows(folder_buttons, row_size=1)["inline_keyboard"]
-                        )
-
-            markup["inline_keyboard"].append(
-                [
-                    {"text": "🔄 Refresh", "callback_data": f"hier_ref_{scope}_{job.project_name}"},
-                    {"text": "❌ Quit", "callback_data": "hier_quit"},
-                ]
-            )
-            
-            hierarchy_text_log = run_log if run_log.exists() else current_command_log
-            if hierarchy_text_log is None and current_command_log is not None and current_command_log.exists():
-                hierarchy_text_log = current_command_log
-            if hierarchy_text_log is not None and hierarchy_text_log.exists():
-                try:
-                    hier_lines = extract_hierarchy_lines(hierarchy_text_log)
-                    if not hier_lines and current_command_log is not None and current_command_log != hierarchy_text_log:
-                        hier_lines = extract_hierarchy_lines(current_command_log)
-                    if hier_lines:
-                        status_lines.append("")
-                        status_lines.append("🌳 <b>Hierarchy:</b>")
-                        status_lines.append("<pre>")
-                        status_lines.extend(hier_lines)
-                        status_lines.append("</pre>")
-                except Exception as e:
-                    status_lines.append(f"<i>Failed to parse hierarchy output: {e}</i>")
-
-        safe_send_text(config, chat_id, "\n".join(status_lines), reply_markup=markup)
-        if not timed_out:
-            send_sim_vivado_replay_logs(config, chat_id, job, start_ts, run_log=run_log)
-        if not timed_out and result_rc == 0:
-            send_diagram_artifacts(config, chat_id, job, start_ts)
-            send_report_artifacts(config, chat_id, job, start_ts)
-
+        markup = build_hierarchy_result_markup(config, result)
+        safe_send_text(config, chat_id, TELEGRAM_PRESENTER.build_completion_text(job, result), reply_markup=markup)
+        send_sim_vivado_result_summary(config, chat_id, result)
+        send_execution_artifacts(config, chat_id, result)
     except Exception as exc:
         safe_send_text(config, chat_id, f"🚨 <b>[ERROR]</b> Failed to execute command: <code>{html_escape(exc)}</code>")
     finally:
         STATE.finish_job(
             {
-                "command": job.command_name,
+                "command": job.command_id or job.command_name,
                 "menu_no": job.menu_no,
                 "project": job.project_name,
-                "sim_vivado_close_gui": job.sim_vivado_close_gui,
-                "sim_vivado_close_decision": sim_vivado_close_decision,
-                "sim_vivado_controller_detached": sim_vivado_controller_detached,
-                "return_code": result_rc,
-                "duration_sec": duration,
+                "return_code": result.return_code if result is not None else -1,
+                "duration_sec": result.duration_sec if result is not None else 0,
                 "finished_at_utc": finished_at,
-                "timed_out": timed_out,
+                "timed_out": bool(result.status == "timeout") if result is not None else False,
             }
         )
 
@@ -2579,8 +1872,8 @@ def parse_task_command(config: Config, args_text: str) -> tuple[JobRequest | Non
         return None, "Usage: /task <menu_no> <project> [args...]"
 
     menu_no = int(tokens[0])
-    if menu_no < 1 or menu_no > 19:
-        return None, "menu_no must be between 1 and 19."
+    if menu_no < 1 or menu_no > 20:
+        return None, "menu_no must be between 1 and 20."
 
     project_path, error = resolve_project(config.project_root, tokens[1])
     if error:
@@ -2698,8 +1991,8 @@ def parse_alias_command(config: Config, command: str, args_text: str) -> tuple[J
         return build_menu_invocation(config, 4, project_path, extras, "presentation")
 
     if command == "/sim_vivado":
-        if len(tokens) < 3 or len(tokens) > 4:
-            return None, "Usage: /sim_vivado <project> <folder_idx> <tb_idx> [--close-gui|--keep-gui]"
+        if len(tokens) != 3:
+            return None, "Usage: /sim_vivado <project> <folder_idx> <tb_idx>"
 
         project_path, error = resolve_project(config.project_root, tokens[0])
         if error:
@@ -2707,7 +2000,7 @@ def parse_alias_command(config: Config, command: str, args_text: str) -> tuple[J
         if project_path is None:
             return None, "Failed to resolve project path."
 
-        return build_menu_invocation(config, 5, project_path, tokens[1:], "sim_vivado")
+        return build_menu_invocation(config, 20, project_path, tokens[1:], "sim_vivado")
 
     if command == "/sim_auto_report":
         if len(tokens) != 2:
@@ -2846,11 +2139,6 @@ def process_message(config: Config, message: dict) -> None:
                 f"🔹 command: {last.get('command')}",
                 f"🔹 menu: {last.get('menu_no')}",
                 f"🔹 project: {last.get('project')}",
-                f"🔹 close_gui: {last.get('sim_vivado_close_gui')}" if last.get("menu_no") == 5 else "",
-                f"🔹 close_decision: {last.get('sim_vivado_close_decision')}" if last.get("menu_no") == 5 else "",
-                f"🔹 controller_detached: {last.get('sim_vivado_controller_detached')}"
-                if last.get("menu_no") == 5
-                else "",
                 f"🔹 rc: {last.get('return_code')}",
                 f"⏱ duration: {last.get('duration_sec')}s",
                 f"📅 finished_at_utc: {last.get('finished_at_utc')}",
@@ -3650,7 +2938,7 @@ def render_vivado_tb_wizard(
         )
 
     keyboard = build_inline_keyboard_rows(buttons)
-    keyboard["inline_keyboard"].append([{"text": "🔙 Back", "callback_data": "wiz_act_5"}])
+    keyboard["inline_keyboard"].append([{"text": "🔙 Back", "callback_data": "wiz_act_20"}])
 
     folder_display = str(folder_target.get("folder_display", "tb"))
     text = (
@@ -3784,24 +3072,6 @@ def process_callback_query(config: Config, callback: dict) -> None:
     allowed = user_id in config.allowed_user_ids or (user_name and user_name in config.allowed_usernames)
     if not allowed:
         answer_callback_query(config, query_id, text="Access denied.")
-        return
-
-    if data.startswith("simgui_"):
-        parts = data.split("_", 2)
-        if len(parts) != 3:
-            answer_callback_query(config, query_id, text="Invalid selection.")
-            return
-        action_code = parts[1]
-        token = parts[2]
-        decision = "close" if action_code == "c" else "keep" if action_code == "k" else ""
-        if not decision:
-            answer_callback_query(config, query_id, text="Invalid selection.")
-            return
-        resolved = STATE.resolve_sim_vivado_prompt(token, decision)
-        if not resolved:
-            answer_callback_query(config, query_id, text="Selection expired.")
-            return
-        answer_callback_query(config, query_id, text=f"Selected: {decision}")
         return
 
     if data.startswith("help_"):
@@ -3953,7 +3223,7 @@ def process_callback_query(config: Config, callback: dict) -> None:
             ]
         elif category == "sim":
             keyboard["inline_keyboard"] = [
-                [{"text": "5. Vivado Sim", "callback_data": "wiz_act_5"}, {"text": "6. Auto Sim+Rep", "callback_data": "wiz_act_6"}],
+                [{"text": "20. NO GUI Vivado Sim", "callback_data": "wiz_act_20"}, {"text": "6. Auto Sim+Rep", "callback_data": "wiz_act_6"}],
                 [{"text": "7. Icarus Sim", "callback_data": "wiz_act_7"}, {"text": "19. Create TB Scaffold", "callback_data": "wiz_act_19"}],
             ]
         elif category == "vis":
@@ -3983,7 +3253,7 @@ def process_callback_query(config: Config, callback: dict) -> None:
         proj_name = str(state.get("project", ""))
         category = str(state.get("category", ""))
 
-        if act_num == "5":
+        if act_num == "20":
             proj_path, _ = resolve_project(config.project_root, proj_name)
             targets = find_vivado_tb_targets(config, proj_path) if proj_path else []
             if not targets:
@@ -4255,7 +3525,7 @@ def process_callback_query(config: Config, callback: dict) -> None:
         proj_name = str(state.get("project", ""))
         targets = state.get("vivado_targets", [])
         if not isinstance(targets, list) or folder_state_idx < 1 or folder_state_idx > len(targets):
-            answer_callback_query(config, query_id, text="Target expired. Re-open action 5.", show_alert=True)
+            answer_callback_query(config, query_id, text="Target expired. Re-open action 20.", show_alert=True)
             return
 
         folder_target = targets[folder_state_idx - 1]
@@ -4271,33 +3541,16 @@ def process_callback_query(config: Config, callback: dict) -> None:
             answer_callback_query(config, query_id, text="Invalid target mapping.", show_alert=True)
             return
 
-        STATE.update_user_state(
+        execute_wizard_command(
+            config,
+            chat_id,
+            message_id,
+            query_id,
             user_id,
-            {
-                "step": "gui",
-                "folder_state_idx": folder_state_idx,
-                "folder_idx": int(folder_idx),
-                "tb": int(tb_idx),
-            },
+            user_name,
+            f"/sim_vivado {proj_name} {folder_idx} {tb_idx}",
+            "Executing NO GUI Vivado simulation...",
         )
-        keyboard = {
-            "inline_keyboard": [
-                [
-                    {"text": "🖥️ GUI Open", "callback_data": "wiz_gui_keep"},
-                    {"text": "🚫 GUI Close (Fast)", "callback_data": "wiz_gui_close"},
-                ],
-                [{"text": "🔙 Back", "callback_data": f"wiz_vsimf_{folder_state_idx}"}],
-            ]
-        }
-        text = (
-            f"🧙‍♂️ <b>[Simulation Wizard]</b>\n\n"
-            f"<b>Project:</b> <code>{html_escape(proj_name)}</code>\n"
-            f"<b>Folder:</b> <code>{html_escape(folder_idx)}</code>\n"
-            f"<b>TB:</b> <code>{html_escape(tb_idx)}</code>\n\n"
-            f"<b>Step 6:</b> Vivado GUI Mode:"
-        )
-        edit_message_text(config, chat_id, message_id, text, reply_markup=keyboard)
-        answer_callback_query(config, query_id)
         return
 
     if data.startswith("wiz_sar_"):
@@ -4328,28 +3581,6 @@ def process_callback_query(config: Config, callback: dict) -> None:
             user_name,
             f"/sim_auto_report {proj_name} {tb_idx}",
             "Executing action...",
-        )
-        return
-
-    if data.startswith("wiz_gui_"):
-        gui_mode = data[len("wiz_gui_"):]
-        gui_flag = "--keep-gui" if gui_mode == "keep" else "--close-gui"
-        proj_name = str(state.get("project", ""))
-        folder_idx = str(state.get("folder_idx", ""))
-        tb_idx = str(state.get("tb", ""))
-        if not (re.fullmatch(r"\d+", folder_idx) and re.fullmatch(r"\d+", tb_idx)):
-            answer_callback_query(config, query_id, text="Simulation target expired.", show_alert=True)
-            return
-
-        execute_wizard_command(
-            config,
-            chat_id,
-            message_id,
-            query_id,
-            user_id,
-            user_name,
-            f"/sim_vivado {proj_name} {folder_idx} {tb_idx} {gui_flag}",
-            "Executing simulation...",
         )
         return
 

@@ -37,7 +37,7 @@ Telegram\telegram_fpga_bot_run.bat
 - `/hierarchy <project> [src|tb]`
 - `/fsm <project> <modules>`
 - `/presentation <project> [clean_assets]`
-- `/sim_vivado <project> <folder_idx> <tb_idx> [--close-gui|--keep-gui]`
+- `/sim_vivado <project> <folder_idx> <tb_idx>`
 - `/sim_auto_report <project> <tb_idx>`
 - `/sim_iverilog <project> (--all | --tb <name>)`
 - `/vcd_svg <project>`

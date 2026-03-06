@@ -12,6 +12,7 @@ if "%~1"=="" (
 
 set "TARGET_PROJECT=%~f1"
 set "HDL_INDEXER=%TEMPLATES_ROOT%\contexts\code_intel\adapters\cli\code_index_hdl_cli.js"
+set "SUMMARY_WRITER=%TEMPLATES_ROOT%\contexts\code_intel\adapters\cli\code_write_hierarchy_summary_cli.js"
 set "MANIFEST_CTX=%TEMPLATES_ROOT%\shared\adapters\bat\bootstrap_manifest_context.bat"
 set "BROWSE_ONCE=0"
 set "INCLUDE_TB=0"
@@ -52,7 +53,7 @@ for /f "tokens=1 delims=:" %%a in ('findstr /n "^%MARKER%" "%~f0"') do set "STAR
 more +%START_LINE% "%~f0" > "%PS_FILE%"
 
 :: Run PowerShell
-powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_FILE%" "%TARGET_PROJECT%" "%HDL_INDEXER%" "%BROWSE_ONCE%" "%INCLUDE_TB%" "%TB_ONLY%" "%SCOPE_SPECIFIED%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_FILE%" "%TARGET_PROJECT%" "%HDL_INDEXER%" "%BROWSE_ONCE%" "%INCLUDE_TB%" "%TB_ONLY%" "%SCOPE_SPECIFIED%" "%SUMMARY_WRITER%" "%MANIFEST_JSON%"
 set "PS_RC=%errorlevel%"
 
 del "%PS_FILE%"
@@ -69,7 +70,9 @@ param(
     [string]$BrowseOnce = "0",
     [string]$IncludeTb = "0",
     [string]$TbOnly = "0",
-    [string]$ScopeSpecified = "0"
+    [string]$ScopeSpecified = "0",
+    [string]$SummaryWriterPath = "",
+    [string]$ManifestJsonPath = ""
 )
 $Host.UI.RawUI.WindowTitle = "HDL Project Navigator"
 $srcDir = 'src'
@@ -80,8 +83,53 @@ $global:declLineCache = @{} # type::name::path -> line number
 $global:antigravityCommand = Get-Command antigravity -ErrorAction SilentlyContinue
 $global:counter = 1
 $selectedTbFolderKey = ""
+$selectedTbFolderDisplay = ""
 $userCancelRc = 99
 $quitRequested = $false
+$runStartedAt = (Get-Date).ToString("o")
+
+$hierarchyLogDir = Join-Path $ProjectRoot "log\hierarchy"
+New-Item -Path $hierarchyLogDir -ItemType Directory -Force | Out-Null
+$hierarchyLogFile = Join-Path $hierarchyLogDir ("hierarchy_{0}.log" -f (Get-Date -Format "yyyyMMdd_HHmmss_fff"))
+$hierarchyTranscriptActive = $false
+
+function Get-HierarchyScopeName {
+    if ($TbOnly -eq "1") { return "tb_only" }
+    if ($IncludeTb -eq "1") { return "include_tb" }
+    return "src"
+}
+
+function Invoke-HierarchySummaryWriter {
+    param(
+        [Parameter(Mandatory = $true)][string]$Status
+    )
+
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return }
+    if ([string]::IsNullOrWhiteSpace($SummaryWriterPath) -or -not (Test-Path $SummaryWriterPath)) { return }
+
+    $writerArgs = @(
+        $SummaryWriterPath,
+        "--project-root", $ProjectRoot,
+        "--status", $Status,
+        "--log-path", $hierarchyLogFile,
+        "--scope", (Get-HierarchyScopeName),
+        "--started-at", $runStartedAt,
+        "--finished-at", (Get-Date).ToString("o")
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($ManifestJsonPath)) {
+        $writerArgs += @("--manifest-json", $ManifestJsonPath)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($selectedTbFolderDisplay)) {
+        $writerArgs += @("--tb-folder", $selectedTbFolderDisplay)
+    }
+
+    & node @writerArgs
+    $writerRc = $LASTEXITCODE
+    if ($writerRc -ne 0) {
+        Write-Host ("[WARN] Failed to update hierarchy run summary (rc={0})." -f $writerRc) -ForegroundColor DarkYellow
+    }
+}
 
 if ($BrowseOnce -ne "1" -and $ScopeSpecified -ne "1") {
     Write-Host ""
@@ -116,9 +164,18 @@ if ($BrowseOnce -ne "1" -and $ScopeSpecified -ne "1") {
             $IncludeTb = "1"
             $TbOnly = "1"
         }
-        "q" { exit $userCancelRc }
-        "quit" { exit $userCancelRc }
-        "cancel" { exit $userCancelRc }
+        "q" {
+            Invoke-HierarchySummaryWriter -Status "cancelled"
+            exit $userCancelRc
+        }
+        "quit" {
+            Invoke-HierarchySummaryWriter -Status "cancelled"
+            exit $userCancelRc
+        }
+        "cancel" {
+            Invoke-HierarchySummaryWriter -Status "cancelled"
+            exit $userCancelRc
+        }
         "" {
             $IncludeTb = "0"
             $TbOnly = "0"
@@ -130,11 +187,6 @@ if ($BrowseOnce -ne "1" -and $ScopeSpecified -ne "1") {
         }
     }
 }
-
-$hierarchyLogDir = Join-Path $ProjectRoot "log\hierarchy"
-New-Item -Path $hierarchyLogDir -ItemType Directory -Force | Out-Null
-$hierarchyLogFile = Join-Path $hierarchyLogDir ("hierarchy_{0}.log" -f (Get-Date -Format "yyyyMMdd_HHmmss_fff"))
-$hierarchyTranscriptActive = $false
 
 Write-Host ("[INFO] Hierarchy logs    : {0}" -f $hierarchyLogDir)
 Write-Host ("[INFO] Hierarchy log file: {0}" -f $hierarchyLogFile)
@@ -1357,6 +1409,7 @@ while ($true) {
     $data = Get-Hierarchy
     if ($data.Error) {
         $selectedTbFolderKey = ""
+        $selectedTbFolderDisplay = ""
         Write-Host $data.Error -ForegroundColor Red
     } else {
         if ($data.Indexer) {
@@ -1371,6 +1424,7 @@ while ($true) {
             }
             if (-not $selectedTbFolder) {
                 $selectedTbFolderKey = ""
+                $selectedTbFolderDisplay = ""
             }
 
             if ($BrowseOnce -eq "1") {
@@ -1418,6 +1472,7 @@ while ($true) {
 
     if ($tbOnlyEnabled -and -not [string]::IsNullOrWhiteSpace($selectedTbFolderKey) -and $inputUpper -eq 'B') {
         $selectedTbFolderKey = ""
+        $selectedTbFolderDisplay = ""
         continue
     }
 
@@ -1425,12 +1480,14 @@ while ($true) {
         $IncludeTb = "0"
         $TbOnly = "0"
         $selectedTbFolderKey = ""
+        $selectedTbFolderDisplay = ""
         continue
     }
     if ($inputUpper -eq 'S3') {
         $IncludeTb = "1"
         $TbOnly = "1"
         $selectedTbFolderKey = ""
+        $selectedTbFolderDisplay = ""
         continue
     }
 
@@ -1440,6 +1497,7 @@ while ($true) {
             $target = $global:fileIndexMap[$idx]
             if ([string]$target.Kind -eq "tb-folder") {
                 $selectedTbFolderKey = [string]$target.FolderKey
+                $selectedTbFolderDisplay = [string]$target.Label
                 continue
             }
 
@@ -1461,6 +1519,11 @@ finally {
     }
 }
 
+$summaryStatus = "success"
+if ($quitRequested) {
+    $summaryStatus = "cancelled"
+}
+Invoke-HierarchySummaryWriter -Status $summaryStatus
 if ($quitRequested) {
     exit $userCancelRc
 }

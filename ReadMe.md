@@ -153,6 +153,13 @@ flowchart LR
     class Z,A,G hw;
 ```
 
+#### 🤖 [ Telegram Bot Automation ]
+
+- **Launch Telegram Bot** (`Telegram\telegram_fpga_bot_run.bat`)
+  - Starts a Telegram bot interface to control the FPGA Automation Toolkit remotely via chat commands.
+  - Features include: structured project hierarchy browsing, GUI/NO-GUI Vivado simulations, automated SVG waveform generation, and result presentation.
+  - **Architecture Note**: The bot's data structures and application flow have been thoroughly refactored using Domain-Driven Design (DDD) principles for optimal stability and scalability.
+
 #### 🏗️ [ Project Bootstrap / Management ]
 
 1. **Create New Project** (`contexts\project_bootstrap\adapters\bat\project_create.bat`)
@@ -182,7 +189,11 @@ flowchart LR
 
 6. **Run Vivado Simulation** (`contexts\simulation\adapters\bat\sim_run_vivado.bat`)
    - Launches Vivado xsim for RTL simulation. After waveform setup is loaded (or initialized), it automatically executes `restart` and `run all`.
-   - **Usage**: Select your project and testbench file. Once the Vivado GUI waveform view is ready, one automatic replay run starts to provide a clean log.
+   - **Usage**: Select your project and testbench file. This remains the manual GUI path for waveform inspection.
+
+20. **NO GUI Run Vivado Simulation** (`contexts\simulation\adapters\bat\sim_run_vivado_nogui.bat`)
+   - Runs the same Vivado replay flow in batch mode without opening the GUI, then stores the selected TB log/journal in the intended TB folder.
+   - **Usage**: Select the TB folder and TB file. The script executes `restart` + `run all` silently and updates `output/run_summary.json`.
 
 7. **Auto Sim + Report** (`contexts\simulation\adapters\bat\sim_run_auto_report.bat`)
    - Fully automated validation loop: runs simulation silently and passes VCD/logs directly to the report generator.
@@ -416,6 +427,13 @@ flowchart LR
     class Z,A,G hw;
 ```
 
+#### 🤖 [ Telegram Bot Automation (텔레그램 봇 자동화) ]
+
+- **Launch Telegram Bot** (`Telegram\telegram_fpga_bot_run.bat`)
+  - 원격에서 스마트폰이나 데스크톱 메신저 앱으로 FPGA 자동화 툴킷을 직접 제어하기 위한 텔레그램 챗봇 환경을 시작합니다.
+  - 계층 구조(Hierarchy) 탐색, Vivado 시뮬레이션 제어(GUI/NO-GUI), 자동화된 파형 렌더링(SVG), 검증 리포트 전송 등 핵심 기능을 챗봇 명령어로 지원합니다.
+  - **아키텍처 정보**: 챗봇의 내부 자료구조 및 애플리케이션 흐름은 안정성과 확장성을 위해 철저하게 도메인 주도 설계(DDD) 기반으로 리팩토링 되었습니다.
+
 #### 🏗️ [ Project Bootstrap / Management (프로젝트 초기화) ]
 
 1. **Create New Project** (`contexts\project_bootstrap\adapters\bat\project_create.bat`)
@@ -445,7 +463,11 @@ flowchart LR
 
 6. **Run Vivado Simulation** (`contexts\simulation\adapters\bat\sim_run_vivado.bat`)
    - 테스트벤치 선택 후 Vivado xsim GUI를 열고, 웨이브폼 설정 로드(또는 초기화) 직후 자동으로 `restart`와 `run all`을 실행합니다.
-   - **사용 방법**: 프로젝트와 TB를 선택하면 파형 창 표시 후 자동 재실행이 1회 수행되어 초기 상태 기준 로그를 바로 확인할 수 있습니다.
+   - **사용 방법**: 프로젝트와 TB를 선택하면 파형 창 표시 후 자동 재실행이 1회 수행됩니다. 이 경로는 GUI 수동 확인용으로 유지됩니다.
+
+20. **NO GUI Run Vivado Simulation** (`contexts\simulation\adapters\bat\sim_run_vivado_nogui.bat`)
+   - GUI 없이 Vivado batch 모드로 동일한 `restart` + `run all` 흐름을 수행하고, 선택한 TB 기준 로그/저널과 `output/run_summary.json`을 갱신합니다.
+   - **사용 방법**: TB 폴더와 TB 파일을 고르면 NO GUI 시뮬레이션이 바로 실행되고 결과 로그가 해당 TB 위치에 저장됩니다.
 
 7. **Auto Sim + Report** (`contexts\simulation\adapters\bat\sim_run_auto_report.bat`)
    - 시뮬레이션 직후 추출된 VCD 파형과 검증 로그를 HTML 문서화 프로세스에 자동으로 넘겨 문서 형태로 기록합니다.

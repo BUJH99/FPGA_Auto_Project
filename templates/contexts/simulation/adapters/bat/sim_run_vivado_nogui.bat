@@ -12,8 +12,7 @@ if "%~1"=="" (
 )
 
 set "TARGET_PROJECT=%~f1"
-set "TEMPLATES_DIR=%TEMPLATES_ROOT%"
-set "TCL_SCRIPT=%TEMPLATES_ROOT%\contexts\simulation\adapters\tcl\sim_run_vivado.tcl"
+set "TCL_SCRIPT=%TEMPLATES_ROOT%\contexts\simulation\adapters\tcl\sim_run_vivado_nogui.tcl"
 set "SUMMARY_WRITER=%TEMPLATES_ROOT%\contexts\simulation\adapters\cli\sim_write_vivado_gui_summary_cli.js"
 set "VIVADO_ROOT=%TARGET_PROJECT%\vivado_project"
 set "PROJECT_LOG_DIR=%TARGET_PROJECT%\log"
@@ -45,7 +44,7 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-set "PS_FILE=%TEMP%\vivado_sim_runner_%RANDOM%.ps1"
+set "PS_FILE=%TEMP%\vivado_sim_nogui_runner_%RANDOM%.ps1"
 set "MARKER=:POWERSHELL_SCRIPT_START"
 for /f "tokens=1 delims=:" %%A in ('findstr /n "^%MARKER%" "%~f0"') do set "START_LINE=%%A"
 more +%START_LINE% "%~f0" > "%PS_FILE%"
@@ -58,13 +57,13 @@ del "%PS_FILE%" >nul 2>nul
 if %PS_RC% equ %USER_CANCEL_RC% exit /b %USER_CANCEL_RC%
 if %PS_RC% neq 0 (
     echo.
-    echo [FAILURE] Vivado simulation launch failed.
+    echo [FAILURE] NO GUI Vivado simulation failed.
     pause
     exit /b %PS_RC%
 )
 
 echo.
-echo [SUCCESS] Vivado simulation flow finished.
+echo [SUCCESS] NO GUI Vivado simulation finished.
 pause
 exit /b 0
 
@@ -146,8 +145,6 @@ $tbSelection = 0
 $tbTop = ""
 $selectedRel = ""
 $summaryReplayState = "not_started"
-$summaryCloseDecision = ""
-$promptIpcDir = ""
 $vivadoLogFile = ""
 $vivadoJournalFile = ""
 $resolvedVivadoLogFile = ""
@@ -213,6 +210,7 @@ function Invoke-VivadoSummaryWriter {
     $writerArgs = @(
         $SummaryWriterPath,
         "--project-root", $ProjectRoot,
+        "--tool", "vivado_sim_nogui",
         "--status", $Status,
         "--started-at", $runStartedAt,
         "--finished-at", (Get-Date).ToString("o")
@@ -239,17 +237,11 @@ function Invoke-VivadoSummaryWriter {
     if (-not [string]::IsNullOrWhiteSpace($summaryReplayState)) {
         $writerArgs += @("--replay-state", $summaryReplayState)
     }
-    if (-not [string]::IsNullOrWhiteSpace($summaryCloseDecision)) {
-        $writerArgs += @("--close-decision", $summaryCloseDecision)
-    }
     if (-not [string]::IsNullOrWhiteSpace($resolvedVivadoLogFile)) {
         $writerArgs += @("--vivado-log-path", $resolvedVivadoLogFile)
     }
     if (-not [string]::IsNullOrWhiteSpace($resolvedVivadoJournalFile)) {
         $writerArgs += @("--vivado-journal-path", $resolvedVivadoJournalFile)
-    }
-    if (-not [string]::IsNullOrWhiteSpace($promptIpcDir)) {
-        $writerArgs += @("--close-prompt-dir", $promptIpcDir)
     }
 
     if (-not [string]::IsNullOrWhiteSpace($resolvedVivadoLogFile)) {
@@ -304,8 +296,6 @@ function Get-TbTopCandidate {
 
     $clean = [regex]::Replace($raw, "/\*[\s\S]*?\*/", "")
     $clean = [regex]::Replace($clean, "//.*$", "", [System.Text.RegularExpressions.RegexOptions]::Multiline)
-
-    # Support module/program declarations with optional automatic/static lifetime.
     $m = [regex]::Match(
         $clean,
         "\b(?:module|program)\s+(?:(?:automatic|static)\s+)?([A-Za-z_][A-Za-z0-9_$]*)\b",
@@ -350,7 +340,7 @@ $folderEntries = @(
 )
 
 Write-Host "-----------------------------------------------------------" -ForegroundColor Cyan
-Write-Host "      Vivado GUI Simulation Launcher" -ForegroundColor Cyan
+Write-Host "      NO GUI Vivado Simulation Launcher" -ForegroundColor Cyan
 Write-Host "-----------------------------------------------------------" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Select TB Folder:" -ForegroundColor Yellow
@@ -361,7 +351,6 @@ for ($i = 0; $i -lt $folderEntries.Count; $i++) {
     Write-Host ("[{0}] {1} ({2} files)" -f ($i + 1), $folder.Name, $folder.Entries.Count)
 }
 
-$folderSelection = 0
 while ($true) {
     $folderRaw = Read-Host " Folder >"
     if ($folderRaw -match '^(?i)q$') {
@@ -407,7 +396,6 @@ for ($i = 0; $i -lt $tbSelectList.Count; $i++) {
     }
 }
 
-$tbSelection = 0
 while ($true) {
     $tbRaw = Read-Host " TB file >"
     if ($tbRaw -match '^(?i)q$') {
@@ -448,169 +436,56 @@ if ([string]::IsNullOrWhiteSpace($tbLogStemSafe)) {
 $vivadoLogFile = Join-Path $SimLogDir ("vivado_sim_" + $tbLogStemSafe + ".log")
 $vivadoJournalFile = Join-Path $SimLogDir ("vivado_sim_" + $tbLogStemSafe + ".jou")
 
-# Re-route any existing vivado artifacts to the selected TB log directory.
 Move-VivadoArtifacts -RootDir $VivadoRoot -DstDir $SimLogDir
 Move-VivadoArtifacts -RootDir $ProjectRoot -DstDir $SimLogDir
 if (-not [string]::IsNullOrWhiteSpace($CallerCwd)) {
     Move-VivadoArtifacts -RootDir $CallerCwd -DstDir $SimLogDir
 }
-
-$promptSessionId = [Guid]::NewGuid().ToString("N")
-$promptIpcDir = Join-Path $SimLogDir ("close_prompt_" + $promptSessionId)
-$promptRequestFile = Join-Path $promptIpcDir "request.flag"
-$promptCloseFile = Join-Path $promptIpcDir "close.flag"
-$promptKeepFile = Join-Path $promptIpcDir "keep.flag"
-$promptArgMarker = "__PROMPT_IPC__"
-$promptMode = [string]$env:FPGA_SIM_PROMPT_MODE
-if ([string]::IsNullOrWhiteSpace($promptMode)) {
-    $promptMode = "interactive"
-} else {
-    $promptMode = $promptMode.Trim().ToLowerInvariant()
-}
-New-Item -ItemType Directory -Path $promptIpcDir -Force | Out-Null
 
 Write-Host ""
 Write-Host ("[INFO] Selected TB file : {0}" -f $selectedRel) -ForegroundColor Green
 Write-Host ("[INFO] Simulation top   : {0}" -f $tbTop) -ForegroundColor Green
 Write-Host ("[INFO] TB compile scope : {0}" -f $selectedTb.DirectoryName) -ForegroundColor Green
 Write-Host ("[INFO] xsim.more_options: {0}" -f $simMoreOptions) -ForegroundColor Green
-Write-Host "[INFO] After run all completes, this terminal will ask whether to close Vivado GUI." -ForegroundColor Green
-Write-Host "[INFO] Launching Vivado GUI and simulation..." -ForegroundColor Green
+Write-Host "[INFO] Launching NO GUI Vivado simulation..." -ForegroundColor Green
 Write-Host ("[INFO] Vivado workspace : {0}" -f $VivadoRoot) -ForegroundColor Green
 Write-Host ("[INFO] Vivado log file  : {0}" -f $vivadoLogFile) -ForegroundColor Green
 Write-Host ("[INFO] Vivado journal   : {0}" -f $vivadoJournalFile) -ForegroundColor Green
 
 $vivadoArgs = @(
-    "-mode", "gui",
+    "-mode", "batch",
     "-source", $TclScript,
     "-log", $vivadoLogFile,
     "-journal", $vivadoJournalFile,
     "-notrace",
-    "-tclargs", $ProjectRoot, $tbTop, $VivadoRoot, $ManifestSrcList, $ManifestTbList, $ManifestIncList, $selectedTb.FullName, $simMoreOptions, $promptArgMarker, $promptRequestFile, $promptCloseFile, $promptKeepFile
+    "-tclargs", $ProjectRoot, $tbTop, $VivadoRoot, $ManifestSrcList, $ManifestTbList, $ManifestIncList, $selectedTb.FullName, $simMoreOptions
 )
 
-$vivadoProc = $null
+$rc = 1
 try {
-    $vivadoProc = Start-Process -FilePath "vivado" -ArgumentList $vivadoArgs -WorkingDirectory $VivadoRoot -NoNewWindow -PassThru
-    $summaryReplayState = "running"
+    & vivado @vivadoArgs
+    $rc = $LASTEXITCODE
 } catch {
     Write-Host ("[ERROR] Failed to start Vivado process: {0}" -f $_.Exception.Message) -ForegroundColor Red
     $summaryReplayState = "launch_failed"
     Invoke-VivadoSummaryWriter -Status "fail"
-    Remove-Item -Path $promptIpcDir -Recurse -Force -ErrorAction SilentlyContinue
     exit 1
 }
 
-$askedClosePrompt = $false
-$controllerDetached = $false
-while ($true) {
-    $promptRequested = (Test-Path $promptRequestFile)
-    $closeRequested = (Test-Path $promptCloseFile)
-    $keepRequested = (Test-Path $promptKeepFile)
-
-    if ((-not $askedClosePrompt) -and ($promptRequested -or $closeRequested -or $keepRequested)) {
-        $askedClosePrompt = $true
-        $summaryReplayState = "prompt_requested"
-        $closeNow = $false
-
-        if ($closeRequested) {
-            $closeNow = $true
-        } elseif ($keepRequested) {
-            $closeNow = $false
-        } elseif ($promptMode -eq "ipc") {
-            Write-Host "[INFO] Waiting for IPC close decision..." -ForegroundColor Green
-            while ($true) {
-                if (Test-Path $promptCloseFile) {
-                    $closeNow = $true
-                    break
-                }
-                if (Test-Path $promptKeepFile) {
-                    $closeNow = $false
-                    break
-                }
-                Start-Sleep -Milliseconds 200
-                $vivadoProc.Refresh()
-                if ($vivadoProc.HasExited) {
-                    break
-                }
-            }
-        } else {
-            while ($true) {
-                $closeRaw = Read-Host " Auto replay completed. Close Vivado GUI now? (y/N) >"
-                if ([string]::IsNullOrWhiteSpace($closeRaw)) {
-                    $closeNow = $false
-                    break
-                }
-
-                $closeNorm = $closeRaw.Trim().ToLower()
-                if ($closeNorm -in @("y", "yes", "1")) {
-                    $closeNow = $true
-                    break
-                }
-                if ($closeNorm -in @("n", "no", "0")) {
-                    $closeNow = $false
-                    break
-                }
-
-                Write-Host "[WARN] Enter y or n." -ForegroundColor DarkYellow
-            }
-        }
-
-        if ($closeNow) {
-            New-Item -ItemType File -Path $promptCloseFile -Force | Out-Null
-            $summaryReplayState = "close_requested"
-            $summaryCloseDecision = "close"
-            Write-Host "[INFO] Close request sent to Vivado." -ForegroundColor Green
-        } else {
-            if (-not $vivadoProc.HasExited) {
-                New-Item -ItemType File -Path $promptKeepFile -Force | Out-Null
-                $summaryReplayState = "keep_requested"
-                $summaryCloseDecision = "keep"
-                Write-Host "[INFO] Keeping Vivado GUI open by user choice." -ForegroundColor Green
-                if ($promptMode -eq "ipc") {
-                    $controllerDetached = $true
-                    break
-                }
-            } elseif ($promptMode -eq "ipc") {
-                $summaryReplayState = "prompt_pending"
-                Write-Host "[WARN] Vivado exited before IPC close decision was received." -ForegroundColor DarkYellow
-            } else {
-                $closeNow = $false
-                New-Item -ItemType File -Path $promptKeepFile -Force | Out-Null
-                $summaryReplayState = "keep_requested"
-                $summaryCloseDecision = "keep"
-            }
-        }
-    }
-
-    if ($vivadoProc.HasExited) {
-        break
-    }
-
-    Start-Sleep -Milliseconds 250
-    $vivadoProc.Refresh()
-}
-
-$rc = 0
-if (-not $controllerDetached) {
-    $rc = $vivadoProc.ExitCode
-}
-if ($summaryReplayState -eq "running") {
-    $summaryReplayState = "process_exited"
-}
 Move-VivadoArtifacts -RootDir $VivadoRoot -DstDir $SimLogDir
 Move-VivadoArtifacts -RootDir $ProjectRoot -DstDir $SimLogDir
 if (-not [string]::IsNullOrWhiteSpace($CallerCwd)) {
     Move-VivadoArtifacts -RootDir $CallerCwd -DstDir $SimLogDir
 }
+
+$summaryReplayState = "failed"
 $summaryStatus = "fail"
-if ($controllerDetached) {
-    $summaryStatus = "success"
-} elseif ($rc -eq 0) {
+if ($rc -eq 0) {
+    $summaryReplayState = "completed"
     $summaryStatus = "success"
 } elseif ($rc -eq 99) {
+    $summaryReplayState = "cancelled"
     $summaryStatus = "cancelled"
 }
 Invoke-VivadoSummaryWriter -Status $summaryStatus
-Remove-Item -Path $promptIpcDir -Recurse -Force -ErrorAction SilentlyContinue
 exit $rc
