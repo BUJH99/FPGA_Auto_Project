@@ -461,7 +461,9 @@ $moduleWorker = {
 
   $quotedVerilogFiles = $VerilogFiles | ForEach-Object { '"' + $_ + '"' }
   $quotedIncludeDirs = $IncludeDirs | ForEach-Object { '-I "' + ($_.Replace('\','/')) + '"' }
-  $yosysScript = "read_verilog -sv $($quotedIncludeDirs -join ' ') $($quotedVerilogFiles -join ' '); hierarchy -top $Module; proc; opt; write_json `"$jsonFile`""
+  # Keep hierarchy for schematic generation. Running `opt` here collapses
+  # wrapper/dataflow structure that users expect to see in diagrams.
+  $yosysScript = "read_verilog -sv $($quotedIncludeDirs -join ' ') $($quotedVerilogFiles -join ' '); hierarchy -top $Module; proc; write_json `"$jsonFile`""
   $yosysOk = Invoke-ExternalCommand -Label "Yosys synthesis for $Module" -Command $YosysCmd -Arguments @("-p", $yosysScript)
   if (-not $yosysOk) {
     $moduleSuccess = $false
