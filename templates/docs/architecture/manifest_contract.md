@@ -28,8 +28,8 @@ These are optional and used by the manifest resolver CLI:
 - `hdl.xdc_globs` (default: `[]`)
 - `hdl.exclude_globs` (default: `[]`)
 
-## v0 Optional Fields (Reserved, No-op)
-These sections are documented for expansion, but ignored in v0 runtime behavior:
+## v0 Optional Fields (Validated / Doctor-visible)
+These sections are optional. They are shape-validated by the manifest stack and surfaced by `toolkit_doctor`, but are not yet consumed uniformly by every BAT runtime flow:
 - `sim.*`
 - `vivado.*`
 - `report.*`
@@ -54,11 +54,11 @@ hdl:
   exclude_globs:
     - "src/legacy/**"
 sim:
-  tool: "iverilog" # reserved in v0
+  tool: "iverilog" # optional metadata, validated
 vivado:
-  mode: "xsim"     # reserved in v0
+  mode: "xsim"     # optional metadata, validated
 report:
-  enable: true      # reserved in v0
+  enable: true      # optional metadata, validated
 ```
 
 ## CLI Contract (`manifest_resolve_cli.js`)

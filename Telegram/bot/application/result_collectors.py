@@ -507,6 +507,8 @@ class DefaultResultCollector:
         self._reader = reader
 
     def collect(self, result: ExecutionResult, context: CollectorContext) -> ExecutionResult:
+        if context.spec.command_id == "report_html" or context.spec.menu_no == 10:
+            return result
         tool_filters = self._expected_tools_for_command(context.spec.command_id)
         summary_paths = self._reader.find_summary_paths(
             context.spec.artifact_roots,
@@ -528,7 +530,7 @@ class DefaultResultCollector:
             "program": ("vivado_build",),
             "sim_auto_report": ("simulation_report",),
             "report_docs": ("report_documentation", "report_doc"),
-            "report_html": ("report_one_source",),
+            "doctor": ("toolkit_doctor",),
             "hierarchy": ("hierarchy_view",),
             "sim_vivado": ("vivado_sim_nogui",),
         }

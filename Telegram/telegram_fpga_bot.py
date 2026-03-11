@@ -49,7 +49,8 @@ from Telegram.bot.domain.models import Config, ExecutionRequest, ExecutionResult
 
 DEFAULT_AUTOMATION_REPO_ROOT = BOT_REPO_ROOT
 DEFAULT_ENV_PATH = SCRIPT_DIR / "telegram_fpga_bot.env"
-DEFAULT_SECRET_PATH = BOT_REPO_ROOT.parent / "MOBILE_AGENT_TOKEN" / "TELEGRAMTOKEN_ID.txt"
+DEFAULT_SECRET_PATH = BOT_REPO_ROOT.parent / "FPGA_AGENT_TOKEN" / "TELEGRAMTOKEN_ID.txt"
+LEGACY_SECRET_PATH = BOT_REPO_ROOT.parent / "MOBILE_AGENT_TOKEN" / "TELEGRAMTOKEN_ID.txt"
 LOCK_PATH = Path(tempfile.gettempdir()) / "telegram_fpga_bot.lock"
 LOCK_HANDLE = None
 VIVADO_LOG_FRESH_SLACK_SEC = 60.0
@@ -314,7 +315,7 @@ def get_secret_file_candidates() -> list[Path]:
     override = os.getenv("TELEGRAM_SECRET_FILE", "").strip()
     if override:
         return [Path(override).expanduser()]
-    return [DEFAULT_SECRET_PATH]
+    return [DEFAULT_SECRET_PATH, LEGACY_SECRET_PATH]
 
 
 def load_secret_defaults() -> None:
@@ -418,7 +419,7 @@ def parse_main_menu_registry(main_bat_path: Path, templates_root: Path) -> dict[
         script_path = (templates_root / script_rel.replace("\\", "/")).resolve()
         registry[menu_no] = MenuEntry(menu_no=menu_no, script_rel=script_rel, script_path=script_path)
 
-    missing = sorted(set(range(1, 21)) - set(registry.keys()))
+    missing = sorted(set(range(1, 22)) - set(registry.keys()))
     if missing:
         raise RuntimeError(f"MAIN.bat menu map is incomplete. Missing CMD entries: {missing}")
 
@@ -865,7 +866,8 @@ def build_help(category: str = "core") -> tuple[str, dict[str, object]]:
             "🔸 /projects - <i>list valid projects</i>",
             "🔸 /status - <i>show running status</i>",
             "🔸 /last - <i>show last job result</i>",
-            "🔸 /task &lt;menu_no&gt; &lt;proj&gt; [args] - <i>run MAIN menu (1~20)</i>",
+            "🔸 /task &lt;menu_no&gt; &lt;proj&gt; [args] - <i>run MAIN menu (1~21)</i>",
+            "🔸 /doctor &lt;proj&gt; - <i>run toolkit health check</i>",
             "🔸 /setup_project &lt;name&gt; [v|sv] - <i>run setup</i>",
             "🔸 /help - <i>show this help</i>",
         ])
@@ -1872,8 +1874,8 @@ def parse_task_command(config: Config, args_text: str) -> tuple[JobRequest | Non
         return None, "Usage: /task <menu_no> <project> [args...]"
 
     menu_no = int(tokens[0])
-    if menu_no < 1 or menu_no > 20:
-        return None, "menu_no must be between 1 and 20."
+    if menu_no < 1 or menu_no > 21:
+        return None, "menu_no must be between 1 and 21."
 
     project_path, error = resolve_project(config.project_root, tokens[1])
     if error:
@@ -1900,6 +1902,7 @@ def parse_alias_command(config: Config, command: str, args_text: str) -> tuple[J
         "/build",
         "/build_program",
         "/program",
+        "/doctor",
         "/report_html",
         "/report_docs",
         "/vivado_gui",
@@ -1912,6 +1915,7 @@ def parse_alias_command(config: Config, command: str, args_text: str) -> tuple[J
             "/build": "Usage: /build <project>",
             "/build_program": "Usage: /build_program <project>",
             "/program": "Usage: /program <project>",
+            "/doctor": "Usage: /doctor <project>",
             "/report_html": "Usage: /report_html <project>",
             "/report_docs": "Usage: /report_docs <project>",
             "/vivado_gui": "Usage: /vivado_gui <project>",
@@ -1927,6 +1931,7 @@ def parse_alias_command(config: Config, command: str, args_text: str) -> tuple[J
             "/build": 13,
             "/build_program": 17,
             "/program": 16,
+            "/doctor": 21,
             "/report_html": 10,
             "/report_docs": 11,
             "/vivado_gui": 12,
@@ -1943,7 +1948,8 @@ def parse_alias_command(config: Config, command: str, args_text: str) -> tuple[J
         if project_path is None:
             return None, "Failed to resolve project path."
 
-        return build_menu_invocation(config, menu_no, project_path, [], command[1:])
+        command_id = "doctor" if command == "/doctor" else command[1:]
+        return build_menu_invocation(config, menu_no, project_path, [], command_id)
 
     if command in {"/schematic", "/fsm"}:
         if len(tokens) < 2:
@@ -3196,6 +3202,9 @@ def process_callback_query(config: Config, callback: dict) -> None:
                     {"text": "🖼 Visuals", "callback_data": "wiz_cat_vis"},
                     {"text": "📊 Reports", "callback_data": "wiz_cat_rep"},
                 ],
+                [
+                    {"text": "🩺 Health", "callback_data": "wiz_cat_health"},
+                ],
                 [{"text": "🔙 Back", "callback_data": "wiz_start"}],
             ]
         }
@@ -3236,6 +3245,10 @@ def process_callback_query(config: Config, callback: dict) -> None:
             keyboard["inline_keyboard"] = [
                 [{"text": "4. Gen Presentation", "callback_data": "wiz_act_4"}, {"text": "18. Open Presentation", "callback_data": "wiz_act_18"}],
                 [{"text": "10. Report Generator", "callback_data": "wiz_act_10"}, {"text": "11. Legacy Docs", "callback_data": "wiz_act_11"}],
+            ]
+        elif category == "health":
+            keyboard["inline_keyboard"] = [
+                [{"text": "21. Toolkit Doctor", "callback_data": "wiz_act_21"}],
             ]
 
         keyboard["inline_keyboard"].append([{"text": "🔙 Back", "callback_data": f"wiz_proj_{proj_name}"}])
@@ -3354,6 +3367,8 @@ def process_callback_query(config: Config, callback: dict) -> None:
             synthetic_cmd = f"/report_html {proj_name}"
         elif act_num == "11":
             synthetic_cmd = f"/report_docs {proj_name}"
+        elif act_num == "21":
+            synthetic_cmd = f"/doctor {proj_name}"
 
         if synthetic_cmd:
             execute_wizard_command(

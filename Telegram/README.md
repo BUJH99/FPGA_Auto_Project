@@ -13,14 +13,17 @@ This folder is the single source of truth for the Telegram chatbot integration.
 1. Copy `telegram_fpga_bot.env.example` to `telegram_fpga_bot.env`.
 2. Fill `TELEGRAM_BOT_TOKEN`.
 3. Fill either `TELEGRAM_ALLOWED_USER_IDS` or `TELEGRAM_ALLOWED_USERNAMES`.
-4. By default the bot resolves the secret file relative to the repo layout: `..\MOBILE_AGENT_TOKEN\TELEGRAMTOKEN_ID.txt` from the bot repo root.
-5. Optionally set `TELEGRAM_SECRET_FILE` if you want to override that path.
+4. By default the bot resolves the secret file relative to the repo layout: `..\FPGA_AGENT_TOKEN\TELEGRAMTOKEN_ID.txt` from the bot repo root.
+5. For backward compatibility, it also checks `..\MOBILE_AGENT_TOKEN\TELEGRAMTOKEN_ID.txt` if the new folder is not present.
+6. Optionally set `TELEGRAM_SECRET_FILE` if you want to override that path.
 
 ## Run
 
 ```bat
 Telegram\telegram_fpga_bot_run.bat
 ```
+
+- The Windows launcher accepts `py -3`, `python`, or `python3`.
 
 ## Supported commands
 
@@ -33,6 +36,7 @@ Telegram\telegram_fpga_bot_run.bat
 - `/build <project>`
 - `/build_program <project>`
 - `/program <project>`
+- `/doctor <project>`
 - `/schematic <project> <modules>`
 - `/hierarchy <project> [src|tb]`
 - `/fsm <project> <modules>`
@@ -54,4 +58,5 @@ Telegram\telegram_fpga_bot_run.bat
 
 - The bot derives its executable menu map from `MAIN.bat`.
 - Menu 5 and menu 6 buttons are built from manifest-resolved TB files instead of hardcoded folder or index assumptions.
+- `/doctor` runs the existing Toolkit Doctor flow and summarizes `output/doctor_summary.json`.
 - Runtime execution is intended for Windows because the automation stack depends on `cmd.exe`, PowerShell, and Vivado tooling.

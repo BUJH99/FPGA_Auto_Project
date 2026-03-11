@@ -78,6 +78,14 @@ class ExecutionStackTests(unittest.TestCase):
             self.assertEqual("scope_select", hier_spec.interaction_contract.input_mode)
             self.assertEqual("tb_only", hier_spec.metadata["hierarchy_scope"])
 
+            doctor_spec, error = resolver.build_menu_command_spec(21, project_path, [], "doctor")
+            self.assertIsNone(error)
+            assert doctor_spec is not None
+            self.assertEqual("doctor", doctor_spec.command_id)
+            self.assertEqual("doctor", doctor_spec.result_kind)
+            self.assertEqual("direct_execute", doctor_spec.interaction_contract.input_mode)
+            self.assertEqual((project_path / "log", project_path / "output"), doctor_spec.artifact_roots)
+
     def test_result_collector_prefers_summary_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project_path = self.create_project(Path(temp_dir))
@@ -159,6 +167,77 @@ class ExecutionStackTests(unittest.TestCase):
             vivado_artifacts = [artifact for artifact in collected.artifacts if artifact.kind == "vivado_sim_log"]
             self.assertTrue(vivado_artifacts)
             self.assertEqual(current_log, vivado_artifacts[0].path)
+
+    def test_result_collector_prefers_doctor_summary_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = self.create_project(Path(temp_dir))
+            output_root = project_path / "output"
+            log_root = project_path / "log"
+            output_root.mkdir(parents=True, exist_ok=True)
+            log_root.mkdir(parents=True, exist_ok=True)
+            write_text(
+                output_root / "doctor_summary.json",
+                '{"tool":"toolkit_doctor","status":"warning","ok":false,"warnings":["tool_missing:node"]}',
+            )
+
+            config = make_config(project_path.parent)
+            resolver = CommandResolver(config)
+            spec, error = resolver.build_menu_command_spec(21, project_path, [], "doctor")
+            self.assertIsNone(error)
+            assert spec is not None
+
+            registry = ResultCollectorRegistry(FilesystemEvidenceReader())
+            base_result = ExecutionResult(
+                command_id=spec.command_id,
+                menu_no=spec.menu_no,
+                project_name=spec.project_name,
+                status="fail",
+                return_code=1,
+                started_at=0.0,
+                finished_at=0.0,
+            )
+            collected = registry.collect(
+                base_result,
+                CollectorContext(spec=spec, started_ts=0.0, run_log_path=None, timed_out=False, runtime_metadata={}),
+            )
+            self.assertEqual("summary_json", collected.evidence_source)
+            self.assertTrue(collected.summary_paths)
+            self.assertEqual("toolkit_doctor", collected.structured_payload["summary"]["tool"])
+
+    def test_report_html_skips_removed_summary_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = self.create_project(Path(temp_dir))
+            output_root = project_path / "output"
+            log_root = project_path / "log"
+            output_root.mkdir(parents=True, exist_ok=True)
+            log_root.mkdir(parents=True, exist_ok=True)
+            write_text(
+                output_root / "report_one_source_summary.json",
+                '{"tool":"report_one_source","status":"ok"}',
+            )
+
+            config = make_config(project_path.parent)
+            resolver = CommandResolver(config)
+            spec, error = resolver.build_menu_command_spec(10, project_path, [], "report_html")
+            self.assertIsNone(error)
+            assert spec is not None
+
+            registry = ResultCollectorRegistry(FilesystemEvidenceReader())
+            base_result = ExecutionResult(
+                command_id=spec.command_id,
+                menu_no=spec.menu_no,
+                project_name=spec.project_name,
+                status="success",
+                return_code=0,
+                started_at=0.0,
+                finished_at=0.0,
+            )
+            collected = registry.collect(
+                base_result,
+                CollectorContext(spec=spec, started_ts=0.0, run_log_path=None, timed_out=False, runtime_metadata={}),
+            )
+            self.assertFalse(collected.summary_paths)
+            self.assertEqual("none", collected.evidence_source)
 
     def test_presenter_renders_raw_tail_and_hierarchy_payload(self) -> None:
         presenter = TelegramPresenter()

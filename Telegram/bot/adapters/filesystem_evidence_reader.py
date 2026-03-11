@@ -92,6 +92,7 @@ class FilesystemEvidenceReader:
         candidates = [
             output_dir / "run_summary.json",
             output_dir / "build_summary.json",
+            output_dir / "doctor_summary.json",
             output_dir / "report_doc_summary.json",
             output_dir / "report_one_source_summary.json",
             output_dir / "regression_dashboard_summary.json",

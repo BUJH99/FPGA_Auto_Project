@@ -213,6 +213,21 @@ if ($srcFiles.Count -eq 0) {
   exit 1
 }
 
+$packageDeclRegex = [regex]'(?im)^\s*package\s+[A-Za-z_][A-Za-z0-9_$]*\b'
+$packageSrcFiles = @()
+$nonPackageSrcFiles = @()
+foreach ($src in $srcFiles) {
+  $raw = Get-Content -Path $src.FullName -Raw
+  $clean = Strip-HdlComments -Text $raw
+  if ($packageDeclRegex.IsMatch($clean)) {
+    $packageSrcFiles += $src
+  }
+  else {
+    $nonPackageSrcFiles += $src
+  }
+}
+$srcFiles = @($packageSrcFiles + $nonPackageSrcFiles)
+
 $verilogFiles = $srcFiles | ForEach-Object {
   $rel = Get-ProjectRelativePath -BasePath $ProjectPath -TargetPath $_.FullName
   $rel

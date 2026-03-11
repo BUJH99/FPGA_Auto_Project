@@ -91,6 +91,8 @@ graph LR
 ### ⚙️ Prerequisites
 To fully utilize the FPGA Automation Toolkit, ensure the following are installed and added to your system `PATH`:
 
+The canonical runtime path is Windows. `MAIN.bat`, Telegram execution, Vivado automation, and batch wrappers are designed for Windows-first operation; WSL/Linux are best treated as inspection or test environments.
+
 **Required Tools:**
 - **Xilinx Vivado**: For simulation, synthesis, and implementation.  
   Vivado installation is intentionally manual (license/policy dependent). The setup script only validates and links PATH.
@@ -157,7 +159,7 @@ flowchart LR
 
 - **Launch Telegram Bot** (`Telegram\telegram_fpga_bot_run.bat`)
   - Starts a Telegram bot interface to control the FPGA Automation Toolkit remotely via chat commands.
-  - Features include: structured project hierarchy browsing, GUI/NO-GUI Vivado simulations, automated SVG waveform generation, and result presentation.
+  - Features include: structured project hierarchy browsing, GUI/NO-GUI Vivado simulations, automated SVG waveform generation, Toolkit Doctor project health checks, and result presentation.
   - **Architecture Note**: The bot's data structures and application flow have been thoroughly refactored using Domain-Driven Design (DDD) principles for optimal stability and scalability.
 
 #### 🏗️ [ Project Bootstrap / Management ]
@@ -251,6 +253,12 @@ flowchart LR
     - Endless execution: Runs the full build flow chain (Synthesis -> Impl) and automatically programs the target right after completion.
     - **Usage**: Connect the board and select the project. The ultimate one-click testing sequence.
 
+#### 🩺 [ Project Health ]
+
+21. **Toolkit Doctor** (`shared\adapters\bat\toolkit_doctor.bat`)
+    - Runs a project health check over the manifest, resolved file catalog, output/log paths, testbench naming, and tool availability (`node`, `python`, `vivado`, `yosys`).
+    - **Usage**: Use this before long simulations or builds to quickly detect missing tools, broken manifests, or layout issues. The summary is written to `output/doctor_summary.json`.
+
 ### 🧩 SystemVerilog Capabilities
 The toolkit provides extensive capabilities around the SystemVerilog (SV) standard, offering both heuristic parsing and rigorous AST tracking using `tree-sitter`.
 *For the latest exact status, see `templates/docs/architecture/systemverilog_support_matrix.md`.*
@@ -287,6 +295,7 @@ Project/
 - **Cannot open latest presentation**: use `MAIN.bat -> 18. Open Latest Presentation HTML` after generation.
 - **`vivado not found`** or **`yosys not found`**: Make sure the binary paths for these applications are explicitly added to your system's Environment Variables (`PATH`).
 - **Missing File errors during sim**: Verify that the project correctly contains the `fpga_auto.yml` structure.
+- **Need a quick project health check**: Run `MAIN.bat -> 21. Toolkit Doctor` or `templates\shared\adapters\bat\toolkit_doctor.bat <project>`.
 - **Setup script failed**: Check setup logs under `templates\output\setup\toolkit_setup_*.log`.
 - **Need to rollback PATH**: Run `%USERPROFILE%\.fpga_toolkit\backups\restore_user_path_*.bat`.
 
@@ -369,6 +378,8 @@ graph LR
 ### ⚙️ 시스템 요구사항
 툴킷의 100% 기능을 활용하기 위해서는 하단 소프트웨어의 설치와 시스템 경로(`PATH`) 등록이 필수로 권장됩니다.
 
+공식 실행 기준 환경은 Windows입니다. `MAIN.bat`, Telegram 실행 경로, Vivado 자동화, 배치 래퍼들은 Windows 우선으로 설계되어 있으며 WSL/Linux는 저장소 점검이나 테스트 용도로 보는 것이 적합합니다.
+
 **필수 도구:**
 - **Xilinx Vivado**: 시뮬레이션, 코드 합성, 하드웨어 빌드 시 사용.  
   Vivado는 라이선스/배포 정책 이슈로 자동 설치 대상이 아니며, 초기 설정 BAT에서는 PATH 연결만 점검/반영합니다.
@@ -435,7 +446,7 @@ flowchart LR
 
 - **Launch Telegram Bot** (`Telegram\telegram_fpga_bot_run.bat`)
   - 원격에서 스마트폰이나 데스크톱 메신저 앱으로 FPGA 자동화 툴킷을 직접 제어하기 위한 텔레그램 챗봇 환경을 시작합니다.
-  - 계층 구조(Hierarchy) 탐색, Vivado 시뮬레이션 제어(GUI/NO-GUI), 자동화된 파형 렌더링(SVG), 검증 리포트 전송 등 핵심 기능을 챗봇 명령어로 지원합니다.
+  - 계층 구조(Hierarchy) 탐색, Vivado 시뮬레이션 제어(GUI/NO-GUI), 자동화된 파형 렌더링(SVG), Toolkit Doctor 기반 프로젝트 상태 점검, 검증 리포트 전송 등 핵심 기능을 챗봇 명령어로 지원합니다.
   - **아키텍처 정보**: 챗봇의 내부 자료구조 및 애플리케이션 흐름은 안정성과 확장성을 위해 철저하게 도메인 주도 설계(DDD) 기반으로 리팩토링 되었습니다.
 
 #### 🏗️ [ Project Bootstrap / Management (프로젝트 초기화) ]
@@ -529,6 +540,12 @@ flowchart LR
     - 원클릭 시스템: 14번 스크립트 기반 합성과 빌드를 진행한 후 성공 시 자동으로 17번 JTAG 플래시 과정을 이어붙여 수행합니다.
     - **사용 방법**: 보드 연결 및 세팅 후 실행하세요. 개발부터 단말 펌웨어 업데이트까지 논스탑으로 진행되는 마법의 버튼입니다.
 
+#### 🩺 [ Project Health (프로젝트 상태 점검) ]
+
+21. **Toolkit Doctor** (`shared\adapters\bat\toolkit_doctor.bat`)
+    - 매니페스트, 해석된 파일 목록, output/log 경로, 테스트벤치 이름 규칙, 필수 도구(`node`, `python`, `vivado`, `yosys`) 상태를 한 번에 점검합니다.
+    - **사용 방법**: 장시간 시뮬레이션이나 빌드 전에 실행하여 누락 도구, 손상된 manifest, 프로젝트 레이아웃 문제를 빠르게 확인할 수 있습니다. 결과는 `output/doctor_summary.json`에 저장됩니다.
+
 ### 🧩 SystemVerilog 호환성
 본 자동화 툴킷은 SystemVerilog(SV) 표준에 대한 광범위한 기능을 지원하며, 복원력이 높은 휴리스틱 정규식 스크립트와 `tree-sitter`를 이용한 정교한 AST 추적 환경을 동시 제공합니다.
 *업데이트 되는 최신 상태 확인: `templates/docs/architecture/systemverilog_support_matrix.md` 참조.*
@@ -565,5 +582,6 @@ Project/
 - **최신 발표자료 열기 실패**: 먼저 발표 생성 후 `MAIN.bat -> 18. Open Latest Presentation HTML`를 사용하세요.
 - **`vivado is not recognized...` 혹은 `yosys` 오류**: 해당 소프트웨어들의 실행 경로(`.exe` 나 `bin` 폴더)가 Windows 시스템 환경 변수인 `PATH`에 명시적으로 연결되어 있는지 점검합니다.
 - **시뮬레이션에서 파일이 없다는 오류 발생 시**: 대상 프로젝트 폴더 내부에 올바른 모델링 파일 구조와 기준점인 `fpga_auto.yml` 이 존재하는지 확인하세요.
+- **프로젝트 상태를 빠르게 점검하고 싶다면**: `MAIN.bat -> 21. Toolkit Doctor` 또는 `templates\shared\adapters\bat\toolkit_doctor.bat <project>`를 실행하세요.
 - **초기 설정 BAT 실패 시**: `templates\output\setup\toolkit_setup_*.log` 로그를 확인하세요.
 - **PATH 되돌리기 필요 시**: `%USERPROFILE%\.fpga_toolkit\backups\restore_user_path_*.bat`를 실행하세요.

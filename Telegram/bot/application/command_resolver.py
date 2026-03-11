@@ -34,6 +34,7 @@ MENU_USAGE: dict[int, str] = {
     18: "Usage: /task 18 <project>",
     19: "Usage: /task 19 <project> (--all | --dut <name>) [--force]",
     20: "Usage: /task 20 <project> <folder_idx> <tb_idx>",
+    21: "Usage: /task 21 <project>",
 }
 
 HIERARCHY_SCOPE_ALIASES: dict[str, str] = {
@@ -387,6 +388,10 @@ class CommandResolver:
                 script_args.append("--force")
             script_args.append("--no-pause")
 
+        elif menu_no == 21:
+            if tokens:
+                return None, usage
+
         else:
             return None, f"Menu {menu_no} is not supported."
 
@@ -478,6 +483,8 @@ class CommandResolver:
             return "diagram"
         if command_id == "hierarchy":
             return "hierarchy"
+        if command_id == "doctor" or menu_no == 21:
+            return "doctor"
         if command_id == "sim_vivado" or menu_no == 20:
             return "sim_vivado"
         if command_id in {"report_html", "report_docs", "presentation"}:
@@ -501,6 +508,7 @@ class CommandResolver:
             "vcd_svg",
             "open_presentation",
             "setup_project",
+            "doctor",
         }:
             return InteractionContract(
                 input_mode="direct_execute",

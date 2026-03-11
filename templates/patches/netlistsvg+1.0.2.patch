@@ -233,3 +233,44 @@ index a59ebd4..4d3d220 100644
  }
  
  function setGenericSize(tempclone, height) {
+diff --git a/node_modules/netlistsvg/built/index.js b/node_modules/netlistsvg/built/index.js
+--- a/node_modules/netlistsvg/built/index.js
++++ b/node_modules/netlistsvg/built/index.js
+@@ -15,7 +15,15 @@ function createFlatModule(skinData, yosysNetlist) {
+     }
+     // this can be skipped if there are no splits or joins
+     if (layoutProps.splitsAndJoins !== false) {
+-        flatModule.addSplitsJoins();
++        try {
++            flatModule.addSplitsJoins();
++        }
++        catch (err) {
++            // Large sequential graphs such as register files can trigger
++            // deep recursion in netlistsvg's split/join gather step.
++            // Skip the optional split/join enrichment and continue rendering.
++            console.log('[WARN] netlistsvg addSplitsJoins skipped:', err && err.message ? err.message : err);
++        }
+     }
+     flatModule.createWires();
+     return flatModule;
+ }
+diff --git a/node_modules/netlistsvg/lib/index.ts b/node_modules/netlistsvg/lib/index.ts
+--- a/node_modules/netlistsvg/lib/index.ts
++++ b/node_modules/netlistsvg/lib/index.ts
+@@ -21,7 +21,15 @@ function createFlatModule(skinData: string, yosysNetlist: Yosys.Netlist): FlatM
+     }
+     // this can be skipped if there are no splits or joins
+     if (layoutProps.splitsAndJoins !== false) {
+-        flatModule.addSplitsJoins();
++        try {
++            flatModule.addSplitsJoins();
++        } catch (err) {
++            // Large sequential graphs such as register files can trigger
++            // deep recursion in netlistsvg's split/join gather step.
++            // Skip the optional split/join enrichment and continue rendering.
++            console.log('[WARN] netlistsvg addSplitsJoins skipped:', err && err.message ? err.message : err);
++        }
+     }
+     flatModule.createWires();
+     return flatModule;
+ }

@@ -119,6 +119,11 @@ class LayeredComponentTests(unittest.TestCase):
                     script_rel="contexts\\simulation\\adapters\\bat\\sim_run_vivado_nogui.bat",
                     script_path=templates_root / "contexts" / "simulation" / "adapters" / "bat" / "sim_run_vivado_nogui.bat",
                 ),
+                21: MenuEntry(
+                    menu_no=21,
+                    script_rel="shared\\adapters\\bat\\toolkit_doctor.bat",
+                    script_path=templates_root / "shared" / "adapters" / "bat" / "toolkit_doctor.bat",
+                ),
             },
             project_root=project_root,
             poll_timeout_sec=25,
@@ -169,6 +174,13 @@ class LayeredComponentTests(unittest.TestCase):
             self.assertEqual(1, spec.metadata["folder_idx"])
             self.assertEqual(2, spec.metadata["tb_idx"])
             self.assertIsNone(spec.sim_vivado_close_gui)
+
+            spec, error = resolver.build_menu_command_spec(21, project_path, [], "doctor")
+            self.assertIsNone(error)
+            assert spec is not None
+            self.assertEqual("doctor", spec.command_id)
+            self.assertEqual("doctor", spec.result_kind)
+            self.assertEqual("direct_execute", spec.interaction_contract.input_mode)
 
     def test_execution_service_collects_summary_paths_from_default_collector(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -332,6 +344,53 @@ class LayeredComponentTests(unittest.TestCase):
         self.assertIn("[FAIL]", text)
         self.assertIn("Raw Tail", text)
         self.assertIn("line2", text)
+
+    def test_telegram_presenter_renders_doctor_summary(self) -> None:
+        presenter = TelegramPresenter()
+        job = JobRequest(
+            command_name="doctor",
+            menu_no=21,
+            project_name="Demo",
+            script_path=REPO_ROOT / "templates" / "shared" / "adapters" / "bat" / "toolkit_doctor.bat",
+            cwd=REPO_ROOT,
+            cmd=("cmd.exe", "/c", "toolkit_doctor.bat", "Demo"),
+            stdin_text=None,
+            artifact_paths=(),
+            sim_vivado_close_gui=None,
+            command_id="doctor",
+            result_kind="doctor",
+        )
+        from Telegram.bot.domain.models import ExecutionResult
+
+        result = ExecutionResult(
+            command_id="doctor",
+            status="fail",
+            return_code=1,
+            duration_sec=4,
+            structured_payload={
+                "summary": {
+                    "status": "warning",
+                    "ok": False,
+                    "warnings": ["tool_missing:node", "xdc_missing"],
+                    "tools": {
+                        "node": {"ok": False},
+                        "python": {"ok": True},
+                        "vivado": {"ok": False},
+                        "yosys": {"ok": False},
+                    },
+                }
+            },
+        )
+        text = presenter.build_completion_text(job, result)
+        self.assertIn("Doctor Summary", text)
+        self.assertIn("Status:</b> <code>warning</code>", text)
+        self.assertIn("Healthy:</b> <code>no</code>", text)
+        self.assertIn("Manifest:</b> <code>-</code>", text)
+        self.assertIn("Top:</b> <code>-</code>", text)
+        self.assertIn("Node.js", text)
+        self.assertIn("Vivado", text)
+        self.assertIn("tool_missing:node", text)
+        self.assertIn("Missing Tools:</b> <code>Node.js, Vivado, Yosys</code>", text)
 
 
 if __name__ == "__main__":

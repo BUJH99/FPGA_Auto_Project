@@ -8,15 +8,25 @@ if not exist "%BOT_SCRIPT%" (
     exit /b 1
 )
 
-where python >nul 2>nul
-if errorlevel 1 (
-    echo [ERROR] python command not found in PATH.
-    echo         Install Python 3 and ensure python.exe is available.
+set "PYTHON_CMD="
+py -3 -c "import sys" >nul 2>nul
+if not errorlevel 1 set "PYTHON_CMD=py -3"
+if not defined PYTHON_CMD (
+    where python >nul 2>nul
+    if not errorlevel 1 set "PYTHON_CMD=python"
+)
+if not defined PYTHON_CMD (
+    where python3 >nul 2>nul
+    if not errorlevel 1 set "PYTHON_CMD=python3"
+)
+if not defined PYTHON_CMD (
+    echo [ERROR] Python 3 launcher not found in PATH.
+    echo         Tried: py -3, python, python3
     exit /b 1
 )
 
 echo [INFO] Starting Telegram FPGA bot...
-python "%BOT_SCRIPT%"
+call %PYTHON_CMD% "%BOT_SCRIPT%"
 set "RC=%errorlevel%"
 
 echo [INFO] Bot exited with code: %RC%

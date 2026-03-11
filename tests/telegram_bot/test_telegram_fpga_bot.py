@@ -66,11 +66,14 @@ class TelegramBotTests(unittest.TestCase):
         write_text(project_path / "fpga_auto.yml", "name: Demo\n")
         return project_root, project_path
 
-    def test_get_secret_file_candidates_prefers_git_adjacent_mobile_agent_token(self) -> None:
+    def test_get_secret_file_candidates_prefers_git_adjacent_fpga_agent_token(self) -> None:
         with mock.patch.dict(BOT.os.environ, {}, clear=True):
             candidates = BOT.get_secret_file_candidates()
         self.assertEqual(
-            [REPO_ROOT.parent / "MOBILE_AGENT_TOKEN" / "TELEGRAMTOKEN_ID.txt"],
+            [
+                REPO_ROOT.parent / "FPGA_AGENT_TOKEN" / "TELEGRAMTOKEN_ID.txt",
+                REPO_ROOT.parent / "MOBILE_AGENT_TOKEN" / "TELEGRAMTOKEN_ID.txt",
+            ],
             candidates,
         )
 
@@ -329,7 +332,7 @@ class TelegramBotTests(unittest.TestCase):
 
     def test_parse_main_menu_registry_covers_main_menu(self) -> None:
         registry = BOT.parse_main_menu_registry(REPO_ROOT / "MAIN.bat", REPO_ROOT / "templates")
-        self.assertEqual(set(range(1, 21)), set(registry))
+        self.assertEqual(set(range(1, 22)), set(registry))
         self.assertTrue(
             registry[5].script_path.as_posix().endswith("templates/contexts/simulation/adapters/bat/sim_run_vivado.bat")
         )
@@ -342,6 +345,11 @@ class TelegramBotTests(unittest.TestCase):
             registry[20]
             .script_path.as_posix()
             .endswith("templates/contexts/simulation/adapters/bat/sim_run_vivado_nogui.bat")
+        )
+        self.assertTrue(
+            registry[21]
+            .script_path.as_posix()
+            .endswith("templates/shared/adapters/bat/toolkit_doctor.bat")
         )
 
     def test_make_execution_service_returns_layered_service(self) -> None:
@@ -406,6 +414,13 @@ class TelegramBotTests(unittest.TestCase):
                     None,
                     None,
                 ),
+                (
+                    21,
+                    [],
+                    [str(project_path)],
+                    None,
+                    None,
+                ),
             ]
 
             for menu_no, extras, expected_tail, expected_stdin, expected_close in cases:
@@ -417,6 +432,34 @@ class TelegramBotTests(unittest.TestCase):
                     self.assertEqual(expected_tail, list(request.cmd[3:]))
                     self.assertEqual(expected_stdin, request.stdin_text)
                     self.assertEqual(expected_close, request.sim_vivado_close_gui)
+
+    def test_parse_alias_command_doctor_maps_to_menu_21(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root, project_path = self.create_project_root(Path(temp_dir))
+            config = self.make_config(project_root)
+
+            request, error = BOT.parse_alias_command(config, "/doctor", "Demo")
+            self.assertIsNone(error)
+            assert request is not None
+            self.assertEqual(21, request.menu_no)
+            self.assertEqual("doctor", request.command_id)
+            self.assertEqual([str(project_path)], list(request.cmd[3:]))
+            self.assertIsNone(request.stdin_text)
+
+    def test_parse_task_command_accepts_menu_21_and_rejects_extra_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root, project_path = self.create_project_root(Path(temp_dir))
+            config = self.make_config(project_root)
+
+            request, error = BOT.parse_task_command(config, "21 Demo")
+            self.assertIsNone(error)
+            assert request is not None
+            self.assertEqual(21, request.menu_no)
+            self.assertEqual([str(project_path)], list(request.cmd[3:]))
+
+            request, error = BOT.parse_task_command(config, "21 Demo extra")
+            self.assertIsNone(request)
+            self.assertEqual("Usage: /task 21 <project>", error)
 
     def test_build_menu_invocation_hierarchy_accepts_batch_scope_aliases(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -560,6 +603,45 @@ class TelegramBotTests(unittest.TestCase):
                     {"id": "q6", "data": "wiz_sar_2", "from": {"id": 1}, "message": {"chat": {"id": 10}, "message_id": 20}},
                 )
                 self.assertEqual("/sim_auto_report Demo 2", process_mock.call_args.args[1]["text"])
+
+    def test_process_callback_query_project_selection_exposes_health_category(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root, _ = self.create_project_root(Path(temp_dir))
+            config = self.make_config(project_root)
+            BOT.STATE.update_user_state(1, {"wizard": "project", "step": "project"})
+
+            with mock.patch.object(BOT, "edit_message_text") as edit_mock, \
+                mock.patch.object(BOT, "answer_callback_query"):
+                BOT.process_callback_query(
+                    config,
+                    {"id": "q6a", "data": "wiz_proj_Demo", "from": {"id": 1}, "message": {"chat": {"id": 10}, "message_id": 20}},
+                )
+                keyboard = edit_mock.call_args.kwargs["reply_markup"]["inline_keyboard"]
+                self.assertEqual("wiz_cat_health", keyboard[2][0]["callback_data"])
+
+    def test_process_callback_query_health_wizard_runs_doctor(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root, _ = self.create_project_root(Path(temp_dir))
+            config = self.make_config(project_root)
+            BOT.STATE.update_user_state(1, {"wizard": "project", "project": "Demo", "category": "health"})
+
+            with mock.patch.object(BOT, "edit_message_text") as edit_mock, \
+                mock.patch.object(BOT, "answer_callback_query"):
+                BOT.process_callback_query(
+                    config,
+                    {"id": "q6b", "data": "wiz_cat_health", "from": {"id": 1}, "message": {"chat": {"id": 10}, "message_id": 20}},
+                )
+                keyboard = edit_mock.call_args.kwargs["reply_markup"]["inline_keyboard"]
+                self.assertEqual("wiz_act_21", keyboard[0][0]["callback_data"])
+
+            with mock.patch.object(BOT, "process_message") as process_mock, \
+                mock.patch.object(BOT, "edit_message_text"), \
+                mock.patch.object(BOT, "answer_callback_query"):
+                BOT.process_callback_query(
+                    config,
+                    {"id": "q6c", "data": "wiz_act_21", "from": {"id": 1}, "message": {"chat": {"id": 10}, "message_id": 20}},
+                )
+                self.assertEqual("/doctor Demo", process_mock.call_args.args[1]["text"])
 
     def test_process_callback_query_hierarchy_wizard_matches_batch_scopes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
