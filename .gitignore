@@ -25,6 +25,13 @@
 !/templates/output/.gitkeep
 /templates/node_modules/.cache/**
 
+# Ignore retired/local Slidev integration artifacts
+/templates/contexts/reporting/adapters/bat/report_open_slidev_viewer.bat
+/templates/contexts/reporting/slidedev/
+/templates/node_modules/.bin/slidev.cmd
+/templates/node_modules/.cache/fpga_auto_slidev_runtime/
+/templates/node_modules/@slidev/
+
 # Ignore common OS files (just in case they end up in templates)
 thumbs.db
 desktop.ini
