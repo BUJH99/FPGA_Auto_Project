@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import os
 import sys
 import tempfile
@@ -66,6 +67,22 @@ class TelegramBotTests(unittest.TestCase):
         write_text(project_path / "fpga_auto.yml", "name: Demo\n")
         return project_root, project_path
 
+    def write_run_index(self, project_path: Path, runs: list[dict]) -> None:
+        write_text(
+            project_path / "output" / "run_index.json",
+            json.dumps(
+                {
+                    "schemaVersion": 1,
+                    "kind": "run_index",
+                    "projectRoot": project_path.as_posix(),
+                    "updatedAt": "2026-03-11T00:00:00Z",
+                    "runs": runs,
+                },
+                indent=2,
+            )
+            + "\n",
+        )
+
     def test_get_secret_file_candidates_prefers_git_adjacent_fpga_agent_token(self) -> None:
         with mock.patch.dict(BOT.os.environ, {}, clear=True):
             candidates = BOT.get_secret_file_candidates()
@@ -76,6 +93,20 @@ class TelegramBotTests(unittest.TestCase):
             ],
             candidates,
         )
+
+    def test_register_bot_menu_commands_includes_run(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root, _ = self.create_project_root(Path(temp_dir))
+            config = self.make_config(project_root)
+
+            with mock.patch.object(BOT, "telegram_api") as api_mock:
+                BOT.register_bot_menu_commands(config)
+
+            payload = api_mock.call_args.args[2]
+            commands = payload["commands"]
+            command_names = [row["command"] for row in commands]
+            self.assertIn("run", command_names)
+            self.assertEqual("Open interactive project wizard", commands[1]["description"])
 
     def test_load_secret_file_defaults_parses_external_token_and_username(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -329,6 +360,165 @@ class TelegramBotTests(unittest.TestCase):
             self.assertIn("SMOKE", sent_text)
             self.assertIn("errs=<code>0</code>", sent_text)
             self.assertIn("cov=<code>-%</code>", sent_text)
+
+    def test_parse_history_request_args_accepts_tool_and_limit_any_order(self) -> None:
+        project_token, tool_filter, limit, error = BOT.parse_history_request_args(["Demo", "build", "7"])
+        self.assertIsNone(error)
+        self.assertEqual("Demo", project_token)
+        self.assertEqual("build", tool_filter)
+        self.assertEqual(7, limit)
+
+        project_token, tool_filter, limit, error = BOT.parse_history_request_args(["Demo", "3", "doctor"])
+        self.assertIsNone(error)
+        self.assertEqual("Demo", project_token)
+        self.assertEqual("doctor", tool_filter)
+        self.assertEqual(3, limit)
+
+    def test_process_message_history_renders_recent_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root, project_path = self.create_project_root(Path(temp_dir))
+            config = self.make_config(project_root)
+            write_text(
+                project_path / "output" / "history" / "toolkit_doctor" / "r2" / "doctor_summary.json",
+                json.dumps(
+                    {
+                        "tool": "toolkit_doctor",
+                        "type": "doctor_summary",
+                        "status": "warning",
+                        "ok": False,
+                        "warnings": ["xdc_missing"],
+                    }
+                )
+                + "\n",
+            )
+            write_text(
+                project_path / "output" / "history" / "vivado_build" / "b1" / "build_summary.json",
+                json.dumps(
+                    {
+                        "tool": "vivado_build",
+                        "type": "build_summary",
+                        "status": "ok",
+                        "qualityGate": {
+                            "timing": {"status": "ok", "wnsNs": 0.125},
+                            "bitstream": {"status": "ok", "count": 1},
+                        },
+                        "details": {"topModule": "TOP"},
+                    }
+                )
+                + "\n",
+            )
+            self.write_run_index(
+                project_path,
+                [
+                    {
+                        "tool": "vivado_build",
+                        "status": "ok",
+                        "summaryPath": "output/history/vivado_build/b1/build_summary.json",
+                        "outputs": [],
+                        "metadata": {"topModule": "TOP"},
+                        "createdAt": "2026-03-11T01:00:00Z",
+                    },
+                    {
+                        "tool": "toolkit_doctor",
+                        "status": "warning",
+                        "summaryPath": "output/history/toolkit_doctor/r2/doctor_summary.json",
+                        "outputs": [],
+                        "metadata": {},
+                        "createdAt": "2026-03-11T02:00:00Z",
+                    },
+                ],
+            )
+
+            with mock.patch.object(BOT, "send_text") as send_text_mock:
+                BOT.process_message(
+                    config,
+                    {"message_id": 1, "from": {"id": 1}, "chat": {"id": 10}, "text": "/history Demo 2"},
+                )
+
+            sent_text = send_text_mock.call_args.args[2]
+            self.assertIn("[Run History]", sent_text)
+            self.assertIn("Toolkit Doctor", sent_text)
+            self.assertIn("Vivado Build", sent_text)
+            self.assertLess(sent_text.index("Toolkit Doctor"), sent_text.index("Vivado Build"))
+
+    def test_process_message_diff_renders_simulation_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root, project_path = self.create_project_root(Path(temp_dir))
+            config = self.make_config(project_root)
+            write_text(
+                project_path / "output" / "history" / "simulation_report" / "r1" / "run_summary.json",
+                json.dumps(
+                    {
+                        "tool": "simulation_report",
+                        "type": "run_summary",
+                        "status": "ok",
+                        "warnings": [],
+                        "details": {
+                            "topModule": "tb_TOP",
+                            "passCount": 1,
+                            "failCount": 0,
+                            "regressionRows": [
+                                {"testName": "SMOKE", "pass": True, "reason": "ok"},
+                            ],
+                        },
+                    }
+                )
+                + "\n",
+            )
+            write_text(
+                project_path / "output" / "history" / "simulation_report" / "r2" / "run_summary.json",
+                json.dumps(
+                    {
+                        "tool": "simulation_report",
+                        "type": "run_summary",
+                        "status": "failed",
+                        "warnings": ["scoreboard_errors"],
+                        "details": {
+                            "topModule": "tb_TOP",
+                            "passCount": 0,
+                            "failCount": 1,
+                            "regressionRows": [
+                                {"testName": "SMOKE", "pass": False, "reason": "scoreboard_errors"},
+                            ],
+                        },
+                    }
+                )
+                + "\n",
+            )
+            self.write_run_index(
+                project_path,
+                [
+                    {
+                        "tool": "simulation_report",
+                        "status": "ok",
+                        "summaryPath": "output/history/simulation_report/r1/run_summary.json",
+                        "outputs": [],
+                        "metadata": {},
+                        "createdAt": "2026-03-11T01:00:00Z",
+                    },
+                    {
+                        "tool": "simulation_report",
+                        "status": "failed",
+                        "summaryPath": "output/history/simulation_report/r2/run_summary.json",
+                        "outputs": [],
+                        "metadata": {},
+                        "createdAt": "2026-03-11T02:00:00Z",
+                    },
+                ],
+            )
+
+            with mock.patch.object(BOT, "send_text") as send_text_mock:
+                BOT.process_message(
+                    config,
+                    {"message_id": 2, "from": {"id": 1}, "chat": {"id": 10}, "text": "/diff Demo sim"},
+                )
+
+            sent_text = send_text_mock.call_args.args[2]
+            self.assertIn("[Run Diff]", sent_text)
+            self.assertIn("Simulation Report", sent_text)
+            self.assertIn("Fail Count", sent_text)
+            self.assertIn("Failing Tests Added", sent_text)
+            self.assertIn("SMOKE:scoreboard_errors", sent_text)
 
     def test_parse_main_menu_registry_covers_main_menu(self) -> None:
         registry = BOT.parse_main_menu_registry(REPO_ROOT / "MAIN.bat", REPO_ROOT / "templates")
@@ -633,6 +823,8 @@ class TelegramBotTests(unittest.TestCase):
                 )
                 keyboard = edit_mock.call_args.kwargs["reply_markup"]["inline_keyboard"]
                 self.assertEqual("wiz_act_21", keyboard[0][0]["callback_data"])
+                self.assertEqual("wiz_act_hist", keyboard[1][0]["callback_data"])
+                self.assertEqual("wiz_act_diff", keyboard[1][1]["callback_data"])
 
             with mock.patch.object(BOT, "process_message") as process_mock, \
                 mock.patch.object(BOT, "edit_message_text"), \
@@ -642,6 +834,31 @@ class TelegramBotTests(unittest.TestCase):
                     {"id": "q6c", "data": "wiz_act_21", "from": {"id": 1}, "message": {"chat": {"id": 10}, "message_id": 20}},
                 )
                 self.assertEqual("/doctor Demo", process_mock.call_args.args[1]["text"])
+
+    def test_process_callback_query_health_wizard_runs_history_and_diff(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root, _ = self.create_project_root(Path(temp_dir))
+            config = self.make_config(project_root)
+
+            BOT.STATE.update_user_state(1, {"wizard": "project", "project": "Demo", "category": "health"})
+            with mock.patch.object(BOT, "process_message") as process_mock, \
+                mock.patch.object(BOT, "edit_message_text"), \
+                mock.patch.object(BOT, "answer_callback_query"):
+                BOT.process_callback_query(
+                    config,
+                    {"id": "q6d", "data": "wiz_act_hist", "from": {"id": 1}, "message": {"chat": {"id": 10}, "message_id": 20}},
+                )
+                self.assertEqual("/history Demo", process_mock.call_args.args[1]["text"])
+
+            BOT.STATE.update_user_state(1, {"wizard": "project", "project": "Demo", "category": "health"})
+            with mock.patch.object(BOT, "process_message") as process_mock, \
+                mock.patch.object(BOT, "edit_message_text"), \
+                mock.patch.object(BOT, "answer_callback_query"):
+                BOT.process_callback_query(
+                    config,
+                    {"id": "q6e", "data": "wiz_act_diff", "from": {"id": 1}, "message": {"chat": {"id": 10}, "message_id": 20}},
+                )
+                self.assertEqual("/diff Demo", process_mock.call_args.args[1]["text"])
 
     def test_process_callback_query_hierarchy_wizard_matches_batch_scopes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

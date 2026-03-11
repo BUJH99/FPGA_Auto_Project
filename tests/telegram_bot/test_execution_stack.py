@@ -204,6 +204,84 @@ class ExecutionStackTests(unittest.TestCase):
             self.assertTrue(collected.summary_paths)
             self.assertEqual("toolkit_doctor", collected.structured_payload["summary"]["tool"])
 
+    def test_result_collector_adds_build_failure_triage_from_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = self.create_project(Path(temp_dir))
+            output_root = project_path / "output"
+            log_root = project_path / "log"
+            output_root.mkdir(parents=True, exist_ok=True)
+            log_root.mkdir(parents=True, exist_ok=True)
+            write_text(
+                output_root / "build_summary.json",
+                (
+                    '{"tool":"vivado_build","type":"build_summary","status":"failed",'
+                    '"qualityGate":{"timing":{"status":"failed","wnsNs":-0.125},'
+                    '"power":{"status":"ok"},"bitstream":{"status":"ok","count":1}}}'
+                ),
+            )
+
+            config = make_config(project_path.parent)
+            resolver = CommandResolver(config)
+            spec, error = resolver.build_menu_command_spec(13, project_path, [], "build")
+            self.assertIsNone(error)
+            assert spec is not None
+
+            registry = ResultCollectorRegistry(FilesystemEvidenceReader())
+            base_result = ExecutionResult(
+                command_id=spec.command_id,
+                menu_no=spec.menu_no,
+                project_name=spec.project_name,
+                status="success",
+                return_code=0,
+                started_at=time.time(),
+                finished_at=time.time(),
+            )
+            collected = registry.collect(
+                base_result,
+                CollectorContext(spec=spec, started_ts=time.time(), run_log_path=None, timed_out=False, runtime_metadata={}),
+            )
+            triage = collected.structured_payload.get("failure_triage")
+            self.assertIsInstance(triage, dict)
+            assert isinstance(triage, dict)
+            self.assertEqual("timing_violation", triage["category"])
+            self.assertIn("Timing closure failed", triage["title"])
+
+    def test_result_collector_adds_sim_failure_triage_from_log_excerpt(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = self.create_project(Path(temp_dir))
+            config = make_config(project_path.parent)
+            resolver = CommandResolver(config)
+            spec, error = resolver.build_menu_command_spec(20, project_path, ["1", "1"], "sim_vivado")
+            self.assertIsNone(error)
+            assert spec is not None
+
+            registry = ResultCollectorRegistry(FilesystemEvidenceReader())
+            base_result = ExecutionResult(
+                command_id=spec.command_id,
+                menu_no=spec.menu_no,
+                project_name=spec.project_name,
+                status="fail",
+                return_code=1,
+                started_at=0.0,
+                finished_at=0.0,
+                structured_payload={
+                    "vivado_log_excerpt": [
+                        "[TB][INFO] Selected TESTNAME=SMOKE",
+                        "[TB][INFO] ENV report: checked=128 errors=2 coverage=97.5%",
+                        "Scoreboard mismatches found",
+                    ]
+                },
+            )
+            collected = registry.collect(
+                base_result,
+                CollectorContext(spec=spec, started_ts=0.0, run_log_path=None, timed_out=False, runtime_metadata={}),
+            )
+            triage = collected.structured_payload.get("failure_triage")
+            self.assertIsInstance(triage, dict)
+            assert isinstance(triage, dict)
+            self.assertEqual("simulation_assertion_failed", triage["category"])
+            self.assertTrue(triage["evidence"])
+
     def test_report_html_skips_removed_summary_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project_path = self.create_project(Path(temp_dir))
@@ -267,6 +345,33 @@ class ExecutionStackTests(unittest.TestCase):
         self.assertIn("[FAIL]", failure_text)
         self.assertIn("Raw Tail", failure_text)
         self.assertIn("first error", failure_text)
+
+        triaged_failure = ExecutionResult(
+            command_id="build",
+            menu_no=13,
+            project_name="Demo",
+            status="fail",
+            return_code=1,
+            duration_sec=12,
+            structured_payload={
+                "failure_triage": {
+                    "category": "vivado_missing",
+                    "title": "Vivado is not available",
+                    "summary": "The automation could not launch the `vivado` executable on this machine.",
+                    "evidence": ["[ERROR] Vivado executable not found in PATH."],
+                    "actions": [
+                        "Add the Vivado bin directory to PATH or launch from a Xilinx-enabled shell.",
+                        "Re-run Toolkit Doctor before retrying the flow.",
+                    ],
+                }
+            },
+        )
+        triage_text = presenter.build_completion_text(job, triaged_failure)
+        self.assertIn("Failure Triage", triage_text)
+        self.assertIn("Likely Cause", triage_text)
+        self.assertIn("vivado_missing", triage_text)
+        self.assertIn("Vivado executable not found in PATH", triage_text)
+        self.assertIn("Next Actions", triage_text)
 
         hierarchy = ExecutionResult(
             command_id="hierarchy",

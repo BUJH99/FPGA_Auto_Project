@@ -33,6 +33,10 @@ from Telegram.bot.adapters.filesystem_evidence_reader import (
 from Telegram.bot.adapters.telegram_presenter import TelegramPresenter as LayeredTelegramPresenter
 from Telegram.bot.application.command_resolver import CommandResolver as LayeredCommandResolver
 from Telegram.bot.application.execution_service import ExecutionService as LayeredExecutionService
+from Telegram.bot.application.run_history_service import (
+    build_run_diff_text as build_project_run_diff_text,
+    build_run_history_text as build_project_run_history_text,
+)
 from Telegram.bot.application.result_collectors import (
     ResultCollectorRegistry as LayeredResultCollectorRegistry,
     extract_hierarchy_lines as collector_extract_hierarchy_lines,
@@ -843,6 +847,21 @@ def get_main_menu_keyboard() -> dict[str, object]:
         "is_persistent": True,
     }
 
+def get_bot_menu_commands() -> list[dict[str, str]]:
+    return [
+        {"command": "start", "description": "Show interactive main menu"},
+        {"command": "run", "description": "Open interactive project wizard"},
+        {"command": "status", "description": "Check currently running job"},
+        {"command": "last", "description": "Check last job result"},
+        {"command": "projects", "description": "List available projects"},
+        {"command": "help", "description": "Show paginated help menu"},
+    ]
+
+
+def register_bot_menu_commands(config: Config) -> None:
+    telegram_api(config, "setMyCommands", {"commands": get_bot_menu_commands()})
+
+
 def build_help(category: str = "core") -> tuple[str, dict[str, object]]:
     keyboard = {
         "inline_keyboard": [
@@ -866,6 +885,8 @@ def build_help(category: str = "core") -> tuple[str, dict[str, object]]:
             "🔸 /projects - <i>list valid projects</i>",
             "🔸 /status - <i>show running status</i>",
             "🔸 /last - <i>show last job result</i>",
+            "🔸 /history &lt;proj&gt; [tool] [limit] - <i>show recent project runs</i>",
+            "🔸 /diff &lt;proj&gt; [tool] - <i>compare latest two runs</i>",
             "🔸 /task &lt;menu_no&gt; &lt;proj&gt; [args] - <i>run MAIN menu (1~21)</i>",
             "🔸 /doctor &lt;proj&gt; - <i>run toolkit health check</i>",
             "🔸 /setup_project &lt;name&gt; [v|sv] - <i>run setup</i>",
@@ -961,6 +982,39 @@ def parse_sim_vivado_close_choice(raw: str) -> bool | None:
     if token in {"--keep-gui", "--keep", "--gui-on", "keep", "n", "no", "0"}:
         return False
     return None
+
+
+def parse_history_request_args(tokens: list[str]) -> tuple[str | None, str, int, str | None]:
+    if len(tokens) < 1 or len(tokens) > 3:
+        return None, "", 5, "Usage: /history <project> [tool] [limit]"
+
+    project_token = tokens[0]
+    tool_filter = ""
+    limit = 5
+
+    for token in tokens[1:]:
+        value = token.strip()
+        if not value:
+            continue
+        if re.fullmatch(r"\d+", value):
+            parsed_limit = int(value)
+            if parsed_limit <= 0 or parsed_limit > 20:
+                return None, "", 5, "history limit must be between 1 and 20."
+            limit = parsed_limit
+            continue
+        if tool_filter:
+            return None, "", 5, "Usage: /history <project> [tool] [limit]"
+        tool_filter = value
+
+    return project_token, tool_filter, limit, None
+
+
+def parse_diff_request_args(tokens: list[str]) -> tuple[str | None, str, str | None]:
+    if len(tokens) < 1 or len(tokens) > 2:
+        return None, "", "Usage: /diff <project> [tool]"
+    project_token = tokens[0]
+    tool_filter = tokens[1].strip() if len(tokens) == 2 else ""
+    return project_token, tool_filter, None
 
 
 def format_stdin(lines: list[str]) -> str | None:
@@ -2152,6 +2206,51 @@ def process_message(config: Config, message: dict) -> None:
             send_text(config, chat_id, "\n".join([x for x in lines if x]))
         return
 
+    if command == "/history":
+        project_token, tool_filter, limit, error = parse_history_request_args(parse_cli_tokens(args))
+        if error:
+            send_text(config, chat_id, error)
+            return
+        assert project_token is not None
+        project_path, error = resolve_project(config.project_root, project_token)
+        if error:
+            send_text(config, chat_id, error)
+            return
+        assert project_path is not None
+        send_text(
+            config,
+            chat_id,
+            build_project_run_history_text(
+                project_path,
+                project_name=project_path.name,
+                tool_filter=tool_filter,
+                limit=limit,
+            ),
+        )
+        return
+
+    if command == "/diff":
+        project_token, tool_filter, error = parse_diff_request_args(parse_cli_tokens(args))
+        if error:
+            send_text(config, chat_id, error)
+            return
+        assert project_token is not None
+        project_path, error = resolve_project(config.project_root, project_token)
+        if error:
+            send_text(config, chat_id, error)
+            return
+        assert project_path is not None
+        send_text(
+            config,
+            chat_id,
+            build_project_run_diff_text(
+                project_path,
+                project_name=project_path.name,
+                tool_filter=tool_filter,
+            ),
+        )
+        return
+
     if command == "/task":
         request, error = parse_task_command(config, args)
     elif command == "/run" or command == "/sim":
@@ -3249,6 +3348,7 @@ def process_callback_query(config: Config, callback: dict) -> None:
         elif category == "health":
             keyboard["inline_keyboard"] = [
                 [{"text": "21. Toolkit Doctor", "callback_data": "wiz_act_21"}],
+                [{"text": "🗂 Run History", "callback_data": "wiz_act_hist"}, {"text": "🧾 Run Diff", "callback_data": "wiz_act_diff"}],
             ]
 
         keyboard["inline_keyboard"].append([{"text": "🔙 Back", "callback_data": f"wiz_proj_{proj_name}"}])
@@ -3369,6 +3469,10 @@ def process_callback_query(config: Config, callback: dict) -> None:
             synthetic_cmd = f"/report_docs {proj_name}"
         elif act_num == "21":
             synthetic_cmd = f"/doctor {proj_name}"
+        elif act_num == "hist":
+            synthetic_cmd = f"/history {proj_name}"
+        elif act_num == "diff":
+            synthetic_cmd = f"/diff {proj_name}"
 
         if synthetic_cmd:
             execute_wizard_command(
@@ -3606,15 +3710,7 @@ def run_loop(config: Config) -> None:
 
     # Register Bot Commands Menu natively
     try:
-        telegram_api(config, "setMyCommands", {
-            "commands": [
-                {"command": "start", "description": "Show interactive main menu"},
-                {"command": "status", "description": "Check currently running job"},
-                {"command": "last", "description": "Check last job result"},
-                {"command": "projects", "description": "List available projects"},
-                {"command": "help", "description": "Show paginated help menu"}
-            ]
-        })
+        register_bot_menu_commands(config)
     except Exception as exc:
         print(f"[WARN] Failed to set bot commands: {exc}")
 

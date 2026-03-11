@@ -28,9 +28,12 @@ Telegram\telegram_fpga_bot_run.bat
 ## Supported commands
 
 - `/help`
+- `/run`
 - `/projects`
 - `/status`
 - `/last`
+- `/history <project> [tool] [limit]`
+- `/diff <project> [tool]`
 - `/task <menu_no> <project> [args...]`
 - `/setup_project <name> [v|sv]`
 - `/build <project>`

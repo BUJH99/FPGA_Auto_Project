@@ -90,6 +90,11 @@ class TelegramPresenter:
         for artifact in result.artifacts:
             lines.append(f"📎 <i>artifact=</i><code>{self.html_escape(Path(artifact.path).name)}</code>")
 
+        triage_lines = self._build_failure_triage_lines(result)
+        if triage_lines:
+            lines.append("")
+            lines.extend(triage_lines)
+
         doctor_lines = self._build_doctor_summary_lines(command_name, result, job.menu_no)
         if doctor_lines:
             lines.append("")
@@ -110,6 +115,35 @@ class TelegramPresenter:
             lines.extend(self.html_escape(line) for line in result.raw_output_tail[-20:])
             lines.append("</pre>")
         return "\n".join(lines)
+
+    def _build_failure_triage_lines(self, result: ExecutionResult) -> list[str]:
+        triage = result.structured_payload.get("failure_triage")
+        if not isinstance(triage, dict):
+            return []
+
+        title = str(triage.get("title", "")).strip() or "Needs manual investigation"
+        category = str(triage.get("category", "")).strip() or "generic_failure"
+        summary = str(triage.get("summary", "")).strip()
+        evidence = triage.get("evidence")
+        actions = triage.get("actions")
+
+        evidence_lines = [str(item).strip() for item in evidence if str(item).strip()] if isinstance(evidence, list) else []
+        action_lines = [str(item).strip() for item in actions if str(item).strip()] if isinstance(actions, list) else []
+
+        lines = [
+            "🧭 <b>Failure Triage</b>",
+            f"🔎 <b>Likely Cause:</b> <code>{self.html_escape(title)}</code>",
+            f"🏷 <b>Code:</b> <code>{self.html_escape(category)}</code>",
+        ]
+        if summary:
+            lines.append(f"📝 <b>What Happened:</b> {self.html_escape(summary)}")
+        if evidence_lines:
+            lines.append("📌 <b>Evidence:</b>")
+            lines.extend(f"• <code>{self.html_escape(item)}</code>" for item in evidence_lines[:3])
+        if action_lines:
+            lines.append("🛠 <b>Next Actions:</b>")
+            lines.extend(f"• {self.html_escape(item)}" for item in action_lines[:3])
+        return lines
 
     def _build_doctor_summary_lines(
         self,

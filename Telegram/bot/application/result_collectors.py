@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from Telegram.bot.adapters.filesystem_evidence_reader import FilesystemEvidenceReader
+from Telegram.bot.application.failure_triage import build_failure_triage
 from Telegram.bot.domain.models import ArtifactRef, CommandSpec, ExecutionResult
 
 VIVADO_LOG_FRESH_SLACK_SEC = 60.0
@@ -728,6 +729,9 @@ class ResultCollectorRegistry:
         result = self._default.collect(result, context)
         for collector in self._by_kind.get(context.spec.result_kind, []):
             result = collector.collect(result, context)
+        triage = build_failure_triage(result, context, self._reader)
+        if triage:
+            result.structured_payload["failure_triage"] = triage
         if result.evidence_source == "none" and result.raw_output_tail:
             result.evidence_source = "raw_output_tail"
         return result
