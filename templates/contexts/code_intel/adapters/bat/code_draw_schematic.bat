@@ -24,21 +24,44 @@ if exist "%MANIFEST_CTX%" (
 cd /d "%TARGET_PROJECT%"
 echo Target Project: %TARGET_PROJECT%
 
-REM Check for Yosys (trying yowasp-yosys first, then yosys)
-set YOSYS_CMD=yosys
-
-where yowasp-yosys >nul 2>nul
-if %errorlevel% equ 0 (
-    echo [INFO] Found yowasp-yosys. Using it.
-    set YOSYS_CMD=yowasp-yosys
+REM Resolve Yosys command.
+REM Priority:
+REM   1) SCHEMATIC_YOSYS_CMD override
+REM   2) native yosys
+REM   3) yowasp-yosys
+set "YOSYS_CMD="
+if defined SCHEMATIC_YOSYS_CMD (
+    set "YOSYS_CMD=%SCHEMATIC_YOSYS_CMD%"
+    echo [INFO] Using SCHEMATIC_YOSYS_CMD override: %YOSYS_CMD%
 ) else (
-    where yosys >nul 2>nul
-    if %errorlevel% neq 0 (
-        echo [ERROR] Neither 'yosys' nor 'yowasp-yosys' found in PATH.
-        echo Please ensure Yosys is installed.
-        pause
-        exit /b 1
+    for /f "usebackq delims=" %%I in (`where yosys 2^>nul`) do (
+        if not defined YOSYS_CMD set "YOSYS_CMD=%%~fI"
     )
+    if defined YOSYS_CMD (
+        echo [INFO] Found yosys. Using it.
+    ) else (
+        for /f "usebackq delims=" %%I in (`where yowasp-yosys 2^>nul`) do (
+            if not defined YOSYS_CMD set "YOSYS_CMD=%%~fI"
+        )
+        if defined YOSYS_CMD (
+            echo [INFO] Found yowasp-yosys. Using it.
+        ) else (
+            echo [ERROR] Neither 'yosys' nor 'yowasp-yosys' found in PATH.
+            echo [INFO] You can also set SCHEMATIC_YOSYS_CMD to a specific Yosys executable.
+            pause
+            exit /b 1
+        )
+    )
+)
+
+set "YOSYS_FRONTEND=auto"
+if defined SCHEMATIC_FRONTEND (
+    set "YOSYS_FRONTEND=%SCHEMATIC_FRONTEND%"
+)
+
+set "YOSYS_PLUGIN=slang"
+if defined SCHEMATIC_YOSYS_PLUGIN (
+    set "YOSYS_PLUGIN=%SCHEMATIC_YOSYS_PLUGIN%"
 )
 
 set "NETLISTSVG_CMD=%TEMPLATES_ROOT%\node_modules\netlistsvg\bin\netlistsvg.js"
@@ -243,12 +266,15 @@ if defined SCHEMATIC_MAX_JOBS (
 echo [INFO] Selected modules: !SELECTED_COUNT!
 echo [INFO] Parallel workers target: !MAX_PARALLEL!
 echo [INFO] Per-module logs: output\Diagram\logs
+echo [INFO] Requested frontend: !YOSYS_FRONTEND!
 echo.
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%RUN_SCHEMATIC_PS%" ^
     -ProjectPath "%TARGET_PROJECT%" ^
     -ModulesCsv "!MODULES_CSV!" ^
     -YosysCmd "%YOSYS_CMD%" ^
+    -Frontend "!YOSYS_FRONTEND!" ^
+    -YosysPlugin "%YOSYS_PLUGIN%" ^
     -NetlistSvgCmd "%NETLISTSVG_CMD%" ^
     -MaxParallel "!MAX_PARALLEL!" ^
     -HdlIndexerPath "%HDL_INDEXER%" ^

@@ -6,6 +6,10 @@ Param(
 
   [string]$YosysCmd = "",
 
+  [string]$Frontend = "auto",
+
+  [string]$YosysPlugin = "slang",
+
   [string]$NetlistSvgCmd = "",
 
   [int]$MaxParallel = 0,
@@ -49,6 +53,80 @@ Set-Location $ProjectPath
 if (-not [string]::IsNullOrWhiteSpace($ManifestJson) -and -not (Test-Path $ManifestJson)) {
   Write-Host "[ERROR] Manifest JSON not found: $ManifestJson"
   exit 1
+}
+
+function Invoke-YosysProbe {
+  param(
+    [string]$YosysCmd,
+    [string]$PluginName = "",
+    [string]$Script = ""
+  )
+
+  try {
+    $global:LASTEXITCODE = 0
+    $tmpCombined = [System.IO.Path]::GetTempFileName()
+    try {
+      $args = @("-Q")
+      if (-not [string]::IsNullOrWhiteSpace($PluginName)) {
+        $args += @("-m", $PluginName)
+      }
+      $args += @("-p", $Script)
+      & $YosysCmd @args *> $tmpCombined
+      $exitCode = $LASTEXITCODE
+      $output = @()
+      if (Test-Path $tmpCombined) {
+        $output = @(Get-Content -Path $tmpCombined)
+      }
+    }
+    finally {
+      if (Test-Path $tmpCombined) {
+        Remove-Item -Path $tmpCombined -Force -ErrorAction SilentlyContinue
+      }
+    }
+  }
+  catch {
+    return [pscustomobject]@{
+      Success = $false
+      ExitCode = -1
+      Output = @($_.Exception.Message)
+    }
+  }
+
+  return [pscustomobject]@{
+    Success = ($exitCode -eq 0)
+    ExitCode = $exitCode
+    Output = @($output)
+  }
+}
+
+function Test-YosysReadSlangSupport {
+  param(
+    [string]$YosysCmd,
+    [string]$PluginName = ""
+  )
+
+  $probe = Invoke-YosysProbe -YosysCmd $YosysCmd -PluginName $PluginName -Script "help read_slang"
+  if (-not $probe.Success) {
+    return $false
+  }
+
+  $joined = ($probe.Output -join "`n")
+  if ($joined -match "No such command or cell type: read_slang") {
+    return $false
+  }
+
+  return ($joined -match "\bread_slang\b")
+}
+
+function Get-YosysVersionText {
+  param([string]$YosysCmd)
+
+  $probe = Invoke-YosysProbe -YosysCmd $YosysCmd -Script "version"
+  if (-not $probe.Success) {
+    return ""
+  }
+
+  return (($probe.Output -join " ").Trim())
 }
 
 function Get-ProjectRelativePath {
@@ -253,6 +331,37 @@ foreach ($incEntry in $incEntries) {
 $includeDirs += $srcFiles | Select-Object -ExpandProperty DirectoryName
 $includeDirs = @($includeDirs | Sort-Object -Unique)
 
+$frontendRequested = [string]$Frontend
+if ([string]::IsNullOrWhiteSpace($frontendRequested)) {
+  $frontendRequested = "auto"
+}
+$frontendRequested = $frontendRequested.Trim().ToLowerInvariant()
+if ($frontendRequested -notin @("auto", "verilog", "slang")) {
+  Write-Host "[ERROR] Unsupported frontend request: $Frontend (use auto, verilog, or slang)"
+  exit 1
+}
+
+$slangAvailable = Test-YosysReadSlangSupport -YosysCmd $YosysCmd -PluginName $YosysPlugin
+$resolvedFrontend = $frontendRequested
+if ($resolvedFrontend -eq "auto") {
+  if ($slangAvailable) {
+    $resolvedFrontend = "slang"
+  }
+  else {
+    $resolvedFrontend = "verilog"
+  }
+}
+elseif ($resolvedFrontend -eq "slang" -and -not $slangAvailable) {
+  Write-Host "[ERROR] Requested slang frontend, but read_slang is unavailable."
+  if (-not [string]::IsNullOrWhiteSpace($YosysPlugin)) {
+    Write-Host "[INFO] Checked Yosys plugin: $YosysPlugin"
+  }
+  Write-Host "[INFO] Install yosys-slang / OSS CAD Suite, or switch SCHEMATIC_FRONTEND=verilog."
+  exit 1
+}
+
+$yosysVersionText = Get-YosysVersionText -YosysCmd $YosysCmd
+
 $moduleEntries = Try-LoadModuleEntriesFromIndexer -ProjectPath $ProjectPath -HdlIndexerPath $HdlIndexerPath -ManifestJson $ManifestJson
 if ($moduleEntries.Count -eq 0) {
   Write-Host "[ERROR] hdl_indexer failed or returned no module entries. Strict mode does not allow fallback scanning."
@@ -325,6 +434,15 @@ if (-not (Test-Path $logDir)) {
 Write-Host "[INFO] Selected modules: $selectedCount"
 Write-Host "[INFO] Parallel workers: $MaxParallel"
 Write-Host "[INFO] Log directory: $logDir"
+Write-Host "[INFO] Yosys command: $YosysCmd"
+if (-not [string]::IsNullOrWhiteSpace($yosysVersionText)) {
+  Write-Host "[INFO] Yosys version: $yosysVersionText"
+}
+Write-Host "[INFO] Requested frontend: $frontendRequested"
+Write-Host "[INFO] Active frontend: $resolvedFrontend"
+if (-not [string]::IsNullOrWhiteSpace($YosysPlugin)) {
+  Write-Host "[INFO] Yosys plugin hint: $YosysPlugin"
+}
 Write-Host ""
 
 $moduleWorker = {
@@ -334,6 +452,8 @@ $moduleWorker = {
     [string]$SourceFile,
     [string[]]$VerilogFiles,
     [string]$YosysCmd,
+    [string]$Frontend,
+    [string]$YosysPlugin,
     [string]$NetlistSvgCmd,
     [string]$ProcessSchematicScript,
     [string]$GenerateSimpleSvgScript,
@@ -444,6 +564,11 @@ $moduleWorker = {
   Write-Log " Processing Module: $Module"
   Write-Log "--------------------------------------------------------"
   Write-Log "[INFO] Found $Module in $SourceFile"
+  Write-Log "[INFO] Using Yosys command: $YosysCmd"
+  Write-Log "[INFO] Active frontend: $Frontend"
+  if (-not [string]::IsNullOrWhiteSpace($YosysPlugin)) {
+    Write-Log "[INFO] Yosys plugin hint: $YosysPlugin"
+  }
 
   $sourcePath = Join-Path $ProjectPath $SourceFile
   $hasSubmodules = 0
@@ -479,7 +604,17 @@ $moduleWorker = {
   # Keep hierarchy for schematic generation. Running `opt` here collapses
   # wrapper/dataflow structure that users expect to see in diagrams.
   $yosysScript = "read_verilog -sv $($quotedIncludeDirs -join ' ') $($quotedVerilogFiles -join ' '); hierarchy -top $Module; proc; write_json `"$jsonFile`""
-  $yosysOk = Invoke-ExternalCommand -Label "Yosys synthesis for $Module" -Command $YosysCmd -Arguments @("-p", $yosysScript)
+  $yosysArgs = @("-p", $yosysScript)
+  if ($Frontend -eq "slang") {
+    $quotedSlangFiles = $VerilogFiles | ForEach-Object { '"' + $_ + '"' }
+    $quotedSlangIncludeDirs = $IncludeDirs | ForEach-Object { '--include-directory "' + ($_.Replace('\','/')) + '"' }
+    $yosysScript = "read_slang --top $Module $($quotedSlangIncludeDirs -join ' ') $($quotedSlangFiles -join ' '); hierarchy -top $Module; proc; write_json `"$jsonFile`""
+    $yosysArgs = @("-p", $yosysScript)
+    if (-not [string]::IsNullOrWhiteSpace($YosysPlugin)) {
+      $yosysArgs = @("-m", $YosysPlugin) + $yosysArgs
+    }
+  }
+  $yosysOk = Invoke-ExternalCommand -Label "Yosys synthesis for $Module" -Command $YosysCmd -Arguments $yosysArgs
   if (-not $yosysOk) {
     $moduleSuccess = $false
   }
@@ -624,6 +759,8 @@ while ($queue.Count -gt 0 -or $runningJobs.Count -gt 0) {
       $item.SourceFile,
       $verilogFiles,
       $YosysCmd,
+      $resolvedFrontend,
+      $YosysPlugin,
       $NetlistSvgCmd,
       $processSchematicScript,
       $generateSimpleSvgScript,
