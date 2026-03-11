@@ -520,6 +520,141 @@ class TelegramBotTests(unittest.TestCase):
             self.assertIn("Failing Tests Added", sent_text)
             self.assertIn("SMOKE:scoreboard_errors", sent_text)
 
+    def test_process_message_diff_sim_vivado_uses_same_workflow_history(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root, project_path = self.create_project_root(Path(temp_dir))
+            config = self.make_config(project_root)
+            write_text(
+                project_path / "output" / "history" / "vivado_sim_gui" / "g1" / "run_summary.json",
+                json.dumps(
+                    {
+                        "tool": "vivado_sim_gui",
+                        "type": "run_summary",
+                        "status": "ok",
+                        "details": {"tbName": "tb_gui_old", "replayState": "completed"},
+                    }
+                )
+                + "\n",
+            )
+            write_text(
+                project_path / "output" / "history" / "vivado_sim_nogui" / "n1" / "run_summary.json",
+                json.dumps(
+                    {
+                        "tool": "vivado_sim_nogui",
+                        "type": "run_summary",
+                        "status": "ok",
+                        "details": {"tbName": "tb_nogui", "replayState": "completed"},
+                    }
+                )
+                + "\n",
+            )
+            write_text(
+                project_path / "output" / "history" / "vivado_sim_gui" / "g2" / "run_summary.json",
+                json.dumps(
+                    {
+                        "tool": "vivado_sim_gui",
+                        "type": "run_summary",
+                        "status": "ok",
+                        "details": {"tbName": "tb_gui_new", "replayState": "completed"},
+                    }
+                )
+                + "\n",
+            )
+            self.write_run_index(
+                project_path,
+                [
+                    {
+                        "tool": "vivado_sim_gui",
+                        "status": "ok",
+                        "summaryPath": "output/history/vivado_sim_gui/g1/run_summary.json",
+                        "outputs": [],
+                        "metadata": {},
+                        "createdAt": "2026-03-11T01:00:00Z",
+                    },
+                    {
+                        "tool": "vivado_sim_nogui",
+                        "status": "ok",
+                        "summaryPath": "output/history/vivado_sim_nogui/n1/run_summary.json",
+                        "outputs": [],
+                        "metadata": {},
+                        "createdAt": "2026-03-11T02:00:00Z",
+                    },
+                    {
+                        "tool": "vivado_sim_gui",
+                        "status": "ok",
+                        "summaryPath": "output/history/vivado_sim_gui/g2/run_summary.json",
+                        "outputs": [],
+                        "metadata": {},
+                        "createdAt": "2026-03-11T03:00:00Z",
+                    },
+                ],
+            )
+
+            with mock.patch.object(BOT, "send_text") as send_text_mock:
+                BOT.process_message(
+                    config,
+                    {"message_id": 3, "from": {"id": 1}, "chat": {"id": 10}, "text": "/diff Demo sim_vivado"},
+                )
+
+            sent_text = send_text_mock.call_args.args[2]
+            self.assertIn("[Run Diff]", sent_text)
+            self.assertIn("Vivado Sim (GUI)", sent_text)
+            self.assertIn("tb_gui_old", sent_text)
+            self.assertIn("tb_gui_new", sent_text)
+            self.assertNotIn("tb_nogui", sent_text)
+
+    def test_process_message_history_presentation_filter_matches_report_one_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root, project_path = self.create_project_root(Path(temp_dir))
+            config = self.make_config(project_root)
+            write_text(
+                project_path / "output" / "history" / "report_one_source" / "r1" / "run_summary.json",
+                json.dumps(
+                    {
+                        "tool": "report_one_source",
+                        "type": "run_summary",
+                        "status": "ok",
+                        "details": {"topModule": "TOP"},
+                    }
+                )
+                + "\n",
+            )
+            self.write_run_index(
+                project_path,
+                [
+                    {
+                        "tool": "report_one_source",
+                        "status": "ok",
+                        "summaryPath": "output/history/report_one_source/r1/run_summary.json",
+                        "outputs": [],
+                        "metadata": {"topModule": "TOP"},
+                        "createdAt": "2026-03-11T04:00:00Z",
+                    },
+                ],
+            )
+
+            with mock.patch.object(BOT, "send_text") as send_text_mock:
+                BOT.process_message(
+                    config,
+                    {"message_id": 4, "from": {"id": 1}, "chat": {"id": 10}, "text": "/history Demo presentation"},
+                )
+
+            filtered_text = send_text_mock.call_args.args[2]
+            self.assertIn("[Run History]", filtered_text)
+            self.assertIn("Filter:</b> <code>Presentation</code>", filtered_text)
+            self.assertIn("HTML Report", filtered_text)
+            self.assertNotIn("No matching run history", filtered_text)
+
+            with mock.patch.object(BOT, "send_text") as send_text_mock:
+                BOT.process_message(
+                    config,
+                    {"message_id": 5, "from": {"id": 1}, "chat": {"id": 10}, "text": "/history Demo 5"},
+                )
+
+            unfiltered_text = send_text_mock.call_args.args[2]
+            self.assertIn("HTML Report", unfiltered_text)
+            self.assertNotIn("report_one_source", unfiltered_text)
+
     def test_parse_main_menu_registry_covers_main_menu(self) -> None:
         registry = BOT.parse_main_menu_registry(REPO_ROOT / "MAIN.bat", REPO_ROOT / "templates")
         self.assertEqual(set(range(1, 22)), set(registry))

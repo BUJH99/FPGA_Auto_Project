@@ -416,11 +416,30 @@ def _match_text_finding(lines: list[str]) -> FailureFinding | None:
         ),
         (
             (
+                r"syntax error",
+                r"malformed statement",
+                r"invalid module instantiation",
+                r"parse error",
+                r"\bvrfc\b.*error",
+                r"\bxvlog\b.*error",
+                r"\bxelab\b.*error",
+            ),
+            FailureFinding(
+                category="hdl_compile_error",
+                title="HDL compile/elaboration error",
+                summary="The tool reported a Verilog/SystemVerilog compile problem before the run could complete.",
+                actions=(
+                    "Open the cited HDL file/line and fix the syntax, undeclared symbol, or elaboration issue.",
+                    "Rerun the same simulation/build command once compile is clean.",
+                ),
+            ),
+        ),
+        (
+            (
                 r"cannot open .*\.xdc",
                 r"no such file or directory.*\.xdc",
-                r"constraint",
+                r"(error|failed|invalid).*(constraint|\.xdc)",
                 r"get_ports .* returned empty",
-                r"\.xdc",
             ),
             FailureFinding(
                 category="xdc_issue",
@@ -447,26 +466,6 @@ def _match_text_finding(lines: list[str]) -> FailureFinding | None:
                 actions=(
                     "Verify the selected TB/top name matches the actual `module` or `program` declaration in the source.",
                     "If this is a new TB, align the filename/top naming and rerun the same selection.",
-                ),
-            ),
-        ),
-        (
-            (
-                r"syntax error",
-                r"malformed statement",
-                r"invalid module instantiation",
-                r"parse error",
-                r"\bvrfc\b.*error",
-                r"\bxvlog\b.*error",
-                r"\bxelab\b.*error",
-            ),
-            FailureFinding(
-                category="hdl_compile_error",
-                title="HDL compile/elaboration error",
-                summary="The tool reported a Verilog/SystemVerilog compile problem before the run could complete.",
-                actions=(
-                    "Open the cited HDL file/line and fix the syntax, undeclared symbol, or elaboration issue.",
-                    "Rerun the same simulation/build command once compile is clean.",
                 ),
             ),
         ),

@@ -6,9 +6,10 @@ from pathlib import Path
 
 from Telegram.bot.adapters.filesystem_evidence_reader import FilesystemEvidenceReader
 from Telegram.bot.adapters.telegram_presenter import TelegramPresenter
+from Telegram.bot.application.failure_triage import build_failure_triage
 from Telegram.bot.application.command_resolver import CommandResolver
 from Telegram.bot.application.result_collectors import CollectorContext, ResultCollectorRegistry
-from Telegram.bot.domain.models import Config, ExecutionResult, JobRequest
+from Telegram.bot.domain.models import CommandSpec, Config, ExecutionResult, InteractionContract, JobRequest
 from Telegram.telegram_fpga_bot import parse_main_menu_registry
 
 
@@ -281,6 +282,52 @@ class ExecutionStackTests(unittest.TestCase):
             assert isinstance(triage, dict)
             self.assertEqual("simulation_assertion_failed", triage["category"])
             self.assertTrue(triage["evidence"])
+
+    def test_failure_triage_prefers_hdl_compile_error_over_xdc_info_line(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = self.create_project(Path(temp_dir))
+            run_log_path = project_path / "log" / "vivado_build.log"
+            write_text(
+                run_log_path,
+                "\n".join(
+                    [
+                        "[INFO] Loading constraints from board.xdc",
+                        "[ERROR] syntax error near always_ff",
+                    ]
+                )
+                + "\n",
+            )
+
+            result = ExecutionResult(
+                command_id="build",
+                menu_no=13,
+                project_name="Demo",
+                status="fail",
+                return_code=1,
+                run_log_path=run_log_path,
+            )
+            spec = CommandSpec(
+                command_id="build",
+                menu_no=13,
+                project_name="Demo",
+                script_path=REPO_ROOT / "templates" / "contexts" / "vivado" / "adapters" / "bat" / "vivado_run_build_flow.bat",
+                cwd=project_path,
+                args=(),
+                stdin_text=None,
+                artifact_roots=(project_path, project_path / "log", project_path / "output"),
+                result_kind="build",
+                interaction_contract=InteractionContract(),
+                timeout_policy="default",
+                metadata={},
+            )
+
+            triage = build_failure_triage(
+                result,
+                CollectorContext(spec=spec, started_ts=0.0, run_log_path=run_log_path, timed_out=False, runtime_metadata={}),
+            )
+            self.assertIsNotNone(triage)
+            assert isinstance(triage, dict)
+            self.assertEqual("hdl_compile_error", triage["category"])
 
     def test_report_html_skips_removed_summary_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

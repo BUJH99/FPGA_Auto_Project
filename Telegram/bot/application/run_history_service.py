@@ -20,9 +20,11 @@ TOOL_ALIAS_MAP: dict[str, tuple[str, ...]] = {
     "vivado_sim_gui": ("vivado_sim_gui",),
     "hierarchy": ("hierarchy_view",),
     "hierarchy_view": ("hierarchy_view",),
+    "report_html": ("report_one_source",),
+    "report_one_source": ("report_one_source",),
     "report_docs": ("report_documentation", "report_doc"),
     "report_doc": ("report_documentation", "report_doc"),
-    "presentation": ("report_presentation", "presentation"),
+    "presentation": ("report_one_source", "report_presentation", "presentation"),
 }
 
 TOOL_LABELS: dict[str, str] = {
@@ -32,9 +34,30 @@ TOOL_LABELS: dict[str, str] = {
     "vivado_sim_nogui": "Vivado Sim (No GUI)",
     "vivado_sim_gui": "Vivado Sim (GUI)",
     "hierarchy_view": "Hierarchy View",
+    "report_one_source": "HTML Report",
     "report_documentation": "Docs Report",
     "report_doc": "Docs Report",
     "report_presentation": "Presentation",
+    "presentation": "Presentation",
+}
+
+FILTER_LABELS: dict[str, str] = {
+    "doctor": "Toolkit Doctor",
+    "toolkit_doctor": "Toolkit Doctor",
+    "build": "Vivado Build",
+    "vivado_build": "Vivado Build",
+    "sim": "Simulation Report",
+    "simulation_report": "Simulation Report",
+    "sim_vivado": "Vivado Sim",
+    "vivado_sim": "Vivado Sim",
+    "vivado_sim_nogui": "Vivado Sim (No GUI)",
+    "vivado_sim_gui": "Vivado Sim (GUI)",
+    "hierarchy": "Hierarchy View",
+    "hierarchy_view": "Hierarchy View",
+    "report_html": "HTML Report",
+    "report_one_source": "HTML Report",
+    "report_docs": "Docs Report",
+    "report_doc": "Docs Report",
     "presentation": "Presentation",
 }
 
@@ -116,7 +139,7 @@ def build_run_diff_text(
         selected_tools = (latest[0].tool,)
         selected_filter = latest[0].tool
 
-    records = load_run_history(project_path, tool_filter=selected_filter, limit=2)
+    records = _load_filtered_history(project_path, tool_filter=selected_filter)
     if not records:
         return (
             "🧾 <b>[Run Diff]</b>\n"
@@ -124,6 +147,11 @@ def build_run_diff_text(
             f"🔎 <b>Tool:</b> <code>{_escape(format_tool_filter_label(selected_filter, selected_tools))}</code>\n"
             "ℹ️ No matching run history was found."
         )
+    if len(selected_tools) > 1:
+        latest_tool = records[0].tool
+        selected_filter = latest_tool
+        selected_tools = (latest_tool,)
+        records = [record for record in records if record.tool == latest_tool]
     if len(records) == 1:
         current = records[0]
         return (
@@ -148,19 +176,11 @@ def build_run_diff_text(
 
 
 def count_run_history(project_path: Path, *, tool_filter: str = "") -> int:
-    records = _read_run_index_records(project_path)
-    tools = resolve_tool_filters(tool_filter)
-    if tools:
-        records = [record for record in records if record.tool in tools]
-    return len(records)
+    return len(_load_filtered_history(project_path, tool_filter=tool_filter))
 
 
 def load_run_history(project_path: Path, *, tool_filter: str = "", limit: int = 5) -> list[RunHistoryRecord]:
-    records = _read_run_index_records(project_path)
-    tools = resolve_tool_filters(tool_filter)
-    if tools:
-        records = [record for record in records if record.tool in tools]
-    records.sort(key=lambda item: _timestamp_sort_key(item.created_at), reverse=True)
+    records = _load_filtered_history(project_path, tool_filter=tool_filter)
     capped_limit = max(1, min(int(limit or 5), 20))
     return records[:capped_limit]
 
@@ -177,9 +197,12 @@ def resolve_tool_filters(raw_tool: str) -> tuple[str, ...]:
 def format_tool_filter_label(raw_tool: str, resolved_tools: tuple[str, ...]) -> str:
     if not raw_tool:
         return "all"
+    normalized = raw_tool.strip().lower()
+    if normalized in FILTER_LABELS:
+        return FILTER_LABELS[normalized]
     if not resolved_tools:
         return raw_tool
-    labels = [display_tool_label(tool) for tool in resolved_tools]
+    labels = _dedupe_preserve_order(display_tool_label(tool) for tool in resolved_tools)
     return " / ".join(labels)
 
 
@@ -188,6 +211,15 @@ def display_tool_label(tool: str) -> str:
     if not value:
         return "-"
     return TOOL_LABELS.get(value, value)
+
+
+def _load_filtered_history(project_path: Path, *, tool_filter: str = "") -> list[RunHistoryRecord]:
+    records = _read_run_index_records(project_path)
+    tools = resolve_tool_filters(tool_filter)
+    if tools:
+        records = [record for record in records if record.tool in tools]
+    records.sort(key=lambda item: _timestamp_sort_key(item.created_at), reverse=True)
+    return records
 
 
 def _build_history_record_lines(index: int, record: RunHistoryRecord) -> list[str]:
@@ -580,6 +612,20 @@ def _to_snake_case(value: str) -> str:
             out.append("_")
         out.append(char.lower())
     return "".join(out)
+
+
+def _dedupe_preserve_order(values: object) -> list[str]:
+    if not isinstance(values, (list, tuple)) and not hasattr(values, "__iter__"):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out
 
 
 def _status_badge(status: str) -> str:
