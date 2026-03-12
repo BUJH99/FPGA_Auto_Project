@@ -61,6 +61,10 @@ LOCK_HANDLE = None
 VIVADO_LOG_FRESH_SLACK_SEC = 60.0
 HIERARCHY_LOG_FRESH_SLACK_SEC = 30.0
 REPORT_ARTIFACT_RECENT_SLACK_SEC = 5.0
+SVG_PREVIEW_MIN_WIDTH_PX = 2400
+SVG_PREVIEW_MAX_WIDTH_PX = 6400
+SVG_PREVIEW_SCALE = 2.0
+SVG_PREVIEW_DPI = 192
 
 
 class RuntimeState:
@@ -1149,17 +1153,21 @@ def collect_schematic_diagram_files(roots: tuple[Path, ...], started_ts: float) 
 
 def render_svg_preview(svg_path: Path) -> Path | None:
     png_sidecar = svg_path.with_suffix(".png")
+    target_width = determine_svg_preview_width(svg_path)
     if png_sidecar.exists() and png_sidecar.is_file():
         try:
-            if png_sidecar.stat().st_mtime >= (svg_path.stat().st_mtime - 2.0):
+            if (
+                png_sidecar.stat().st_mtime >= (svg_path.stat().st_mtime - 2.0)
+                and png_has_width_at_least(png_sidecar, int(target_width * 0.9))
+            ):
                 return png_sidecar
         except OSError:
             pass
 
     temp_preview = Path(tempfile.gettempdir()) / f"{svg_path.stem}_{uuid.uuid4().hex[:8]}.png"
-    if _render_svg_preview_with_cairosvg(svg_path, temp_preview):
+    if _render_svg_preview_with_cairosvg(svg_path, temp_preview, target_width):
         return temp_preview
-    if _render_svg_preview_with_node(svg_path, temp_preview):
+    if _render_svg_preview_with_node(svg_path, temp_preview, target_width):
         return temp_preview
 
     try:
@@ -1169,19 +1177,99 @@ def render_svg_preview(svg_path: Path) -> Path | None:
     return None
 
 
-def _render_svg_preview_with_cairosvg(svg_path: Path, png_path: Path) -> bool:
+def parse_svg_canvas_size(svg_path: Path) -> tuple[float | None, float | None]:
+    try:
+        raw = svg_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None, None
+
+    opening_match = re.search(r"<svg\b([^>]*)>", raw, re.IGNORECASE)
+    if not opening_match:
+        return None, None
+
+    opening = opening_match.group(1)
+
+    def parse_length(name: str) -> float | None:
+        match = re.search(rf'\b{name}\s*=\s*"([^"]+)"', opening, re.IGNORECASE)
+        if not match:
+            return None
+        number_match = re.search(r"([0-9]+(?:\.[0-9]+)?)", match.group(1))
+        if not number_match:
+            return None
+        try:
+            return float(number_match.group(1))
+        except ValueError:
+            return None
+
+    width = parse_length("width")
+    height = parse_length("height")
+    if width is not None and height is not None:
+        return width, height
+
+    viewbox_match = re.search(r'\bviewBox\s*=\s*"([^"]+)"', opening, re.IGNORECASE)
+    if not viewbox_match:
+        return width, height
+
+    parts = [part for part in re.split(r"[\s,]+", viewbox_match.group(1).strip()) if part]
+    if len(parts) != 4:
+        return width, height
+
+    try:
+        vb_width = float(parts[2])
+        vb_height = float(parts[3])
+    except ValueError:
+        return width, height
+
+    return width or vb_width, height or vb_height
+
+
+def determine_svg_preview_width(svg_path: Path) -> int:
+    width, _ = parse_svg_canvas_size(svg_path)
+    if width is None or width <= 0:
+        return SVG_PREVIEW_MIN_WIDTH_PX
+
+    scaled = int(round(width * SVG_PREVIEW_SCALE))
+    return max(SVG_PREVIEW_MIN_WIDTH_PX, min(SVG_PREVIEW_MAX_WIDTH_PX, scaled))
+
+
+def read_png_dimensions(png_path: Path) -> tuple[int | None, int | None]:
+    try:
+        with png_path.open("rb") as handle:
+            header = handle.read(24)
+    except OSError:
+        return None, None
+
+    if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n":
+        return None, None
+
+    width = int.from_bytes(header[16:20], "big")
+    height = int.from_bytes(header[20:24], "big")
+    return width, height
+
+
+def png_has_width_at_least(png_path: Path, min_width: int) -> bool:
+    width, _ = read_png_dimensions(png_path)
+    return width is not None and width >= max(1, min_width)
+
+
+def _render_svg_preview_with_cairosvg(svg_path: Path, png_path: Path, target_width: int) -> bool:
     try:
         import cairosvg  # type: ignore
     except Exception:
         return False
     try:
-        cairosvg.svg2png(url=str(svg_path), write_to=str(png_path))
+        cairosvg.svg2png(
+            url=str(svg_path),
+            write_to=str(png_path),
+            output_width=target_width,
+            dpi=SVG_PREVIEW_DPI,
+        )
     except Exception:
         return False
     return png_path.exists() and png_path.is_file()
 
 
-def _render_svg_preview_with_node(svg_path: Path, png_path: Path) -> bool:
+def _render_svg_preview_with_node(svg_path: Path, png_path: Path, target_width: int) -> bool:
     node_cmd = shutil.which("node")
     converter_script = (
         BOT_REPO_ROOT
@@ -1206,6 +1294,10 @@ def _render_svg_preview_with_node(svg_path: Path, png_path: Path) -> bool:
                 str(svg_path),
                 "--output",
                 str(png_path),
+                "--width",
+                str(target_width),
+                "--dpi",
+                str(SVG_PREVIEW_DPI),
                 "--project-root",
                 str(converter_root),
             ],

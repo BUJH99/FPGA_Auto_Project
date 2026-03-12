@@ -710,6 +710,7 @@ class TelegramBotTests(unittest.TestCase):
             )
 
             with (
+                mock.patch.object(BOT, "render_svg_preview", return_value=png_path),
                 mock.patch.object(BOT, "safe_send_photo") as photo_mock,
                 mock.patch.object(BOT, "safe_send_document") as document_mock,
             ):
@@ -749,6 +750,7 @@ class TelegramBotTests(unittest.TestCase):
             )
 
             with (
+                mock.patch.object(BOT, "render_svg_preview", return_value=png_path),
                 mock.patch.object(BOT, "safe_send_photo") as photo_mock,
                 mock.patch.object(BOT, "safe_send_document") as document_mock,
             ):
@@ -760,10 +762,11 @@ class TelegramBotTests(unittest.TestCase):
     def test_render_svg_preview_falls_back_to_node_converter(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             svg_path = Path(temp_dir) / "TOP.svg"
-            write_text(svg_path, "<svg/>\n")
+            write_text(svg_path, '<svg width="2670" height="733"></svg>\n')
 
-            def fake_node(svg_arg: Path, png_arg: Path) -> bool:
+            def fake_node(svg_arg: Path, png_arg: Path, target_width: int) -> bool:
                 self.assertEqual(svg_path, svg_arg)
+                self.assertEqual(5340, target_width)
                 write_text(png_arg, "png\n")
                 return True
 
@@ -777,6 +780,44 @@ class TelegramBotTests(unittest.TestCase):
             assert preview is not None
             self.assertTrue(preview.exists())
             self.assertEqual(".png", preview.suffix.lower())
+            self.assertEqual(1, node_mock.call_count)
+            preview.unlink(missing_ok=True)
+
+    def test_determine_svg_preview_width_scales_large_detailed_svg(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            svg_path = Path(temp_dir) / "TOP_detailed.svg"
+            write_text(svg_path, '<svg width="2670" height="733"></svg>\n')
+
+            self.assertEqual(5340, BOT.determine_svg_preview_width(svg_path))
+
+    def test_render_svg_preview_ignores_low_res_sidecar_png(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            svg_path = Path(temp_dir) / "TOP_detailed.svg"
+            png_path = svg_path.with_suffix(".png")
+            write_text(svg_path, '<svg width="2670" height="733"></svg>\n')
+            png_path.write_bytes(
+                b"\x89PNG\r\n\x1a\n"
+                + b"\x00\x00\x00\rIHDR"
+                + (1200).to_bytes(4, "big")
+                + (330).to_bytes(4, "big")
+                + b"\x08\x02\x00\x00\x00"
+            )
+
+            def fake_node(svg_arg: Path, out_arg: Path, target_width: int) -> bool:
+                self.assertEqual(svg_path, svg_arg)
+                self.assertEqual(5340, target_width)
+                write_text(out_arg, "png\n")
+                return True
+
+            with (
+                mock.patch.object(BOT, "_render_svg_preview_with_cairosvg", return_value=False),
+                mock.patch.object(BOT, "_render_svg_preview_with_node", side_effect=fake_node) as node_mock,
+            ):
+                preview = BOT.render_svg_preview(svg_path)
+
+            self.assertIsNotNone(preview)
+            assert preview is not None
+            self.assertNotEqual(png_path, preview)
             self.assertEqual(1, node_mock.call_count)
             preview.unlink(missing_ok=True)
 
