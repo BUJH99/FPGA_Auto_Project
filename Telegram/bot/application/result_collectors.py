@@ -47,6 +47,64 @@ def media_type_for_path(path: Path) -> str:
     return "application/octet-stream"
 
 
+def _is_system_skin_svg(path: Path) -> bool:
+    return path.suffix.lower() == ".svg" and path.stem.lower().startswith("skin_")
+
+
+def _collect_schematic_diagram_paths(roots: tuple[Path, ...], started_ts: float) -> list[Path]:
+    cutoff_ts = started_ts - 2.0
+    output_root: Path | None = None
+
+    for root in roots:
+        if root.name.lower() == "output":
+            output_root = root
+            break
+    if output_root is None:
+        for root in roots:
+            if (root / "Diagram").exists():
+                output_root = root
+                break
+    if output_root is None:
+        return []
+
+    simple_dir = output_root / "Diagram" / "Simple"
+    detailed_dir = output_root / "Diagram" / "Detailed"
+    module_paths: dict[str, dict[str, Path]] = {}
+
+    if simple_dir.exists():
+        for path in simple_dir.glob("*.svg"):
+            if not path.is_file() or _is_system_skin_svg(path):
+                continue
+            module_paths.setdefault(path.stem.lower(), {})["simple"] = path
+
+    if detailed_dir.exists():
+        for path in detailed_dir.glob("*.svg"):
+            if not path.is_file() or _is_system_skin_svg(path):
+                continue
+            stem = path.stem
+            key = stem[:-9].lower() if stem.lower().endswith("_detailed") else stem.lower()
+            module_paths.setdefault(key, {})["detailed"] = path
+
+    if not module_paths:
+        return []
+
+    fresh: list[Path] = []
+    fallback: list[Path] = []
+    for module_key in sorted(module_paths):
+        bucket = module_paths[module_key]
+        ordered = [bucket[kind] for kind in ("simple", "detailed") if kind in bucket]
+        for path in ordered:
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                mtime = 0.0
+            if mtime >= cutoff_ts:
+                fresh.append(path)
+            else:
+                fallback.append(path)
+    return fresh if fresh else fallback
+
+
 def _resolve_summary_detail_path(summary_path: Path, payload: dict[str, object], raw_value: object) -> Path | None:
     value = str(raw_value or "").strip()
     if not value:
@@ -641,13 +699,27 @@ class DiagramResultCollector:
         self._reader = reader
 
     def collect(self, result: ExecutionResult, context: CollectorContext) -> ExecutionResult:
-        diagram_paths = self._reader.collect_recent_files(
-            context.spec.artifact_roots,
-            started_ts=context.started_ts,
-            suffixes={".svg", ".png", ".jpg", ".jpeg", ".webp"},
-            limit=context.diagram_limit,
-            exclude_prefixes=("skin_",),
-        )
+        if context.spec.command_id == "schematic" or context.spec.menu_no == 1:
+            diagram_paths = _collect_schematic_diagram_paths(
+                context.spec.artifact_roots,
+                started_ts=context.started_ts,
+            )
+            if not diagram_paths:
+                diagram_paths = self._reader.collect_recent_files(
+                    context.spec.artifact_roots,
+                    started_ts=context.started_ts,
+                    suffixes={".svg", ".png", ".jpg", ".jpeg", ".webp"},
+                    limit=context.diagram_limit,
+                    exclude_prefixes=("skin_",),
+                )
+        else:
+            diagram_paths = self._reader.collect_recent_files(
+                context.spec.artifact_roots,
+                started_ts=context.started_ts,
+                suffixes={".svg", ".png", ".jpg", ".jpeg", ".webp"},
+                limit=context.diagram_limit,
+                exclude_prefixes=("skin_",),
+            )
         result.artifacts = result.artifacts + tuple(
             ArtifactRef(
                 kind="diagram",

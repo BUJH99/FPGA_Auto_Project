@@ -9,6 +9,7 @@ import mimetypes
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -128,6 +129,7 @@ def make_execution_service(config: Config) -> LayeredExecutionService:
         collectors=RESULT_COLLECTOR_REGISTRY,
         progress_interval_sec=config.progress_interval_sec,
         default_timeout_sec=config.command_timeout_sec,
+        diagram_limit=config.max_diagram_files,
         sim_vivado_auto_complete_on_replay=config.sim_vivado_auto_complete_on_replay,
         sim_vivado_replay_check_sec=config.sim_vivado_replay_check_sec,
     )
@@ -1154,21 +1156,96 @@ def render_svg_preview(svg_path: Path) -> Path | None:
         except OSError:
             pass
 
+    temp_preview = Path(tempfile.gettempdir()) / f"{svg_path.stem}_{uuid.uuid4().hex[:8]}.png"
+    if _render_svg_preview_with_cairosvg(svg_path, temp_preview):
+        return temp_preview
+    if _render_svg_preview_with_node(svg_path, temp_preview):
+        return temp_preview
+
+    try:
+        temp_preview.unlink(missing_ok=True)
+    except Exception:
+        pass
+    return None
+
+
+def _render_svg_preview_with_cairosvg(svg_path: Path, png_path: Path) -> bool:
     try:
         import cairosvg  # type: ignore
     except Exception:
-        return None
-
-    temp_preview = Path(tempfile.gettempdir()) / f"{svg_path.stem}_{uuid.uuid4().hex[:8]}.png"
+        return False
     try:
-        cairosvg.svg2png(url=str(svg_path), write_to=str(temp_preview))
+        cairosvg.svg2png(url=str(svg_path), write_to=str(png_path))
     except Exception:
+        return False
+    return png_path.exists() and png_path.is_file()
+
+
+def _render_svg_preview_with_node(svg_path: Path, png_path: Path) -> bool:
+    node_cmd = shutil.which("node")
+    converter_script = (
+        BOT_REPO_ROOT
+        / "templates"
+        / "contexts"
+        / "code_intel"
+        / "adapters"
+        / "cli"
+        / "code_convert_svg_to_png_cli.js"
+    )
+    converter_root = BOT_REPO_ROOT / "templates"
+
+    if node_cmd is None or not converter_script.exists() or not converter_root.exists():
+        return False
+
+    try:
+        completed = subprocess.run(
+            [
+                node_cmd,
+                str(converter_script),
+                "--input",
+                str(svg_path),
+                "--output",
+                str(png_path),
+                "--project-root",
+                str(converter_root),
+            ],
+            cwd=str(BOT_REPO_ROOT),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=120,
+            check=False,
+        )
+    except Exception:
+        return False
+
+    return completed.returncode == 0 and png_path.exists() and png_path.is_file()
+
+
+def send_svg_artifacts(
+    config: Config,
+    chat_id: int,
+    svg_path: Path,
+    command_name: str,
+    *,
+    seen: set[Path] | None = None,
+) -> None:
+    temp_preview: Path | None = None
+    preview = render_svg_preview(svg_path)
+    if preview is not None:
+        temp_preview = preview if preview != svg_path.with_suffix(".png") else None
+        if seen is not None:
+            seen.add(preview)
+        png_caption = f"{command_name} | {svg_path.stem}.png"
+        safe_send_photo(config, chat_id, preview, png_caption)
+        safe_send_document(config, chat_id, preview, png_caption)
+
+    safe_send_document(config, chat_id, svg_path, f"{command_name} | {svg_path.name}")
+
+    if temp_preview is not None:
         try:
             temp_preview.unlink(missing_ok=True)
         except Exception:
             pass
-        return None
-    return temp_preview
 
 
 def send_diagram_artifacts(config: Config, chat_id: int, job: JobRequest, started_ts: float) -> None:
@@ -1187,7 +1264,11 @@ def send_diagram_artifacts(config: Config, chat_id: int, job: JobRequest, starte
         return
 
     safe_send_text(config, chat_id, f"📎 [ARTIFACTS] diagrams={len(targets)}")
+    seen: set[Path] = set()
     for path in targets:
+        if path in seen:
+            continue
+        seen.add(path)
         suffix = path.suffix.lower()
         caption = f"{job.command_name} | {path.name}"
 
@@ -1196,17 +1277,7 @@ def send_diagram_artifacts(config: Config, chat_id: int, job: JobRequest, starte
             continue
 
         if suffix == ".svg":
-            temp_preview: Path | None = None
-            preview = render_svg_preview(path)
-            if preview is not None:
-                temp_preview = preview if preview != path.with_suffix(".png") else None
-                safe_send_photo(config, chat_id, preview, f"{job.command_name} | {path.stem}.png")
-            safe_send_document(config, chat_id, path, caption)
-            if temp_preview is not None:
-                try:
-                    temp_preview.unlink(missing_ok=True)
-                except Exception:
-                    pass
+            send_svg_artifacts(config, chat_id, path, job.command_name, seen=seen)
 
 
 def collect_recent_report_files(job: JobRequest, started_ts: float) -> list[Path]:
@@ -1803,17 +1874,7 @@ def send_execution_artifacts(config: Config, chat_id: int, result: ExecutionResu
             safe_send_photo(config, chat_id, path, caption)
             continue
         if suffix == ".svg":
-            preview = render_svg_preview(path)
-            temp_preview: Path | None = None
-            if preview is not None:
-                temp_preview = preview if preview != path.with_suffix(".png") else None
-                safe_send_photo(config, chat_id, preview, f"{result.command_id} | {path.stem}.png")
-            safe_send_document(config, chat_id, path, caption)
-            if temp_preview is not None:
-                try:
-                    temp_preview.unlink(missing_ok=True)
-                except Exception:
-                    pass
+            send_svg_artifacts(config, chat_id, path, result.command_id, seen=seen)
             continue
         if artifact.kind == "vivado_sim_log" and not config.sim_vivado_send_log_file:
             continue

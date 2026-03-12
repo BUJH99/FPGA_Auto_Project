@@ -169,6 +169,60 @@ class ExecutionStackTests(unittest.TestCase):
             self.assertTrue(vivado_artifacts)
             self.assertEqual(current_log, vivado_artifacts[0].path)
 
+    def test_result_collector_keeps_all_fresh_schematic_diagrams(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = self.create_project(Path(temp_dir))
+            output_root = project_path / "output"
+            simple_dir = output_root / "Diagram" / "Simple"
+            simple_dir.mkdir(parents=True, exist_ok=True)
+
+            now = time.time()
+            expected = {"TOP.svg", "RegFile.svg", "SystemDecoder.svg", "ALU.svg"}
+            for name in expected:
+                path = simple_dir / name
+                write_text(path, "<svg/>\n")
+                os.utime(path, (now, now))
+
+            skin_path = simple_dir / "skin_demo.svg"
+            write_text(skin_path, "<svg/>\n")
+            os.utime(skin_path, (now, now))
+
+            spec = CommandSpec(
+                command_id="schematic",
+                menu_no=1,
+                project_name=project_path.name,
+                script_path=REPO_ROOT / "templates" / "contexts" / "code_intel" / "adapters" / "bat" / "code_draw_schematic.bat",
+                cwd=REPO_ROOT,
+                args=(str(project_path),),
+                artifact_roots=(project_path / "log", output_root),
+                result_kind="diagram",
+            )
+
+            registry = ResultCollectorRegistry(FilesystemEvidenceReader())
+            base_result = ExecutionResult(
+                command_id=spec.command_id,
+                menu_no=spec.menu_no,
+                project_name=spec.project_name,
+                status="success",
+                return_code=0,
+                started_at=now,
+                finished_at=now + 1,
+            )
+            collected = registry.collect(
+                base_result,
+                CollectorContext(
+                    spec=spec,
+                    started_ts=now,
+                    run_log_path=None,
+                    timed_out=False,
+                    runtime_metadata={},
+                    diagram_limit=3,
+                ),
+            )
+
+            diagram_names = {artifact.path.name for artifact in collected.artifacts if artifact.kind == "diagram"}
+            self.assertEqual(expected, diagram_names)
+
     def test_result_collector_prefers_doctor_summary_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project_path = self.create_project(Path(temp_dir))

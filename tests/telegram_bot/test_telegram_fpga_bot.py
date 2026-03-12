@@ -681,8 +681,104 @@ class TelegramBotTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             project_root, _ = self.create_project_root(Path(temp_dir))
             config = self.make_config(project_root)
+            config.max_diagram_files = 7
             service = BOT.make_execution_service(config)
             self.assertIsInstance(service, BOT.LayeredExecutionService)
+            self.assertEqual(7, service._diagram_limit)
+
+    def test_send_execution_artifacts_sends_png_document_for_svg(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            from Telegram.bot.domain.models import ArtifactRef
+
+            project_root, project_path = self.create_project_root(Path(temp_dir))
+            config = self.make_config(project_root)
+            svg_path = project_path / "output" / "Diagram" / "Simple" / "TOP.svg"
+            png_path = svg_path.with_suffix(".png")
+            write_text(svg_path, "<svg/>\n")
+            write_text(png_path, "png\n")
+            result = BOT.ExecutionResult(
+                command_id="schematic",
+                status="success",
+                return_code=0,
+                artifacts=(
+                    ArtifactRef(
+                        kind="diagram",
+                        path=svg_path,
+                        label=svg_path.name,
+                    ),
+                ),
+            )
+
+            with (
+                mock.patch.object(BOT, "safe_send_photo") as photo_mock,
+                mock.patch.object(BOT, "safe_send_document") as document_mock,
+            ):
+                BOT.send_execution_artifacts(config, 10, result)
+
+            self.assertEqual(
+                [call.args[2] for call in photo_mock.call_args_list],
+                [png_path],
+            )
+            self.assertEqual(
+                [call.args[2] for call in document_mock.call_args_list],
+                [png_path, svg_path],
+            )
+            self.assertEqual(
+                [call.args[3] for call in document_mock.call_args_list],
+                ["schematic | TOP.png", "schematic | TOP.svg"],
+            )
+
+    def test_send_execution_artifacts_dedupes_sidecar_png_after_svg_send(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            from Telegram.bot.domain.models import ArtifactRef
+
+            project_root, project_path = self.create_project_root(Path(temp_dir))
+            config = self.make_config(project_root)
+            svg_path = project_path / "output" / "Diagram" / "Simple" / "TOP.svg"
+            png_path = svg_path.with_suffix(".png")
+            write_text(svg_path, "<svg/>\n")
+            write_text(png_path, "png\n")
+            result = BOT.ExecutionResult(
+                command_id="schematic",
+                status="success",
+                return_code=0,
+                artifacts=(
+                    ArtifactRef(kind="diagram", path=svg_path, label=svg_path.name),
+                    ArtifactRef(kind="diagram", path=png_path, label=png_path.name),
+                ),
+            )
+
+            with (
+                mock.patch.object(BOT, "safe_send_photo") as photo_mock,
+                mock.patch.object(BOT, "safe_send_document") as document_mock,
+            ):
+                BOT.send_execution_artifacts(config, 10, result)
+
+            self.assertEqual(1, photo_mock.call_count)
+            self.assertEqual([call.args[2] for call in document_mock.call_args_list], [png_path, svg_path])
+
+    def test_render_svg_preview_falls_back_to_node_converter(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            svg_path = Path(temp_dir) / "TOP.svg"
+            write_text(svg_path, "<svg/>\n")
+
+            def fake_node(svg_arg: Path, png_arg: Path) -> bool:
+                self.assertEqual(svg_path, svg_arg)
+                write_text(png_arg, "png\n")
+                return True
+
+            with (
+                mock.patch.object(BOT, "_render_svg_preview_with_cairosvg", return_value=False),
+                mock.patch.object(BOT, "_render_svg_preview_with_node", side_effect=fake_node) as node_mock,
+            ):
+                preview = BOT.render_svg_preview(svg_path)
+
+            self.assertIsNotNone(preview)
+            assert preview is not None
+            self.assertTrue(preview.exists())
+            self.assertEqual(".png", preview.suffix.lower())
+            self.assertEqual(1, node_mock.call_count)
+            preview.unlink(missing_ok=True)
 
     def test_build_menu_invocation_matches_batch_contracts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
