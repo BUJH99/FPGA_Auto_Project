@@ -89,8 +89,9 @@ function Get-PortNamesFromDeclaration {
       continue
     }
 
-    if ($candidate -match '([A-Za-z_][A-Za-z0-9_$]*)') {
-      $portName = $Matches[1]
+    $identifierMatches = @([regex]::Matches($candidate, '[A-Za-z_][A-Za-z0-9_$]*') | ForEach-Object { $_.Value })
+    if ($identifierMatches.Count -gt 0) {
+      $portName = $identifierMatches[-1]
       if (-not [string]::IsNullOrWhiteSpace($widthSuffix)) {
         $portName += $widthSuffix
       }
