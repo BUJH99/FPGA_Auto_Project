@@ -50,6 +50,17 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function normalizeLegacyEdgeEndpoints(layout) {
+  for (const edge of layout.edges || []) {
+    if ((!Array.isArray(edge.sources) || edge.sources.length === 0) && edge.sourcePort) {
+      edge.sources = [edge.sourcePort];
+    }
+    if ((!Array.isArray(edge.targets) || edge.targets.length === 0) && edge.targetPort) {
+      edge.targets = [edge.targetPort];
+    }
+  }
+}
+
 function nearlyEqual(lhs, rhs, epsilon = 1e-6) {
   return Math.abs(Number(lhs || 0) - Number(rhs || 0)) <= epsilon;
 }
@@ -1095,6 +1106,10 @@ function main() {
   const baselineLayout = readJson(baselinePath);
   const overrideLayout = readJson(overridePath);
   const mergedLayout = clone(baselineLayout);
+
+  normalizeLegacyEdgeEndpoints(baselineLayout);
+  normalizeLegacyEdgeEndpoints(overrideLayout);
+  normalizeLegacyEdgeEndpoints(mergedLayout);
 
   const movedNodeIds = copyChildOverrides(mergedLayout, overrideLayout);
   alignBoundaryNodesToPorts(mergedLayout, movedNodeIds);

@@ -580,7 +580,16 @@ $moduleWorker = {
     try {
       $global:LASTEXITCODE = 0
       $tmpCombined = [System.IO.Path]::GetTempFileName()
+      $previousErrorActionPreference = $ErrorActionPreference
+      $hadNativePref = $false
+      $previousNativePref = $null
       try {
+        $ErrorActionPreference = "Continue"
+        if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -Scope 0 -ErrorAction SilentlyContinue) {
+          $hadNativePref = $true
+          $previousNativePref = $PSNativeCommandUseErrorActionPreference
+          $PSNativeCommandUseErrorActionPreference = $false
+        }
         # Redirect all native command output to a temp file, then append once.
         & $Command @Arguments *> $tmpCombined
         $exitCode = $LASTEXITCODE
@@ -589,6 +598,10 @@ $moduleWorker = {
         }
       }
       finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+        if ($hadNativePref) {
+          $PSNativeCommandUseErrorActionPreference = $previousNativePref
+        }
         if (Test-Path $tmpCombined) { Remove-Item -Path $tmpCombined -Force -ErrorAction SilentlyContinue }
       }
       if ($exitCode -ne 0) {
@@ -639,6 +652,25 @@ $moduleWorker = {
     }
     catch {
       Write-Log ("[WARN] SVG sanitization failed for {0}: {1}" -f $SvgPath, $_.Exception.Message)
+      return $false
+    }
+  }
+
+  function Test-ArtifactFresh {
+    param(
+      [string]$Path,
+      [datetime]$NotBeforeUtc
+    )
+
+    if (-not (Test-Path $Path)) {
+      return $false
+    }
+
+    try {
+      $artifact = Get-Item -LiteralPath $Path
+      return ($artifact.LastWriteTimeUtc -ge $NotBeforeUtc.AddSeconds(-1))
+    }
+    catch {
       return $false
     }
   }
@@ -746,7 +778,9 @@ $moduleWorker = {
   try {
     $yosysCommands = @()
     if ($Frontend -eq "slang") {
-      $readCommandParts = @("read_slang", "--top", $Module)
+      # Preserve structural wrappers for schematic generation so top-level
+      # modules render as submodule instances instead of lowered gate logic.
+      $readCommandParts = @("read_slang", "--keep-hierarchy", "--top", $Module)
       if ($UseReadSlangSingleThread) {
         $readCommandParts += @("--threads", "1")
       }
@@ -815,6 +849,9 @@ $moduleWorker = {
   if (Test-Path $svgDetailed) {
     Remove-Item -Path $svgDetailed -Force -ErrorAction SilentlyContinue
   }
+  if (Test-Path $drawioDetailed) {
+    Remove-Item -Path $drawioDetailed -Force -ErrorAction SilentlyContinue
+  }
 
     $selectedSkin = $SkinPath
   if (Test-Path $skinGenerated) {
@@ -877,29 +914,33 @@ $moduleWorker = {
     Write-Log "[INFO] No custom schematic layout found. Using automatic ELK placement."
   }
 
+  $detailedSvgStartUtc = (Get-Date).ToUniversalTime()
   $netlistOk = Invoke-ExternalCommand -Label "netlistsvg for $Module" -Command "node" -Arguments $netlistArgs
   if (-not $netlistOk) {
     $moduleSuccess = $false
   }
-    elseif (Test-Path $svgDetailed) {
+    elseif (Test-ArtifactFresh -Path $svgDetailed -NotBeforeUtc $detailedSvgStartUtc) {
       Write-Log "[SUCCESS] Generated $svgDetailed"
       [void](Sanitize-SvgTextNodes -SvgPath $svgDetailed)
       Write-Log "[INFO] Converting detailed to Draw.io..."
+      $detailedDrawioStartUtc = (Get-Date).ToUniversalTime()
       $detailedDrawioOk = Invoke-ExternalCommand -Label "Detailed Draw.io conversion for $Module" -Command "node" -Arguments @($Svg2DrawioScript, $svgDetailed, $drawioDetailed)
       if ($detailedDrawioOk) {
-        if (Test-Path $drawioDetailed) {
+        if (Test-ArtifactFresh -Path $drawioDetailed -NotBeforeUtc $detailedDrawioStartUtc) {
           Write-Log "[SUCCESS] Generated $drawioDetailed"
         }
         else {
-          Write-Log "[WARN] Detailed Draw.io conversion output missing for $Module"
+          Write-Log "[ERROR] Detailed Draw.io conversion output missing or stale for $Module"
+          $moduleSuccess = $false
         }
       }
       else {
-        Write-Log "[WARN] Detailed Draw.io conversion failed for $Module"
+        Write-Log "[ERROR] Detailed Draw.io conversion failed for $Module"
+        $moduleSuccess = $false
       }
     }
     else {
-      Write-Log "[ERROR] Failed to generate detailed SVG for $Module"
+      Write-Log "[ERROR] Failed to generate detailed SVG for $Module (output missing or stale)"
       $moduleSuccess = $false
     }
   }
@@ -908,7 +949,11 @@ $moduleWorker = {
   if (Test-Path $svgSimple) {
     Remove-Item -Path $svgSimple -Force -ErrorAction SilentlyContinue
   }
+  if (Test-Path $drawioSimple) {
+    Remove-Item -Path $drawioSimple -Force -ErrorAction SilentlyContinue
+  }
 
+  $simpleSvgStartUtc = (Get-Date).ToUniversalTime()
   $simpleSvgOk = Invoke-ExternalCommand -Label "Simple SVG generation for $Module" -Command "powershell" -Arguments @(
     "-NoProfile",
     "-ExecutionPolicy",
@@ -924,25 +969,28 @@ $moduleWorker = {
     $moduleSuccess = $false
   }
 
-  if (Test-Path $svgSimple) {
+  if (Test-ArtifactFresh -Path $svgSimple -NotBeforeUtc $simpleSvgStartUtc) {
     Write-Log "[SUCCESS] Generated $svgSimple"
     [void](Sanitize-SvgTextNodes -SvgPath $svgSimple)
     Write-Log "[INFO] Converting simple to Draw.io..."
+    $simpleDrawioStartUtc = (Get-Date).ToUniversalTime()
     $simpleDrawioOk = Invoke-ExternalCommand -Label "Simple Draw.io conversion for $Module" -Command "node" -Arguments @($Svg2DrawioScript, $svgSimple, $drawioSimple)
     if ($simpleDrawioOk) {
-      if (Test-Path $drawioSimple) {
+      if (Test-ArtifactFresh -Path $drawioSimple -NotBeforeUtc $simpleDrawioStartUtc) {
         Write-Log "[SUCCESS] Generated $drawioSimple"
       }
       else {
-        Write-Log "[WARN] Simple Draw.io conversion output missing for $Module"
+        Write-Log "[ERROR] Simple Draw.io conversion output missing or stale for $Module"
+        $moduleSuccess = $false
       }
     }
     else {
-      Write-Log "[WARN] Simple Draw.io conversion failed for $Module"
+      Write-Log "[ERROR] Simple Draw.io conversion failed for $Module"
+      $moduleSuccess = $false
     }
   }
   else {
-    Write-Log "[ERROR] Failed to generate simple SVG for $Module"
+    Write-Log "[ERROR] Failed to generate simple SVG for $Module (output missing or stale)"
     $moduleSuccess = $false
   }
 
