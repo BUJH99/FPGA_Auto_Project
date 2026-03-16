@@ -81,6 +81,7 @@ if not exist "%TARGET_PROJECT%\output\FINALReport" mkdir "%TARGET_PROJECT%\outpu
 if not exist "%TARGET_PROJECT%\output\fsm" mkdir "%TARGET_PROJECT%\output\fsm"
 if not exist "%TARGET_PROJECT%\output\fsm\svg" mkdir "%TARGET_PROJECT%\output\fsm\svg"
 if not exist "%TARGET_PROJECT%\output\fsm\drawio" mkdir "%TARGET_PROJECT%\output\fsm\drawio"
+if not exist "%TARGET_PROJECT%\diagram_layout" mkdir "%TARGET_PROJECT%\diagram_layout"
 if not exist "%TARGET_PROJECT%\log" mkdir "%TARGET_PROJECT%\log"
 if not exist "%TARGET_PROJECT%\report_assets" mkdir "%TARGET_PROJECT%\report_assets"
 if not exist "%TARGET_PROJECT%\src" mkdir "%TARGET_PROJECT%\src"
@@ -122,6 +123,7 @@ echo - output\Diagram\JSON
 echo - output\FINALReport
 echo - output\fsm\svg
 echo - output\fsm\drawio
+echo - diagram_layout
 echo - log
 echo - report_assets
 echo - src

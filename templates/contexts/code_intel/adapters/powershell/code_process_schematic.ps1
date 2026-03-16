@@ -676,11 +676,11 @@ text {
   <!-- Output Port: LINE ONLY (No Double Arrow) -->
   <g s:type="outputExt" transform="translate(250,250)" s:width="30" s:height="20">
     <s:alias val="`$_outputExt_"/>
-    <!-- Removed arrow head, kept only line -->
-    <path d="M0,10 L20,10" class="`$cell_id" style="stroke-width:1px; fill:none;"/>
-    <!-- Add outgoing arrow tip at the END of the diagram if desired, or just line -->
-    <!-- Adding a single arrow tip at the very end of the port symbol -->
-    <path d="M20,10 L15,7 M20,10 L15,13" class="`$cell_id" style="stroke-width:1px; fill:none; stroke-linecap:round;"/>
+    <!-- Keep shaft and chevron in one path so the SVG renderer does not
+         anti-alias them as visually separate pieces. -->
+    <path d="M0,10 L20,10 L15,7 M20,10 L15,13"
+          class="`$cell_id"
+          style="stroke-width:1px; fill:none; stroke-linecap:round; stroke-linejoin:round;"/>
     <g s:x="0" s:y="10" s:pid="A"/>
   </g>
 

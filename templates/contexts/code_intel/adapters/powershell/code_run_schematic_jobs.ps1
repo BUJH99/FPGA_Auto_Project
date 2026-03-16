@@ -29,9 +29,12 @@ $ErrorActionPreference = "Stop"
 
 $toolsDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $contextRoot = [System.IO.Path]::GetFullPath((Join-Path $toolsDir "..\.."))
+$templatesRoot = [System.IO.Path]::GetFullPath((Join-Path $contextRoot "..\.."))
 $processSchematicScript = Join-Path $toolsDir "code_process_schematic.ps1"
 $generateSimpleSvgScript = Join-Path $toolsDir "code_generate_simple_svg.ps1"
 $svg2drawioScript = Join-Path (Join-Path $contextRoot "adapters") "cli\code_convert_svg_to_drawio_cli.js"
+$optimizeLayoutScript = Join-Path (Join-Path $contextRoot "adapters") "cli\code_optimize_schematic_layout_cli.js"
+$exportLayoutScript = Join-Path $templatesRoot "node_modules\netlistsvg\bin\exportLayout.js"
 $skinPath = Join-Path $contextRoot "assets\diagram_skin.svg"
 
 $modules = @()
@@ -268,6 +271,28 @@ function Read-ManifestEntries {
   return @($rows | Select-Object -Unique)
 }
 
+function Resolve-ModuleLayoutPath {
+  param(
+    [string]$ProjectPath,
+    [string]$Module
+  )
+
+  $candidates = @(
+    (Join-Path $ProjectPath ("diagram_layout/{0}.elk.json" -f $Module)),
+    (Join-Path $ProjectPath ("diagram_layout/{0}.layout.json" -f $Module)),
+    (Join-Path $ProjectPath ("output/Diagram/Layout/{0}.elk.json" -f $Module)),
+    (Join-Path $ProjectPath ("output/Diagram/Layout/{0}.layout.json" -f $Module))
+  )
+
+  foreach ($candidate in $candidates) {
+    if (Test-Path $candidate) {
+      return $candidate
+    }
+  }
+
+  return ""
+}
+
 $srcEntries = Read-ManifestEntries -ListFilePath $ManifestSrcList -Label "manifest src list" -AllowEmpty:$false
 $srcFiles = @()
 foreach ($entry in $srcEntries) {
@@ -458,6 +483,8 @@ $moduleWorker = {
     [string]$ProcessSchematicScript,
     [string]$GenerateSimpleSvgScript,
     [string]$Svg2DrawioScript,
+    [string]$ExportLayoutScript,
+    [string]$OptimizeLayoutScript,
     [string]$SkinPath,
     [string]$LogDir,
     [string[]]$IncludeDirs
@@ -558,6 +585,47 @@ $moduleWorker = {
     }
   }
 
+  function Get-ProjectRelativePathLocal {
+    param([string]$BasePath, [string]$TargetPath)
+    try {
+      $resolved = Resolve-Path -LiteralPath $TargetPath -Relative
+      if ($resolved -is [array]) { $resolved = $resolved[0] }
+      $resolved = [string]$resolved
+      if ($resolved.StartsWith(".\")) { $resolved = $resolved.Substring(2) }
+      return $resolved.Replace('\', '/')
+    }
+    catch {
+      $base = [IO.Path]::GetFullPath($BasePath)
+      $target = [IO.Path]::GetFullPath($TargetPath)
+      if ($target.StartsWith($base, [StringComparison]::OrdinalIgnoreCase)) {
+        return $target.Substring($base.Length).TrimStart('\','/').Replace('\','/')
+      }
+      return $TargetPath.Replace('\','/')
+    }
+  }
+
+  function Resolve-ModuleLayoutPathLocal {
+    param(
+      [string]$ProjectPath,
+      [string]$Module
+    )
+
+    $candidates = @(
+      (Join-Path $ProjectPath ("diagram_layout/{0}.elk.json" -f $Module)),
+      (Join-Path $ProjectPath ("diagram_layout/{0}.layout.json" -f $Module)),
+      (Join-Path $ProjectPath ("output/Diagram/Layout/{0}.elk.json" -f $Module)),
+      (Join-Path $ProjectPath ("output/Diagram/Layout/{0}.layout.json" -f $Module))
+    )
+
+    foreach ($candidate in $candidates) {
+      if (Test-Path $candidate) {
+        return $candidate
+      }
+    }
+
+    return ""
+  }
+
   $moduleSuccess = $true
 
   Write-Log "--------------------------------------------------------"
@@ -635,23 +703,76 @@ $moduleWorker = {
       $moduleSuccess = $false
     }
 
-    Write-Log "[INFO] Generating detailed SVG..."
-    if (Test-Path $svgDetailed) {
-      Remove-Item -Path $svgDetailed -Force -ErrorAction SilentlyContinue
-    }
+  Write-Log "[INFO] Generating detailed SVG..."
+  if (Test-Path $svgDetailed) {
+    Remove-Item -Path $svgDetailed -Force -ErrorAction SilentlyContinue
+  }
 
     $selectedSkin = $SkinPath
-    if (Test-Path $skinGenerated) {
-      $selectedSkin = $skinGenerated
+  if (Test-Path $skinGenerated) {
+    $selectedSkin = $skinGenerated
+  }
+  else {
+    Write-Log ("[WARN] Generated skin not found for {0}, fallback to default skin: {1}" -f $Module, $SkinPath)
+  }
+
+  $layoutPath = Resolve-ModuleLayoutPathLocal -ProjectPath $ProjectPath -Module $Module
+  $netlistArgs = @($NetlistSvgCmd, $jsonFile, "--skin", $selectedSkin, "-o", $svgDetailed)
+  if (-not [string]::IsNullOrWhiteSpace($layoutPath)) {
+    $layoutRelative = Get-ProjectRelativePathLocal -BasePath $ProjectPath -TargetPath $layoutPath
+    $autoLayoutJson = "output/Diagram/JSON/layout_{0}.auto.json" -f $Module
+    $mergedLayoutJson = "output/Diagram/JSON/layout_{0}.merged.json" -f $Module
+    if (Test-Path $autoLayoutJson) {
+      Remove-Item -Path $autoLayoutJson -Force -ErrorAction SilentlyContinue
     }
-    else {
-      Write-Log ("[WARN] Generated skin not found for {0}, fallback to default skin: {1}" -f $Module, $SkinPath)
+    if (Test-Path $mergedLayoutJson) {
+      Remove-Item -Path $mergedLayoutJson -Force -ErrorAction SilentlyContinue
     }
 
-    $netlistOk = Invoke-ExternalCommand -Label "netlistsvg for $Module" -Command "node" -Arguments @($NetlistSvgCmd, $jsonFile, "--skin", $selectedSkin, "-o", $svgDetailed)
-    if (-not $netlistOk) {
-      $moduleSuccess = $false
+    Write-Log ("[INFO] Found custom schematic layout override: {0}" -f $layoutRelative)
+    $exportOk = Invoke-ExternalCommand -Label "Baseline ELK layout export for $Module" -Command "node" -Arguments @(
+      $ExportLayoutScript,
+      $jsonFile,
+      "-o",
+      $autoLayoutJson,
+      "--skin",
+      $selectedSkin
+    )
+
+    $layoutToApply = $layoutRelative
+    if ($exportOk) {
+      $optimizeOk = Invoke-ExternalCommand -Label "Layout optimization merge for $Module" -Command "node" -Arguments @(
+        $OptimizeLayoutScript,
+        "--baseline",
+        $autoLayoutJson,
+        "--override",
+        $layoutPath,
+        "--output",
+        $mergedLayoutJson
+      )
+
+      if ($optimizeOk -and (Test-Path $mergedLayoutJson)) {
+        $layoutToApply = Get-ProjectRelativePathLocal -BasePath $ProjectPath -TargetPath $mergedLayoutJson
+        Write-Log ("[INFO] Applying optimized merged schematic layout: {0}" -f $layoutToApply)
+      }
+      else {
+        Write-Log ("[WARN] Optimized merged layout was not created for {0}. Falling back to raw custom layout." -f $Module)
+      }
     }
+    else {
+      Write-Log ("[WARN] Baseline ELK export failed for {0}. Falling back to raw custom layout." -f $Module)
+    }
+
+    $netlistArgs += @("--layout", $layoutToApply)
+  }
+  else {
+    Write-Log "[INFO] No custom schematic layout found. Using automatic ELK placement."
+  }
+
+  $netlistOk = Invoke-ExternalCommand -Label "netlistsvg for $Module" -Command "node" -Arguments $netlistArgs
+  if (-not $netlistOk) {
+    $moduleSuccess = $false
+  }
     elseif (Test-Path $svgDetailed) {
       Write-Log "[SUCCESS] Generated $svgDetailed"
       [void](Sanitize-SvgTextNodes -SvgPath $svgDetailed)
@@ -765,6 +886,8 @@ while ($queue.Count -gt 0 -or $runningJobs.Count -gt 0) {
       $processSchematicScript,
       $generateSimpleSvgScript,
       $svg2drawioScript,
+      $exportLayoutScript,
+      $optimizeLayoutScript,
       $skinPath,
       $logDir,
       $includeDirs
