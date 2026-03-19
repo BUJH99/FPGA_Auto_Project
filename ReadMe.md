@@ -189,6 +189,8 @@ flowchart LR
 
 #### 🕹️ [ Simulation ]
 
+- **`MAIN.bat` simulation menu map**: `5` Run Vivado Simulation, `6` Auto Sim + Report, `7` Run Iverilog VCD, `8` Generate SVG from VCD, `9` Generate WaveDrom from VCD, `19` Create DUT TB Scaffold, `20` NO GUI Run Vivado Simulation.
+
 6. **Run Vivado Simulation** (`contexts\simulation\adapters\bat\sim_run_vivado.bat`)
    - Launches Vivado xsim for RTL simulation. After waveform setup is loaded (or initialized), it automatically executes `restart` and `run all`.
    - **Usage**: Select your project and testbench file. This remains the manual GUI path for waveform inspection.
@@ -475,6 +477,8 @@ flowchart LR
    - **미리보기**: `MAIN.bat -> 18. Open Latest Presentation HTML` (`contexts\reporting\adapters\bat\report_open_latest_presentation_html.bat`)로 최신 HTML을 엽니다.
 
 #### 🕹️ [ Simulation (시뮬레이션 구동 및 파형 분석) ]
+
+- **`MAIN.bat` 시뮬레이션 메뉴 맵**: `5` Run Vivado Simulation, `6` Auto Sim + Report, `7` Run Iverilog VCD, `8` Generate SVG from VCD, `9` Generate WaveDrom from VCD, `19` Create DUT TB Scaffold, `20` NO GUI Run Vivado Simulation.
 
 6. **Run Vivado Simulation** (`contexts\simulation\adapters\bat\sim_run_vivado.bat`)
    - 테스트벤치 선택 후 Vivado xsim GUI를 열고, 웨이브폼 설정 로드(또는 초기화) 직후 자동으로 `restart`와 `run all`을 실행합니다.
