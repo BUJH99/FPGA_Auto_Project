@@ -25,6 +25,21 @@ PROFILE_DIRNAME = "svg_profiles"
 USER_CANCEL_RC = 99
 
 
+def clear_screen() -> None:
+    os.system("cls" if os.name == "nt" else "clear")
+
+
+def print_screen_header(title: str, *details: str) -> None:
+    clear_screen()
+    print("=" * 79)
+    print(title)
+    for detail in details:
+        if detail:
+            print(detail)
+    print("=" * 79)
+    print()
+
+
 def _tokenize(spec: str) -> List[str]:
     return [t for t in re.split(r"[,\s]+", spec.strip()) if t]
 
@@ -143,11 +158,18 @@ def _choose_vcds(vcd_dir: str) -> Optional[List[str]]:
     if not files:
         return None
 
-    print("Available VCD files:")
-    for i, p in enumerate(files, start=1):
-        print(f"  [{i}] {os.path.basename(p)}")
-
+    warnings: List[str] = []
     while True:
+        print_screen_header("VCD -> WaveDrom", f"VCD directory: {vcd_dir}", "VCD selection")
+        if warnings:
+            for warning in warnings:
+                print(warning)
+            print()
+            warnings = []
+        print("Available VCD files:")
+        for i, p in enumerate(files, start=1):
+            print(f"  [{i}] {os.path.basename(p)}")
+        print()
         raw = input("Select VCD numbers (e.g. 1 3 / 2-4, A=all, Q=cancel): ").strip()
         if not raw:
             continue
@@ -157,10 +179,9 @@ def _choose_vcds(vcd_dir: str) -> Optional[List[str]]:
             return files
 
         indices, errors = _parse_index_selector(raw, len(files))
-        for e in errors:
-            print(f"[WARN] {e}")
+        warnings.extend(f"[WARN] {e}" for e in errors)
         if not indices:
-            print("Invalid selection.")
+            warnings.append("[WARN] Invalid selection.")
             continue
         return [files[i - 1] for i in indices]
 
@@ -178,20 +199,29 @@ def _parse_time_range(raw: str) -> Optional[Tuple[int, int]]:
     return s, e
 
 
-def _ask_range(default_start: int, default_end: int, default_spec: str = "") -> Tuple[int, int]:
+def _ask_range(
+    default_start: int,
+    default_end: int,
+    default_spec: str = "",
+    render_screen=None,
+) -> Tuple[int, int]:
     default_text = f"{default_start}:{default_end}"
     parsed = _parse_time_range(default_spec)
     if parsed:
         default_start, default_end = parsed
         default_text = f"{default_start}:{default_end}"
 
+    warnings: List[str] = []
     while True:
+        if render_screen is not None:
+            render_screen(warnings)
+            warnings = []
         raw = input(f"Time range start:end [{default_text}]: ").strip()
         if not raw:
             return int(default_start), int(default_end)
         parsed = _parse_time_range(raw)
         if not parsed:
-            print("Invalid range format. Example: 0:5000000")
+            warnings.append("[WARN] Invalid range format. Example: 0:5000000")
             continue
         return parsed
 
@@ -340,10 +370,15 @@ def _choose_signals_with_default(
     default_spec: str,
     blank_behavior: str,
     default_count: int,
+    render_screen=None,
 ):
     show_default = default_spec if default_spec else blank_behavior
 
+    warnings: List[str] = []
     while True:
+        if render_screen is not None:
+            render_screen(warnings)
+            warnings = []
         raw = input(f"{prompt} [default: {show_default}]: ").strip()
         spec = raw if raw else default_spec
 
@@ -356,26 +391,33 @@ def _choose_signals_with_default(
             return list(signals)
 
         selected, errors = _parse_signal_selector(spec, signals)
-        for e in errors:
-            print(f"[WARN] {e}")
+        warnings.extend(f"[WARN] {e}" for e in errors)
         if selected or blank_behavior == "none":
             return selected
-        print("[ERROR] No valid signals selected. Try again.")
+        warnings.append("[ERROR] No valid signals selected. Try again.")
 
 
-def _ask_positive_int(prompt: str, default_value: int) -> int:
+def _ask_positive_int(prompt: str, default_value: int, render_screen=None) -> int:
+    warnings: List[str] = []
     while True:
+        if render_screen is not None:
+            render_screen(warnings)
+            warnings = []
         raw = input(f"{prompt} [{default_value}]: ").strip()
         if not raw:
             return default_value
         if raw.isdigit() and int(raw) > 0:
             return int(raw)
-        print("Invalid value. Enter a positive integer.")
+        warnings.append("[WARN] Invalid value. Enter a positive integer.")
 
 
-def _ask_yes_no(prompt: str, default_yes: bool = True) -> bool:
+def _ask_yes_no(prompt: str, default_yes: bool = True, render_screen=None) -> bool:
     hint = "Y/n" if default_yes else "y/N"
+    warnings: List[str] = []
     while True:
+        if render_screen is not None:
+            render_screen(warnings)
+            warnings = []
         raw = input(f"{prompt} [{hint}]: ").strip().lower()
         if not raw:
             return default_yes
@@ -383,7 +425,7 @@ def _ask_yes_no(prompt: str, default_yes: bool = True) -> bool:
             return True
         if raw in ("n", "no"):
             return False
-        print("Invalid input. Enter y or n.")
+        warnings.append("[WARN] Invalid input. Enter y or n.")
 
 
 def _configure_one_vcd(
@@ -397,9 +439,23 @@ def _configure_one_vcd(
     profile_path = _profile_path(project_dir, base_name)
     profile: Dict[str, str] = {}
 
+    def render_profile_screen(warnings: Optional[List[str]] = None) -> None:
+        print_screen_header("VCD -> WaveDrom", f"VCD: {base_name}", "Profile selection")
+        if warnings:
+            for warning in warnings:
+                print(warning)
+            print()
+        if os.path.isfile(profile_path):
+            print(f"[INFO] Existing profile: {profile_path}")
+        else:
+            print(f"[INFO] No profile yet. New profile will be created: {profile_path}")
+        print()
+
     if os.path.isfile(profile_path):
-        print(f"[INFO] Existing profile: {profile_path}")
+        warnings: List[str] = []
         while True:
+            render_profile_screen(warnings)
+            warnings = []
             mode = input(
                 "Load saved TXT profile? [Y]es/[E]dit/[N]ew/[Q]cancel (default Y): "
             ).strip().lower()
@@ -416,9 +472,9 @@ def _configure_one_vcd(
             if mode in ("q", "quit", "c", "cancel"):
                 print("[INFO] Cancelled by user.")
                 return None
-            print("Invalid input. Enter Y/E/N/Q.")
+            warnings.append("[WARN] Invalid input. Enter Y/E/N/Q.")
     else:
-        print(f"[INFO] No profile yet. New profile will be created: {profile_path}")
+        render_profile_screen()
 
     header = parse_header(vcd_path)
     if not header.signals:
@@ -426,20 +482,34 @@ def _configure_one_vcd(
         return False
 
     tb_scope, tb_top_signals, dut_internal_signals = _split_tb_and_dut(header.signals)
-    print(f"[INFO] Signals total: {len(header.signals)}")
-    if tb_scope:
-        print(f"[INFO] Inferred TB scope: {tb_scope}")
-
-    print()
-    _print_signal_list("TB-top signals", tb_top_signals)
-    print()
-    _print_signal_list("DUT/internal signals", dut_internal_signals)
-    print()
-
     default_tb = profile.get("include_tb", "")
     default_dut = profile.get("include_dut", "")
     default_exclude = profile.get("exclude", "")
     default_range = profile.get("time_range", "")
+
+    selected_tb: List = []
+    selected_dut: List = []
+
+    def render_signal_screen(warnings: Optional[List[str]] = None) -> None:
+        print_screen_header("VCD -> WaveDrom", f"VCD: {base_name}", "Signal selection")
+        if warnings:
+            for warning in warnings:
+                print(warning)
+            print()
+        print(f"[INFO] Signals total: {len(header.signals)}")
+        if tb_scope:
+            print(f"[INFO] Inferred TB scope: {tb_scope}")
+        print()
+        _print_signal_list("TB-top signals", tb_top_signals)
+        print()
+        _print_signal_list("DUT/internal signals", dut_internal_signals)
+        print()
+        if selected_tb:
+            print(f"[INFO] Current TB-top selection: {len(selected_tb)}")
+        if selected_dut:
+            print(f"[INFO] Current DUT/internal selection: {len(selected_dut)}")
+        if selected_tb or selected_dut:
+            print()
 
     selected_tb = _choose_signals_with_default(
         "TB-top include",
@@ -447,6 +517,7 @@ def _configure_one_vcd(
         default_tb,
         blank_behavior="first",
         default_count=max_signals,
+        render_screen=render_signal_screen,
     )
     selected_dut = _choose_signals_with_default(
         "DUT/internal include",
@@ -454,6 +525,7 @@ def _configure_one_vcd(
         default_dut,
         blank_behavior="none",
         default_count=max_signals,
+        render_screen=render_signal_screen,
     )
 
     selected_map = {}
@@ -464,6 +536,17 @@ def _configure_one_vcd(
         print("[ERROR] No signals selected.")
         return False
 
+    def render_output_screen(warnings: Optional[List[str]] = None) -> None:
+        print_screen_header("VCD -> WaveDrom", f"VCD: {base_name}", "Output settings")
+        if warnings:
+            for warning in warnings:
+                print(warning)
+            print()
+        print(f"[INFO] Selected signals: {len(selected)}")
+        print(f"[INFO] Profile: {profile_path}")
+        print()
+
+    render_output_screen()
     exclude_raw = input(
         f"Exclude signals (optional, indexes/names/ranges) [default: {default_exclude or 'none'}]: "
     ).strip()
@@ -480,18 +563,27 @@ def _configure_one_vcd(
             return False
 
     last_t = find_last_timestamp(vcd_path)
-    start_t, end_t = _ask_range(0, max(1, last_t), default_spec=default_range)
+    start_t, end_t = _ask_range(
+        0,
+        max(1, last_t),
+        default_spec=default_range,
+        render_screen=render_output_screen,
+    )
 
     span = max(1, end_t - start_t)
     auto_step = max(1, span // 120)
     profile_step = _parse_positive_int(profile.get("wavedrom_step", ""))
     default_step = forced_step if forced_step > 0 else (profile_step if profile_step > 0 else auto_step)
-    step = _ask_positive_int("Step (sample ticks)", default_step)
+    step = _ask_positive_int("Step (sample ticks)", default_step, render_screen=render_output_screen)
 
     if force_html is None:
         profile_html = _parse_bool(profile.get("wavedrom_html", ""))
         html_default = True if profile_html is None else profile_html
-        html_enabled = _ask_yes_no("Generate HTML viewer too?", default_yes=html_default)
+        html_enabled = _ask_yes_no(
+            "Generate HTML viewer too?",
+            default_yes=html_default,
+            render_screen=render_output_screen,
+        )
     else:
         html_enabled = force_html
         print(f"[INFO] HTML generation forced: {'ON' if html_enabled else 'OFF'}")
@@ -499,6 +591,7 @@ def _configure_one_vcd(
     vcd_dir = os.path.dirname(vcd_path)
     out_json_default = os.path.join(vcd_dir, "wavedrom", f"{base_name}_custom.json")
     out_json_default = _path_from_profile(project_dir, profile.get("wavedrom_output", ""), out_json_default)
+    render_output_screen()
     out_json_raw = input(f"Output JSON path [{out_json_default}]: ").strip()
     out_json_path = out_json_raw if out_json_raw else out_json_default
     if not os.path.isabs(out_json_path):
@@ -510,6 +603,7 @@ def _configure_one_vcd(
         out_html_default = _path_from_profile(
             project_dir, profile.get("wavedrom_html_output", ""), out_html_default
         )
+        render_output_screen()
         out_html_raw = input(f"Output HTML path [{out_html_default}]: ").strip()
         out_html_path = out_html_raw if out_html_raw else out_html_default
         if not os.path.isabs(out_html_path):

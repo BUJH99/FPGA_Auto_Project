@@ -2,12 +2,13 @@
 setlocal EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
     echo Usage: %~nx0 ^<Project_Directory^> [clean-assets]
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -20,7 +21,7 @@ if exist "%MANIFEST_CTX%" (
     call "%MANIFEST_CTX%" "%TARGET_PROJECT%"
     if errorlevel 1 (
         echo [ERROR] Manifest context initialization failed.
-        pause
+        call "%CONSOLE_HELPER%" pause_then_clear
         exit /b 1
     )
 )
@@ -33,13 +34,13 @@ echo.
 
 if not exist "%PY_TOOL%" (
     echo [ERROR] Tool script not found: %PY_TOOL%
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
 if not exist "%TEMPLATE_FILE%" (
     echo [ERROR] Template file not found: %TEMPLATE_FILE%
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -56,7 +57,7 @@ if !errorlevel! equ 0 (
 
 if not defined PY_CMD (
     echo [ERROR] Python was not found in PATH.
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -64,7 +65,7 @@ if not defined PY_CMD (
 if errorlevel 1 (
     echo [ERROR] Jinja2 is not available for this Python.
     echo [INFO] Install with: %PY_CMD% -m pip install jinja2
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -83,7 +84,7 @@ set "TS="
 for /f %%T in ('powershell -NoProfile -Command "(Get-Date).ToString(\"yyyyMMdd_HHmmss\")"') do set "TS=%%T"
 if "!TS!"=="" (
     echo [ERROR] Failed to create timestamp string.
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 for %%I in ("%TARGET_PROJECT%") do set "PROJECT_NAME=%%~nI"
@@ -93,12 +94,12 @@ set "OUTPUT_HTML=!PRESENTATION_DIR!\presentation_!PROJECT_NAME!_!TS!.html"
 if errorlevel 1 (
     echo.
     echo [FAILURE] HTML presentation generation failed.
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
 echo.
 echo [SUCCESS] Presentation generation completed.
 echo [INFO] HTML: !OUTPUT_HTML!
-pause
+call "%CONSOLE_HELPER%" pause_then_clear
 exit /b 0

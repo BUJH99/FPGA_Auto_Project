@@ -12,7 +12,7 @@ set script_dir [file dirname [info script]]
 set templates_root [file normalize [file join $script_dir ".." ".." ".." ".."]]
 
 if {[llength $argv] < 2} {
-    puts "\[ERROR\] Usage: vivado -mode gui -source run_vivado_simulation.tcl -tclargs <project_root> <tb_top> ?<vivado_root>? ?<src_list>? ?<tb_list>? ?<inc_list>? ?<selected_tb_file>? ?<sim_more_options>? ?<prompt_request_file>? ?<prompt_close_file>? ?<prompt_keep_file>?"
+    puts "\[ERROR\] Usage: vivado -mode gui -source run_vivado_simulation.tcl -tclargs <project_root> <tb_top> ?<vivado_root>? ?<src_list>? ?<tb_list>? ?<inc_list>? ?<selected_tb_file>? ?<sim_more_options>?"
     return -code error
 }
 
@@ -28,9 +28,7 @@ set tb_list_file ""
 set inc_list_file ""
 set selected_tb_file ""
 set sim_more_options ""
-set prompt_request_file ""
-set prompt_close_file ""
-set prompt_keep_file ""
+set vivado_option_tokens [list "-log" "-journal" "-notrace" "-source" "-mode" "-tempDir" "-messageDb"]
 if {[llength $argv] >= 4} {
     set a3 [string trim [lindex $argv 3]]
     if {$a3 ne ""} { set src_list_file [file normalize $a3] }
@@ -47,70 +45,17 @@ if {[llength $argv] >= 7} {
     set a6 [string trim [lindex $argv 6]]
     if {$a6 ne ""} { set selected_tb_file [file normalize $a6] }
 }
-set prompt_marker "__PROMPT_IPC__"
-set prompt_marker_index -1
-for {set i 8} {$i < [llength $argv]} {incr i} {
-    if {[string equal [lindex $argv $i] $prompt_marker]} {
-        set prompt_marker_index $i
-        break
-    }
-}
-
-if {$prompt_marker_index >= 0} {
-    if {$prompt_marker_index > 7} {
-        set sim_more_options [string trim [join [lrange $argv 7 [expr {$prompt_marker_index - 1}]] " "]]
-    }
-    if {[llength $argv] >= [expr {$prompt_marker_index + 2}]} {
-        set a_req [string trim [lindex $argv [expr {$prompt_marker_index + 1}]]]
-        if {$a_req ne ""} { set prompt_request_file [file normalize $a_req] }
-    }
-    if {[llength $argv] >= [expr {$prompt_marker_index + 3}]} {
-        set a_close [string trim [lindex $argv [expr {$prompt_marker_index + 2}]]]
-        if {$a_close ne ""} { set prompt_close_file [file normalize $a_close] }
-    }
-    if {[llength $argv] >= [expr {$prompt_marker_index + 4}]} {
-        set a_keep [string trim [lindex $argv [expr {$prompt_marker_index + 3}]]]
-        if {$a_keep ne ""} { set prompt_keep_file [file normalize $a_keep] }
-    }
-} else {
-    set raw8 ""
-    set raw9 ""
-    set raw10 ""
-    set raw11 ""
-    if {[llength $argv] >= 8} {
-        set raw8 [string trim [lindex $argv 7]]
-    }
-    if {[llength $argv] >= 9} {
-        set raw9 [string trim [lindex $argv 8]]
-    }
-    if {[llength $argv] >= 10} {
-        set raw10 [string trim [lindex $argv 9]]
-    }
-    if {[llength $argv] >= 11} {
-        set raw11 [string trim [lindex $argv 10]]
-    }
-
-    # Backward/robust parsing when sim_more_options is split into two tokens
-    # (e.g. "-testplusarg" and "TESTNAME=all").
-    if {$raw8 ne ""} {
-        set sim_more_options $raw8
-    }
-    if {$raw9 ne ""} {
-        set raw9_is_plusarg_value [expr {[string first "=" $raw9] >= 0 && [string first "/" $raw9] < 0 && [string first "\\" $raw9] < 0}]
-        if {$raw9_is_plusarg_value} {
-            set sim_more_options [string trim "$sim_more_options $raw9"]
-            if {$raw10 ne ""} { set prompt_request_file [file normalize $raw10] }
-            if {$raw11 ne ""} { set prompt_close_file [file normalize $raw11] }
-            if {[llength $argv] >= 12} {
-                set raw12 [string trim [lindex $argv 11]]
-                if {$raw12 ne ""} { set prompt_keep_file [file normalize $raw12] }
-            }
-        } else {
-            set prompt_request_file [file normalize $raw9]
-            if {$raw10 ne ""} { set prompt_close_file [file normalize $raw10] }
-            if {$raw11 ne ""} { set prompt_keep_file [file normalize $raw11] }
+if {[llength $argv] >= 8} {
+    set sim_more_option_parts {}
+    for {set i 7} {$i < [llength $argv]} {incr i} {
+        set token [string trim [lindex $argv $i]]
+        if {$token eq ""} { continue }
+        if {[lsearch -exact $vivado_option_tokens $token] >= 0} {
+            break
         }
+        lappend sim_more_option_parts $token
     }
+    set sim_more_options [string trim [join $sim_more_option_parts " "]]
 }
 
 # Recover broken tokenization from launcher paths:
@@ -170,38 +115,6 @@ proc is_subpath {parent child} {
         return 1
     }
     return [string match -nocase "${p}/*" $c]
-}
-
-proc wait_close_decision_from_terminal {sim_top request_file close_file keep_file} {
-    if {$request_file eq "" || $close_file eq "" || $keep_file eq ""} {
-        puts "\[WARNING\] Terminal prompt channel is not configured. Keeping Vivado GUI open."
-        return 0
-    }
-
-    foreach stale_file [list $request_file $close_file $keep_file] {
-        catch {file delete -force $stale_file}
-    }
-
-    if {[catch {
-        set req_dir [file dirname $request_file]
-        if {$req_dir ne "" && ![file exists $req_dir]} {
-            file mkdir $req_dir
-        }
-        set fh [open $request_file w]
-        puts $fh "ready"
-        close $fh
-    } request_err]} {
-        puts "\[WARNING\] Failed to request terminal close prompt: $request_err"
-        return 0
-    }
-
-    puts "\[INFO\] Waiting for close decision from terminal..."
-    while {1} {
-        if {[file exists $close_file]} { return 1 }
-        if {[file exists $keep_file]} { return 0 }
-        after 200
-        catch {update}
-    }
 }
 
 set src_files [read_manifest_list $src_list_file $project_root]
@@ -364,19 +277,7 @@ if {$auto_restart_ok} {
 }
 
 if {$auto_run_all_ok} {
-    set close_gui_by_user [wait_close_decision_from_terminal $sim_top $prompt_request_file $prompt_close_file $prompt_keep_file]
-    if {$close_gui_by_user} {
-        puts "\[INFO\] Closing Vivado GUI by user choice..."
-        if {[catch {close_sim -force} close_sim_err]} {
-            puts "\[WARNING\] Failed to close simulation before exit: $close_sim_err"
-        }
-        if {[catch {close_project} close_project_err]} {
-            puts "\[WARNING\] Failed to close project before exit: $close_project_err"
-        }
-        puts "\[SUCCESS\] Auto replay completed. Closing Vivado GUI for top: $sim_top"
-        exit
-    }
-    puts "\[SUCCESS\] Auto replay completed for top: $sim_top (GUI kept open by terminal choice)"
+    puts "\[SUCCESS\] Auto replay completed for top: $sim_top (GUI remains open)"
 } else {
     puts "\[SUCCESS\] Vivado simulation launched and auto replay attempted for top: $sim_top (GUI kept open)"
 }

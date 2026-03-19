@@ -2,7 +2,9 @@
 setlocal enabledelayedexpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
+set "PROMPT_WARNING="
 
 :: ============================================================================
 :: HDL FPGA Automation Pipeline
@@ -13,7 +15,7 @@ set "USER_CANCEL_RC=99"
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
     echo Usage: %~nx0 ^<Project_Directory^>
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -30,7 +32,7 @@ call :route_vivado_artifacts "%WORKSPACE_ROOT%" "%WORKSPACE_ROOT%\work"
 call "%MANIFEST_CTX%" "%WORKSPACE_ROOT%"
 if errorlevel 1 (
     echo [ERROR] Manifest context initialization failed.
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -60,31 +62,34 @@ for /f "usebackq delims=" %%R in ("%MANIFEST_TB_LIST%") do (
 
 if !count!==0 (
     echo [ERROR] No testbench files resolved from manifest in: %WORKSPACE_ROOT%
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
-:: 2. Display Menu
-echo.
-echo Found !count! testbench(es):
-echo ----------------------------------------------------------------------------
-for /L %%i in (1,1,%count%) do (
-    echo [%%i] !TB_NAME_%%i!   (Location: !TB_REL_%%i!)
-)
-echo ----------------------------------------------------------------------------
-echo Option: Q = cancel
-
 :: 3. User Selection
 :PROMPT
+call :render_tb_prompt
 set /p "selection=Select Testbench Number (1-%count%): "
 if /i "%selection%"=="Q" exit /b %USER_CANCEL_RC%
 
 :: Validate input
-if "%selection%"=="" goto PROMPT
+if "%selection%"=="" (
+    set "PROMPT_WARNING=[WARN] Enter a testbench number."
+    goto PROMPT
+)
 set /a selection_num=%selection% 2>nul
-if errorlevel 1 goto PROMPT
-if %selection_num% LSS 1 goto PROMPT
-if %selection_num% GTR %count% goto PROMPT
+if errorlevel 1 (
+    set "PROMPT_WARNING=[WARN] Invalid selection: %selection%"
+    goto PROMPT
+)
+if %selection_num% LSS 1 (
+    set "PROMPT_WARNING=[WARN] Selection out of range: %selection_num%"
+    goto PROMPT
+)
+if %selection_num% GTR %count% (
+    set "PROMPT_WARNING=[WARN] Selection out of range: %selection_num%"
+    goto PROMPT
+)
 set "selection=%selection_num%"
 
 :: Get selected file path
@@ -100,7 +105,7 @@ echo ===========================================================================
 call node "%TOOLS_ROOT%\contexts\simulation\adapters\cli\sim_parse_tb_cli.js" "%TB_FILE_PATH%" "%WORKSPACE_ROOT%" --manifest-json "%MANIFEST_JSON%"
 if errorlevel 1 (
     echo [FAILURE] Failed to parse testbench and generate config.
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -110,7 +115,7 @@ echo Target Config: %CONFIG_PATH%
 if not exist "%CONFIG_PATH%" (
     echo [ERROR] Configuration file was not generated at expected path: %CONFIG_PATH%
     echo Please check if parse_tb.js generated it in the correct project folder.
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -129,7 +134,7 @@ echo ===========================================================================
 call node "%TOOLS_ROOT%\contexts\simulation\adapters\cli\sim_generate_report_cli.js" "%CONFIG_PATH%" --manifest-json "%MANIFEST_JSON%"
 if errorlevel 1 (
     echo [FAILURE] Simulation or Report Generation failed.
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 call :route_vivado_artifacts "%WORKSPACE_ROOT%" "%LAUNCH_CWD%"
@@ -141,7 +146,26 @@ echo ===========================================================================
 echo [SUCCESS] Automation Complete!
 echo Report Directory: %WORKSPACE_ROOT%\output\
 echo ============================================================================
-pause
+call "%CONSOLE_HELPER%" pause_then_clear
+exit /b 0
+
+:render_tb_prompt
+call "%CONSOLE_HELPER%" banner "HDL Auto Simulation & Report" "Target: %WORKSPACE_ROOT%" "Manifest-resolved testbenches: !count!"
+echo Scanning testbench files from manifest list in: %WORKSPACE_ROOT%
+echo.
+if defined PROMPT_WARNING (
+    echo %PROMPT_WARNING%
+    echo.
+)
+set "PROMPT_WARNING="
+echo Found !count! testbench(es):
+echo ----------------------------------------------------------------------------
+for /L %%i in (1,1,%count%) do (
+    echo [%%i] !TB_NAME_%%i!   (Location: !TB_REL_%%i!)
+)
+echo ----------------------------------------------------------------------------
+echo Option: Q = cancel
+echo.
 exit /b 0
 
 :route_vivado_artifacts

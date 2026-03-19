@@ -2,12 +2,13 @@
 setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
     echo Usage: %~nx0 ^<Project_Directory^>
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -17,7 +18,7 @@ if exist "%MANIFEST_CTX%" (
     call "%MANIFEST_CTX%" "%TARGET_PROJECT%"
     if errorlevel 1 (
         echo [ERROR] Manifest context initialization failed.
-        pause
+        call "%CONSOLE_HELPER%" pause_then_clear
         exit /b 1
     )
 )
@@ -46,7 +47,7 @@ if not exist "output\reports" (
     echo         This script parses existing Vivado reports.
     echo         Please run 'vivado_build_flow_run.bat' first to generate raw reports.
     echo.
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -61,14 +62,14 @@ call :route_vivado_artifacts
 if %REPORT_RC% neq 0 (
     echo.
     echo [ERROR] Report generation failed. Check "%REPORT_LOG%".
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b %REPORT_RC%
 )
 
 echo.
 echo [SUCCESS] Report generated: %REPORT_HTML%
 echo.
-pause
+call "%CONSOLE_HELPER%" pause_then_clear
 exit /b 0
 
 :route_vivado_artifacts

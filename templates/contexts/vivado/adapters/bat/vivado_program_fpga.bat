@@ -2,12 +2,13 @@
 setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
     echo Usage: %~nx0 ^<Project_Directory^>
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -70,7 +71,7 @@ exit /b 0
 
 :maybe_pause
 if "%NO_PAUSE%"=="1" exit /b 0
-pause
+call "%CONSOLE_HELPER%" pause_then_clear
 exit /b 0
 
 :prompt_run_or_cancel

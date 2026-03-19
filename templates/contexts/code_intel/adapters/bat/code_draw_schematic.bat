@@ -2,12 +2,14 @@
 setlocal EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
+set "SELECTION_WARNING="
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
     echo Usage: %~nx0 ^<Project_Directory^>
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -17,7 +19,7 @@ if exist "%MANIFEST_CTX%" (
     call "%MANIFEST_CTX%" "%TARGET_PROJECT%"
     if errorlevel 1 (
         echo [ERROR] Manifest context initialization failed.
-        pause
+        call "%CONSOLE_HELPER%" pause_then_clear
         exit /b 1
     )
 )
@@ -48,7 +50,7 @@ if defined SCHEMATIC_YOSYS_CMD (
         ) else (
             echo [ERROR] Neither 'yosys' nor 'yowasp-yosys' found in PATH.
             echo [INFO] You can also set SCHEMATIC_YOSYS_CMD to a specific Yosys executable.
-            pause
+            call "%CONSOLE_HELPER%" pause_then_clear
             exit /b 1
         )
     )
@@ -70,7 +72,7 @@ set "RUN_SCHEMATIC_PS=%TEMPLATES_ROOT%\contexts\code_intel\adapters\powershell\c
 if not exist "%NETLISTSVG_CMD%" (
     echo [ERROR] netlistsvg not found at: %NETLISTSVG_CMD%
     echo [INFO] Run: cd templates ^&^& npm install
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 if not exist "%RUN_SCHEMATIC_PS%" (
@@ -96,7 +98,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%RUN_SCHEMATIC_PS%" ^
 if errorlevel 1 (
     echo [ERROR] Failed to discover module declarations from src/.
     if exist "%MODULE_LIST_FILE%" del /q "%MODULE_LIST_FILE%" >nul 2>nul
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -116,22 +118,12 @@ if exist "%MODULE_LIST_FILE%" del /q "%MODULE_LIST_FILE%" >nul 2>nul
 
 if !MODULE_COUNT! equ 0 (
     echo [ERROR] No module declarations found in src/ folder.
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
-echo [INFO] Detected module declarations: !MODULE_COUNT!
-echo.
-echo ========================================================
-echo  Module Selection
-echo ========================================================
-echo  Scanned module files in src:
-for /l %%i in (1,1,!MODULE_COUNT!) do (
-    echo   [%%i] !MODULE_%%i!
-)
-echo.
-
 :SELECT_MODULES
+call :render_selection_screen
 echo  Input format:
 echo   - Number(s): 1 3 5  ^(space/comma separated^)
 echo   - ALL: generate all modules
@@ -176,15 +168,15 @@ for %%I in (%SELECTION_RAW%) do (
     set "NON_DIGIT="
     for /f "delims=0123456789" %%A in ("!TOKEN!") do set "NON_DIGIT=%%A"
     if defined NON_DIGIT (
-        echo [ERROR] Invalid selection token: %%I
+        set "SELECTION_WARNING=[ERROR] Invalid selection token: %%I"
         set "SELECTION_OK=0"
     ) else (
         if %%I lss 1 (
-            echo [ERROR] Selection out of range: %%I
+            set "SELECTION_WARNING=[ERROR] Selection out of range: %%I"
             set "SELECTION_OK=0"
         ) else (
             if %%I gtr !MODULE_COUNT! (
-                echo [ERROR] Selection out of range: %%I
+                set "SELECTION_WARNING=[ERROR] Selection out of range: %%I"
                 set "SELECTION_OK=0"
             ) else (
                 set "SELECTED_MODULES=!SELECTED_MODULES! !MODULE_%%I!"
@@ -194,14 +186,12 @@ for %%I in (%SELECTION_RAW%) do (
 )
 
 if "!SELECTION_OK!"=="0" (
-    echo [INFO] Please enter valid module numbers.
-    echo.
+    if not defined SELECTION_WARNING set "SELECTION_WARNING=[INFO] Please enter valid module numbers."
     goto :SELECT_MODULES
 )
 
 if "!SELECTED_MODULES!"=="" (
-    echo [ERROR] No valid module selected.
-    echo.
+    set "SELECTION_WARNING=[ERROR] No valid module selected."
     goto :SELECT_MODULES
 )
 
@@ -288,4 +278,18 @@ if errorlevel 1 (
 )
 
 echo [INFO] All tasks completed.
+exit /b 0
+
+:render_selection_screen
+call "%CONSOLE_HELPER%" banner "Module Selection" "Target: %TARGET_PROJECT%" "Detected module declarations: !MODULE_COUNT!"
+if defined SELECTION_WARNING (
+    echo !SELECTION_WARNING!
+    echo.
+)
+set "SELECTION_WARNING="
+echo  Scanned module files in src:
+for /l %%i in (1,1,!MODULE_COUNT!) do (
+    echo   [%%i] !MODULE_%%i!
+)
+echo.
 exit /b 0

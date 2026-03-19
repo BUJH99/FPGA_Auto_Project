@@ -4,6 +4,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 set "SELF_PATH=%~f0"
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
 
 set "TARGET_PROJECT="
@@ -49,7 +50,7 @@ if "%EXPECT_DUT_VALUE%"=="1" (
 if not defined TARGET_PROJECT goto usage_error
 if not exist "%TARGET_PROJECT%" (
     echo [ERROR] Target project not found: %TARGET_PROJECT%
-    if "%NO_PAUSE%"=="0" pause
+    call :maybe_pause_then_clear
     exit /b 1
 )
 
@@ -61,7 +62,7 @@ if not exist "%TB_ROOT%" (
         mkdir "%TB_ROOT%" >nul 2>nul
         if errorlevel 1 (
             echo [ERROR] Failed to create TB root folder: %TB_ROOT%
-            if "%NO_PAUSE%"=="0" pause
+            call :maybe_pause_then_clear
             exit /b 1
         )
         echo [INFO] Created TB root folder: %TB_ROOT%
@@ -85,7 +86,7 @@ set "START_LINE="
 for /f "tokens=1 delims=:" %%L in ('findstr /n "^%MARKER%" "%SELF_PATH%"') do set "START_LINE=%%L"
 if not defined START_LINE (
     echo [ERROR] Internal marker not found: %MARKER%
-    if "%NO_PAUSE%"=="0" pause
+    call :maybe_pause_then_clear
     exit /b 1
 )
 
@@ -96,13 +97,18 @@ set "SCRIPT_RC=%ERRORLEVEL%"
 del "%PS_FILE%" >nul 2>nul
 
 if "%SCRIPT_RC%"=="%USER_CANCEL_RC%" exit /b %USER_CANCEL_RC%
-if "%NO_PAUSE%"=="0" pause
+call :maybe_pause_then_clear
 exit /b %SCRIPT_RC%
 
 :usage_error
 echo Usage: %~nx0 ^<Project_Directory^> [--dut ^<name^> ^| --dut=name] [--all] [--force] [--no-pause]
-if "%NO_PAUSE%"=="0" pause
+call :maybe_pause_then_clear
 exit /b 1
+
+:maybe_pause_then_clear
+if "%NO_PAUSE%"=="1" exit /b 0
+call "%CONSOLE_HELPER%" pause_then_clear
+exit /b 0
 
 :POWERSHELL_SCRIPT_START
 param(

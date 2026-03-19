@@ -4,6 +4,7 @@ cd /d "%~dp0"
 title FPGA Automation - MAIN
 set "SETUP_BAT=%CD%\templates\contexts\project_bootstrap\adapters\bat\project_create.bat"
 set "PROJECT_ROOT=%CD%\Project"
+set "CONSOLE_HELPER=%CD%\templates\shared\adapters\bat\console_ui.bat"
 
 :: Define ESC character for ANSI colors
 for /F %%a in ('echo prompt $E ^| cmd') do set "ESC=%%a"
@@ -20,7 +21,7 @@ set "Gray=%ESC%[90m"
 set "USER_CANCEL_RC=99"
 
 :MASTER_MENU
-cls
+call "%CONSOLE_HELPER%" clear
 echo.
 echo %Cyan%===============================================================================%Reset%
 echo  %Green%FPGA Automation MASTER Menu%Reset%
@@ -65,10 +66,12 @@ if /i "!NO_PROJ_INPUT!"=="S" (
         echo.
         echo %Red%[ERROR] Setup script not found: !SETUP_BAT!%Reset%
         echo.
-        pause
+        call "%CONSOLE_HELPER%" pause_then_clear
         goto :EXIT
     )
+    set "FPGA_AUTO_PARENT_MENU=1"
     call "!SETUP_BAT!"
+    set "FPGA_AUTO_PARENT_MENU="
     goto :MASTER_MENU
 )
 goto :NO_PROJECT_MENU
@@ -89,10 +92,12 @@ if /i "!PROJ_INPUT!"=="S" (
         echo.
         echo %Red%[ERROR] Setup script not found: !SETUP_BAT!%Reset%
         echo.
-        pause
+        call "%CONSOLE_HELPER%" pause_then_clear
         goto :MASTER_MENU
     )
+    set "FPGA_AUTO_PARENT_MENU=1"
     call "!SETUP_BAT!"
+    set "FPGA_AUTO_PARENT_MENU="
     goto :MASTER_MENU
 )
 
@@ -119,7 +124,7 @@ set "TARGET_PROJECT=!PROJ_LABEL_%PROJ_INPUT%!"
 
 :PROJECT_MENU
 mode con: cols=120 lines=40 >nul 2>&1
-cls
+call "%CONSOLE_HELPER%" clear
 echo %Green%Project: !TARGET_PROJECT!%Reset%
 
 set "CMD_1=contexts\code_intel\adapters\bat\code_draw_schematic.bat"
@@ -211,15 +216,17 @@ set "TARGET_BAT=%CD%\templates\!TARGET_NAME!"
 if not exist "!TARGET_BAT!" (
     echo.
     echo %Red%[ERROR] Template script not found: !TARGET_BAT!%Reset%
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     goto :PROJECT_MENU
 )
 
-echo.
+call "%CONSOLE_HELPER%" clear
 echo %Green%[RUN] !TARGET_NAME! (Target: !TARGET_PROJECT!)%Reset%
 echo %Cyan%===============================================================================%Reset%
+set "FPGA_AUTO_PARENT_MENU=1"
 cmd /c ""!TARGET_BAT!" "!TARGET_PROJECT_ABS!""
 set "CHILD_RC=!errorlevel!"
+set "FPGA_AUTO_PARENT_MENU="
 call :ROUTE_VIVADO_ARTIFACTS "!TARGET_PROJECT_ABS!" "%CD%"
 call :ROUTE_VIVADO_ARTIFACTS "!TARGET_PROJECT_ABS!" "!TARGET_PROJECT_ABS!"
 call :ROUTE_VIVADO_ARTIFACTS "!TARGET_PROJECT_ABS!" "!TARGET_PROJECT_ABS!\work"
@@ -228,12 +235,12 @@ echo %Cyan%=====================================================================
 if not "!CHILD_RC!"=="0" (
     echo %Red%[FAIL] !TARGET_NAME! exited with code !CHILD_RC!%Reset%
     echo.
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     goto :PROJECT_MENU
 )
 echo %Green%[DONE] !TARGET_NAME!%Reset%
 echo.
-pause
+call "%CONSOLE_HELPER%" pause_then_clear
 goto :PROJECT_MENU
 
 :ROUTE_VIVADO_ARTIFACTS

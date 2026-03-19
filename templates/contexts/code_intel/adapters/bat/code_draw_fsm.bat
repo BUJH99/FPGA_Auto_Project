@@ -2,12 +2,14 @@
 setlocal EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
+set "SELECTION_WARNING="
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
     echo Usage: %~nx0 ^<Project_Directory^>
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -20,7 +22,7 @@ set "MANIFEST_CTX=%TEMPLATES_ROOT%\shared\adapters\bat\bootstrap_manifest_contex
 call "%MANIFEST_CTX%" "%TARGET_PROJECT%"
 if errorlevel 1 (
     echo [ERROR] Manifest context initialization failed.
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -35,7 +37,7 @@ echo Target Project: %TARGET_PROJECT%
 
 if not exist "%FSM_TOOL%" (
     echo [ERROR] Missing source parser: %FSM_TOOL%
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -73,22 +75,12 @@ for /f "usebackq delims=" %%R in ("%MANIFEST_SRC_LIST%") do (
 
 if !MODULE_COUNT! equ 0 (
     echo [ERROR] No .v/.sv files found in manifest-resolved src files.
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
-echo [INFO] Detected source files: %VERILOG_FILES%
-echo.
-echo ========================================================
-echo  FSM Module Selection
-echo ========================================================
-echo  Scanned module files in manifest-resolved source set:
-for /l %%i in (1,1,!MODULE_COUNT!) do (
-    echo   [%%i] !MODULE_%%i!
-)
-echo.
-
 :SELECT_MODULES
+call :render_selection_screen
 echo  Input format:
 echo   - Number(s): 1 3 5  ^(space/comma separated^)
 echo   - ALL: generate all modules
@@ -136,15 +128,15 @@ for %%I in (%SELECTION_RAW%) do (
     set "NON_DIGIT="
     for /f "delims=0123456789" %%A in ("!TOKEN!") do set "NON_DIGIT=%%A"
     if defined NON_DIGIT (
-        echo [ERROR] Invalid selection token: %%I
+        set "SELECTION_WARNING=[ERROR] Invalid selection token: %%I"
         set "SELECTION_OK=0"
     ) else (
         if %%I lss 1 (
-            echo [ERROR] Selection out of range: %%I
+            set "SELECTION_WARNING=[ERROR] Selection out of range: %%I"
             set "SELECTION_OK=0"
         ) else (
             if %%I gtr !MODULE_COUNT! (
-                echo [ERROR] Selection out of range: %%I
+                set "SELECTION_WARNING=[ERROR] Selection out of range: %%I"
                 set "SELECTION_OK=0"
             ) else (
                 set "SELECTED_MODULES=!SELECTED_MODULES! !MODULE_%%I!"
@@ -154,14 +146,12 @@ for %%I in (%SELECTION_RAW%) do (
 )
 
 if "!SELECTION_OK!"=="0" (
-    echo [INFO] Please enter valid module numbers.
-    echo.
+    if not defined SELECTION_WARNING set "SELECTION_WARNING=[INFO] Please enter valid module numbers."
     goto :SELECT_MODULES
 )
 
 if "!SELECTED_MODULES!"=="" (
-    echo [ERROR] No valid module selected.
-    echo.
+    set "SELECTION_WARNING=[ERROR] No valid module selected."
     goto :SELECT_MODULES
 )
 
@@ -201,6 +191,20 @@ echo --------------------------------------------------------
 echo [INFO] FSM diagram generation completed.
 echo [INFO] Success: !SUCCESS_COUNT!, Warning: !WARN_COUNT!, Fail: !FAIL_COUNT!
 echo --------------------------------------------------------
+exit /b 0
+
+:render_selection_screen
+call "%CONSOLE_HELPER%" banner "FSM Module Selection" "Target: %TARGET_PROJECT%" "Detected source files: %VERILOG_FILES%"
+if defined SELECTION_WARNING (
+    echo !SELECTION_WARNING!
+    echo.
+)
+set "SELECTION_WARNING="
+echo  Scanned module files in manifest-resolved source set:
+for /l %%i in (1,1,!MODULE_COUNT!) do (
+    echo   [%%i] !MODULE_%%i!
+)
+echo.
 exit /b 0
 
 :PROCESS_MODULE

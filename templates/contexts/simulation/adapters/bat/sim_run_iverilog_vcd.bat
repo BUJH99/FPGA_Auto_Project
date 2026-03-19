@@ -2,7 +2,9 @@
 setlocal EnableExtensions EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
+set "PROMPT_WARNING="
 
 set "TARGET_PROJECT="
 set "TB_FILTER="
@@ -52,7 +54,7 @@ if not defined TARGET_PROJECT goto usage_error
 
 if not exist "%TARGET_PROJECT%" (
     echo [ERROR] Target project not found: %TARGET_PROJECT%
-    if "%NO_PAUSE%"=="0" pause
+    call :maybe_pause_then_clear
     exit /b 1
 )
 
@@ -60,7 +62,7 @@ where iverilog >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] iverilog not found in PATH.
     echo [INFO] Install Icarus Verilog and add it to PATH.
-    if "%NO_PAUSE%"=="0" pause
+    call :maybe_pause_then_clear
     exit /b 1
 )
 
@@ -68,7 +70,7 @@ where vvp >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] vvp not found in PATH.
     echo [INFO] Install Icarus Verilog and add it to PATH.
-    if "%NO_PAUSE%"=="0" pause
+    call :maybe_pause_then_clear
     exit /b 1
 )
 
@@ -83,7 +85,7 @@ if not exist "%VCD_DIR%" mkdir "%VCD_DIR%" >nul 2>nul
 call "%MANIFEST_CTX%" "%TARGET_PROJECT%"
 if errorlevel 1 (
     echo [ERROR] Manifest context initialization failed.
-    if "%NO_PAUSE%"=="0" pause
+    call :maybe_pause_then_clear
     exit /b 1
 )
 
@@ -102,7 +104,7 @@ echo ===========================================================================
 if defined TB_FILTER (
     call :resolve_tb_file "%TB_FILTER%"
     if errorlevel 1 (
-        if "%NO_PAUSE%"=="0" pause
+        call :maybe_pause_then_clear
         exit /b 1
     )
     call :add_selected "!RESOLVED_TB!"
@@ -113,14 +115,14 @@ if defined TB_FILTER (
     set "SELECT_RC=!errorlevel!"
     if "!SELECT_RC!"=="%USER_CANCEL_RC%" exit /b %USER_CANCEL_RC%
     if not "!SELECT_RC!"=="0" (
-        if "%NO_PAUSE%"=="0" pause
+        call :maybe_pause_then_clear
         exit /b !SELECT_RC!
     )
 )
 
 if %SEL_COUNT% EQU 0 (
     echo [WARNING] No testbench selected.
-    if "%NO_PAUSE%"=="0" pause
+    call :maybe_pause_then_clear
     exit /b 1
 )
 
@@ -132,11 +134,11 @@ echo.
 echo [DONE] selected=%SEL_COUNT% total=%RUN_COUNT% pass=%PASS_COUNT% fail=%FAIL_COUNT%
 
 if %FAIL_COUNT% GTR 0 (
-    if "%NO_PAUSE%"=="0" pause
+    call :maybe_pause_then_clear
     exit /b 1
 )
 
-if "%NO_PAUSE%"=="0" pause
+call :maybe_pause_then_clear
 exit /b 0
 
 :queue_all_tbs
@@ -151,19 +153,14 @@ exit /b 0
 call :populate_tb_candidates
 if errorlevel 1 exit /b 1
 
-echo.
-echo Select TBs to run:
-for /L %%I in (1,1,!TB_COUNT!) do (
-    echo   [%%I] !TB_REL_%%I!
-)
-echo.
-echo Example input: 1 3 5
-echo Option: A = all, Q = cancel
-
 :interactive_prompt
+call :render_tb_selection
 set "TB_PICK="
 set /p "TB_PICK=Select TB numbers: "
-if "!TB_PICK!"=="" goto interactive_prompt
+if "!TB_PICK!"=="" (
+    set "PROMPT_WARNING=[WARN] Enter at least one selection."
+    goto interactive_prompt
+)
 if /i "!TB_PICK!"=="Q" exit /b %USER_CANCEL_RC%
 if /i "!TB_PICK!"=="A" (
     call :queue_all_tbs
@@ -175,7 +172,7 @@ set /a SEL_COUNT=0
 for %%T in (!TB_PICK!) do call :add_index "%%~T" "!TB_COUNT!"
 
 if !SEL_COUNT! EQU 0 (
-    echo [ERROR] No valid selection. Try again.
+    if not defined PROMPT_WARNING set "PROMPT_WARNING=[ERROR] No valid selection. Try again."
     goto interactive_prompt
 )
 exit /b 0
@@ -186,14 +183,17 @@ set "MAX=%~2"
 echo(!IDX!| findstr /r "^[0-9][0-9]*$" >nul
 if errorlevel 1 (
     echo [WARNING] Skip invalid token: !IDX!
+    if not defined PROMPT_WARNING set "PROMPT_WARNING=[WARNING] Some selection tokens were invalid."
     exit /b 0
 )
 if !IDX! lss 1 (
     echo [WARNING] Skip out-of-range index: !IDX!
+    if not defined PROMPT_WARNING set "PROMPT_WARNING=[WARNING] Some selection tokens were out of range."
     exit /b 0
 )
 if !IDX! gtr !MAX! (
     echo [WARNING] Skip out-of-range index: !IDX!
+    if not defined PROMPT_WARNING set "PROMPT_WARNING=[WARNING] Some selection tokens were out of range."
     exit /b 0
 )
 call :add_selected "!TB_%IDX%!"
@@ -414,5 +414,27 @@ exit /b 1
 :usage_error
 echo [ERROR] No target project path provided.
 echo Usage: %~nx0 ^<Project_Directory^> [tb_name_or_file] [--tb ^<tb_name_or_file^>] [--all] [--no-pause]
-if "%NO_PAUSE%"=="0" pause
+call :maybe_pause_then_clear
 exit /b 1
+
+:render_tb_selection
+call "%CONSOLE_HELPER%" banner "Iverilog VCD" "Target: %TARGET_PROJECT%" "VCD output: %VCD_DIR%"
+if defined PROMPT_WARNING (
+    echo %PROMPT_WARNING%
+    echo.
+)
+set "PROMPT_WARNING="
+echo Select TBs to run:
+for /L %%I in (1,1,!TB_COUNT!) do (
+    echo   [%%I] !TB_REL_%%I!
+)
+echo.
+echo Example input: 1 3 5
+echo Option: A = all, Q = cancel
+echo.
+exit /b 0
+
+:maybe_pause_then_clear
+if "%NO_PAUSE%"=="1" exit /b 0
+call "%CONSOLE_HELPER%" pause_then_clear
+exit /b 0

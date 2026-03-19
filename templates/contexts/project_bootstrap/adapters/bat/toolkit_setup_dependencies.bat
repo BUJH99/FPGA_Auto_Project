@@ -4,6 +4,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
 for %%I in ("%TEMPLATES_ROOT%\..") do set "REPO_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 
 set "AUTO_YES=0"
 set "NO_PAUSE=0"
@@ -166,7 +167,7 @@ if "%EXIT_CODE%"=="0" (
 if exist "%PATH_CANDIDATES_FILE%" del /q "%PATH_CANDIDATES_FILE%" >nul 2>&1
 if exist "%MISSING_FILE%" del /q "%MISSING_FILE%" >nul 2>&1
 call :log "[DONE] setup_toolkit rc=%EXIT_CODE%"
-if "%NO_PAUSE%"=="0" pause
+if "%NO_PAUSE%"=="0" call "%CONSOLE_HELPER%" pause_then_clear
 endlocal & exit /b %EXIT_CODE%
 
 :parse_args

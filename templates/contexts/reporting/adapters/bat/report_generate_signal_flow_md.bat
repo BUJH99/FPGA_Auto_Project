@@ -2,11 +2,13 @@
 setlocal EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
+set "PROMPT_WARNING="
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
     echo Usage: %~nx0 ^<Project_Directory^>
-    if not defined NO_PAUSE pause
+    call :pause_then_clear_if_allowed
     exit /b 1
 )
 
@@ -23,21 +25,21 @@ echo.
 
 if not exist "%TOOL_SCRIPT%" (
     echo [ERROR] Tool script not found: %TOOL_SCRIPT%
-    if not defined NO_PAUSE pause
+    call :pause_then_clear_if_allowed
     exit /b 1
 )
 
 where node >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] Node.js is not installed or not in PATH.
-    if not defined NO_PAUSE pause
+    call :pause_then_clear_if_allowed
     exit /b 1
 )
 
 call "%MANIFEST_CTX%" "%TARGET_PROJECT%"
 if errorlevel 1 (
     echo [ERROR] Manifest context initialization failed.
-    if not defined NO_PAUSE pause
+    call :pause_then_clear_if_allowed
     exit /b 1
 )
 
@@ -72,21 +74,15 @@ for /f "usebackq delims=" %%R in ("%MANIFEST_SRC_LIST%") do (
 
 if !MODULE_COUNT! equ 0 (
     echo [ERROR] No Verilog source files found in manifest-resolved src list.
-    if not defined NO_PAUSE pause
+    call :pause_then_clear_if_allowed
     exit /b 1
 )
-
-echo [INFO] Detected modules from src file names:
-for /l %%I in (1,1,!MODULE_COUNT!) do (
-    call set "REL_FILE=%%MODULE_REL_%%I%%"
-    for %%A in ("!REL_FILE!") do echo   - %%~nA
-)
-echo.
 
 if "!DEFAULT_TOP!"=="" set "DEFAULT_TOP=TOP"
 
 set "TOP_MODULE=%~3"
 if "!TOP_MODULE!"=="" (
+    call :render_top_prompt
     set /p "TOP_MODULE=Top module [default: !DEFAULT_TOP!]: "
     if "!TOP_MODULE!"=="" set "TOP_MODULE=!DEFAULT_TOP!"
 )
@@ -96,7 +92,7 @@ node "%TOOL_SCRIPT%" --project "%TARGET_PROJECT%" --manifest-json "%MANIFEST_JSO
 if errorlevel 1 (
     if exist "%SIG_LIST_FILE%" del /q "%SIG_LIST_FILE%" >nul 2>nul
     echo [ERROR] Failed to scan signals for module: !TOP_MODULE!
-    if not defined NO_PAUSE pause
+    call :pause_then_clear_if_allowed
     exit /b 1
 )
 
@@ -112,30 +108,18 @@ if exist "%SIG_LIST_FILE%" del /q "%SIG_LIST_FILE%" >nul 2>nul
 
 if !SIG_COUNT! equ 0 (
     echo [ERROR] No signals found in module: !TOP_MODULE!
-    if not defined NO_PAUSE pause
+    call :pause_then_clear_if_allowed
     exit /b 1
 )
 
-echo.
-echo [INFO] Scanned signals in module !TOP_MODULE!:
-for /l %%I in (1,1,!SIG_COUNT!) do (
-    call set "TMP_NAME=%%SIG_NAME_%%I%%"
-    call set "TMP_KIND=%%SIG_KIND_%%I%%"
-    echo   [%%I] !TMP_NAME! ^(!TMP_KIND!^)
-)
-echo.
-echo [INFO] Selection format:
-echo   - ALL
-echo   - Number list: 1,2,3
-echo   - Signal names: wEcho,wTrigger
-
 set "SIGNAL_INPUT=%~2"
 :ASK_SIGNAL_SELECT
+call :render_signal_prompt
 if "!SIGNAL_INPUT!"=="" (
     set /p "SIGNAL_INPUT=Signal selection (required): "
 )
 if "!SIGNAL_INPUT!"=="" (
-    echo [ERROR] Signal selection cannot be empty.
+    set "PROMPT_WARNING=[ERROR] Signal selection cannot be empty."
     goto :ASK_SIGNAL_SELECT
 )
 
@@ -156,16 +140,16 @@ if /i "!SIGNAL_INPUT!"=="ALL" (
             echo(!TOKEN!| findstr /r "^[0-9][0-9]*$" >nul
             if not errorlevel 1 (
                 if !TOKEN! lss 1 (
-                    echo [ERROR] Selection out of range: !TOKEN!
+                    set "PROMPT_WARNING=[ERROR] Selection out of range: !TOKEN!"
                     set "SELECT_ERR=1"
                 ) else if !TOKEN! gtr !SIG_COUNT! (
-                    echo [ERROR] Selection out of range: !TOKEN!
+                    set "PROMPT_WARNING=[ERROR] Selection out of range: !TOKEN!"
                     set "SELECT_ERR=1"
                 ) else (
                     set "SEL_NAME="
                     call set "SEL_NAME=%%SIG_NAME_!TOKEN!%%"
                     if not defined SEL_NAME (
-                        echo [ERROR] Invalid selection index: !TOKEN!
+                        set "PROMPT_WARNING=[ERROR] Invalid selection index: !TOKEN!"
                         set "SELECT_ERR=1"
                     ) else (
                         set /a SELECT_COUNT+=1
@@ -179,7 +163,7 @@ if /i "!SIGNAL_INPUT!"=="ALL" (
                     if /i "!TOKEN!"=="!CAND_NAME!" set "MATCH_NAME=!CAND_NAME!"
                 )
                 if not defined MATCH_NAME (
-                    echo [ERROR] Unknown signal token: !TOKEN!
+                    set "PROMPT_WARNING=[ERROR] Unknown signal token: !TOKEN!"
                     set "SELECT_ERR=1"
                 ) else (
                     set /a SELECT_COUNT+=1
@@ -191,14 +175,13 @@ if /i "!SIGNAL_INPUT!"=="ALL" (
 )
 
 if "!SELECT_ERR!"=="1" (
-    echo.
-    echo [INFO] Please enter a valid selection again.
+    if not defined PROMPT_WARNING set "PROMPT_WARNING=[INFO] Please enter a valid selection again."
     set "SIGNAL_INPUT="
     goto :ASK_SIGNAL_SELECT
 )
 
 if !SELECT_COUNT! equ 0 (
-    echo [ERROR] No valid signal selected.
+    set "PROMPT_WARNING=[ERROR] No valid signal selected."
     set "SIGNAL_INPUT="
     goto :ASK_SIGNAL_SELECT
 )
@@ -210,21 +193,9 @@ for /l %%I in (1,1,!SELECT_COUNT!) do (
 )
 
 set "TRACE_DEPTH=%~4"
-if "!TRACE_DEPTH!"=="" (
-    set /p "TRACE_DEPTH=Trace depth [default: 4, or MAX]: "
-    if "!TRACE_DEPTH!"=="" set "TRACE_DEPTH=4"
-)
+if "!TRACE_DEPTH!"=="" goto :ASK_TRACE_DEPTH
 
-if /i "!TRACE_DEPTH!"=="MAX" goto :TRACE_DEPTH_OK
-
-echo(!TRACE_DEPTH!| findstr /r "^[0-9][0-9]*$" >nul
-if errorlevel 1 (
-    echo [ERROR] Trace depth must be numeric or MAX.
-    if not defined NO_PAUSE pause
-    exit /b 1
-)
 :TRACE_DEPTH_OK
-
 echo.
 set /a SUCCESS_COUNT=0
 set /a FAIL_COUNT=0
@@ -248,9 +219,75 @@ echo [INFO] Success: !SUCCESS_COUNT!, Fail: !FAIL_COUNT!
 echo ============================================================================
 
 if !FAIL_COUNT! gtr 0 (
-    if not defined NO_PAUSE pause
+    call :pause_then_clear_if_allowed
     exit /b 1
 )
 
-if not defined NO_PAUSE pause
+call :pause_then_clear_if_allowed
+exit /b 0
+
+:ASK_TRACE_DEPTH
+call :render_trace_prompt
+    set /p "TRACE_DEPTH=Trace depth [default: 4, or MAX]: "
+if "!TRACE_DEPTH!"=="" set "TRACE_DEPTH=4"
+
+if /i "!TRACE_DEPTH!"=="MAX" goto :TRACE_DEPTH_OK
+
+echo(!TRACE_DEPTH!| findstr /r "^[0-9][0-9]*$" >nul
+if errorlevel 1 (
+    set "PROMPT_WARNING=[ERROR] Trace depth must be numeric or MAX."
+    set "TRACE_DEPTH="
+    goto :ASK_TRACE_DEPTH
+)
+goto :TRACE_DEPTH_OK
+
+:render_top_prompt
+call "%CONSOLE_HELPER%" banner "Signal Flow Markdown Generator" "Target: %TARGET_PROJECT%" "Top module selection"
+echo [INFO] Detected modules from src file names:
+for /l %%I in (1,1,!MODULE_COUNT!) do (
+    call set "REL_FILE=%%MODULE_REL_%%I%%"
+    for %%A in ("!REL_FILE!") do echo   - %%~nA
+)
+echo.
+exit /b 0
+
+:render_signal_prompt
+call "%CONSOLE_HELPER%" banner "Signal Flow Markdown Generator" "Top: !TOP_MODULE!" "Signal selection"
+if defined PROMPT_WARNING (
+    echo %PROMPT_WARNING%
+    echo.
+)
+set "PROMPT_WARNING="
+echo [INFO] Scanned signals in module !TOP_MODULE!:
+for /l %%I in (1,1,!SIG_COUNT!) do (
+    call set "TMP_NAME=%%SIG_NAME_%%I%%"
+    call set "TMP_KIND=%%SIG_KIND_%%I%%"
+    echo   [%%I] !TMP_NAME! ^(!TMP_KIND!^)
+)
+echo.
+echo [INFO] Selection format:
+echo   - ALL
+echo   - Number list: 1,2,3
+echo   - Signal names: wEcho,wTrigger
+echo.
+exit /b 0
+
+:render_trace_prompt
+call "%CONSOLE_HELPER%" banner "Signal Flow Markdown Generator" "Top: !TOP_MODULE!" "Trace depth"
+if defined PROMPT_WARNING (
+    echo %PROMPT_WARNING%
+    echo.
+)
+set "PROMPT_WARNING="
+echo [INFO] Selected signals:
+for /l %%I in (1,1,!SELECT_COUNT!) do (
+    call echo   - %%SELECT_%%I%%
+)
+echo.
+exit /b 0
+
+:pause_then_clear_if_allowed
+if /i "%NO_PAUSE%"=="1" exit /b 0
+if /i "%FPGA_AUTO_NO_PAUSE%"=="1" exit /b 0
+call "%CONSOLE_HELPER%" pause_then_clear
 exit /b 0

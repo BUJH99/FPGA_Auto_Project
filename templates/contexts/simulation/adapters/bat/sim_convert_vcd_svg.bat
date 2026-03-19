@@ -2,6 +2,7 @@
 setlocal EnableExtensions EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
 
 set "TARGET_PROJECT="
@@ -23,13 +24,13 @@ goto parse_args
 if not defined TARGET_PROJECT (
     echo [ERROR] No target project path provided.
     echo Usage: %~nx0 ^<Project_Directory^> [--no-pause]
-    if "%NO_PAUSE%"=="0" pause
+    call :maybe_pause_then_clear
     exit /b 1
 )
 
 if not exist "%TARGET_PROJECT%" (
     echo [ERROR] Target project not found: %TARGET_PROJECT%
-    if "%NO_PAUSE%"=="0" pause
+    call :maybe_pause_then_clear
     exit /b 1
 )
 
@@ -38,7 +39,7 @@ if exist "%MANIFEST_CTX%" (
     call "%MANIFEST_CTX%" "%TARGET_PROJECT%"
     if errorlevel 1 (
         echo [ERROR] Manifest context initialization failed.
-        if "%NO_PAUSE%"=="0" pause
+        call :maybe_pause_then_clear
         exit /b 1
     )
 )
@@ -48,14 +49,14 @@ set "PY_SCRIPT=%REPO_ROOT%\templates\vcd2sgv\vcd2svg_interactive.py"
 
 if not exist "%PY_SCRIPT%" (
     echo [ERROR] Interactive SVG tool not found: %PY_SCRIPT%
-    if "%NO_PAUSE%"=="0" pause
+    call :maybe_pause_then_clear
     exit /b 1
 )
 
 where python >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] python not found in PATH.
-    if "%NO_PAUSE%"=="0" pause
+    call :maybe_pause_then_clear
     exit /b 1
 )
 
@@ -74,11 +75,16 @@ if "%RC%"=="%USER_CANCEL_RC%" exit /b %USER_CANCEL_RC%
 if not "%RC%"=="0" (
     echo.
     echo [FAIL] SVG generation failed ^(rc=%RC%^)
-    if "%NO_PAUSE%"=="0" pause
+    call :maybe_pause_then_clear
     exit /b %RC%
 )
 
 echo.
 echo [DONE] Interactive SVG generation completed.
-if "%NO_PAUSE%"=="0" pause
+call :maybe_pause_then_clear
+exit /b 0
+
+:maybe_pause_then_clear
+if "%NO_PAUSE%"=="1" exit /b 0
+call "%CONSOLE_HELPER%" pause_then_clear
 exit /b 0

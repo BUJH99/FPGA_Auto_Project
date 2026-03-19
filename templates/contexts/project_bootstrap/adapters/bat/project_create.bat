@@ -2,6 +2,7 @@
 setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 
 set "SYNC_BAT=%TEMPLATES_ROOT%\..\SyncProjectsToSourceProject.bat"
 set "MANIFEST_TEMPLATE=%TEMPLATES_ROOT%\manifest\fpga_auto.template.yml"
@@ -10,6 +11,7 @@ set "SETUP_RC=0"
 set "PROJECT_NAME="
 set "HAS_INPUT_NAME=0"
 set "HDL_EXT=v"
+set "PROMPT_WARNING="
 
 :PARSE_ARGS
 if "%~1"=="" goto PARSE_DONE
@@ -45,13 +47,17 @@ if not defined PROJECT_NAME goto PROMPT
 goto CREATE
 
 :PROMPT
+call :render_prompt
 set /p PROJECT_NAME="Enter project name: "
-if not defined PROJECT_NAME goto PROMPT
+if not defined PROJECT_NAME (
+    set "PROMPT_WARNING=[ERROR] Project name is required."
+    goto PROMPT
+)
 
 :CREATE
 set "TARGET_PROJECT=%PROJECT_ROOT%\%PROJECT_NAME%"
 if exist "%TARGET_PROJECT%" (
-    echo [ERROR] "%TARGET_PROJECT%" already exists. Please use a different name.
+    set "PROMPT_WARNING=[ERROR] %TARGET_PROJECT% already exists. Please use a different name."
     if "%HAS_INPUT_NAME%"=="1" (
         set "SETUP_RC=1"
         goto END
@@ -147,6 +153,18 @@ if "%NO_PAUSE%"=="1" (
     endlocal
     exit /b %SETUP_RC%
 )
-pause
+call "%CONSOLE_HELPER%" pause_then_clear
 endlocal
 exit /b %SETUP_RC%
+
+:render_prompt
+call "%CONSOLE_HELPER%" banner "Project Create" "Repository: %REPO_ROOT%" "HDL default: %HDL_EXT%"
+if defined PROMPT_WARNING (
+    echo %PROMPT_WARNING%
+    echo.
+)
+set "PROMPT_WARNING="
+echo Project root:
+echo - %PROJECT_ROOT%
+echo.
+exit /b 0

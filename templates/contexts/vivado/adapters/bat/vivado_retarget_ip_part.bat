@@ -2,12 +2,13 @@
 setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
     echo Usage: %~nx0 ^<Project_Directory^>
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -31,6 +32,7 @@ where vivado >nul 2>nul
 if %errorlevel% neq 0 (
     echo [ERROR] Vivado executable not found in PATH.
     echo         Please add Vivado bin directory to your System PATH.
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -43,10 +45,12 @@ set "RETARGET_RC=%errorlevel%"
 call :route_vivado_artifacts
 if %RETARGET_RC% neq 0 (
     echo [ERROR] Retarget IP failed. Check %RETARGET_LOG%
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b %RETARGET_RC%
 )
 
 echo [DONE] IP retarget complete.
+call "%CONSOLE_HELPER%" pause_then_clear
 endlocal
 exit /b 0
 

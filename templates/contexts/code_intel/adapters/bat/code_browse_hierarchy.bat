@@ -2,11 +2,12 @@
 setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
     echo Usage: %~nx0 ^<Project_Directory^> [--once] [--include-tb ^| --tb-only]
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -36,7 +37,7 @@ if exist "%MANIFEST_CTX%" (
     call "%MANIFEST_CTX%" "%TARGET_PROJECT%"
     if errorlevel 1 (
         echo [ERROR] Manifest context initialization failed.
-        pause
+        call "%CONSOLE_HELPER%" pause_then_clear
         exit /b 1
     )
 )
@@ -132,6 +133,7 @@ function Invoke-HierarchySummaryWriter {
 }
 
 if ($BrowseOnce -ne "1" -and $ScopeSpecified -ne "1") {
+    Clear-Host
     Write-Host ""
     Write-Host "[Hierarchy Scope]" -ForegroundColor Yellow
     Write-Host "  [1] src only (tb hidden)"

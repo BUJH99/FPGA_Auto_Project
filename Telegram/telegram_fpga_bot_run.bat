@@ -2,6 +2,7 @@
 setlocal
 set "SCRIPT_DIR=%~dp0"
 set "BOT_SCRIPT=%SCRIPT_DIR%telegram_fpga_bot.py"
+set "CONSOLE_HELPER=%SCRIPT_DIR%..\templates\shared\adapters\bat\console_ui.bat"
 
 if not exist "%BOT_SCRIPT%" (
     echo [ERROR] Bot script not found: %BOT_SCRIPT%
@@ -32,6 +33,6 @@ set "RC=%errorlevel%"
 echo [INFO] Bot exited with code: %RC%
 if not "%RC%"=="0" (
     echo [INFO] Press any key to close...
-    pause >nul
+    call "%CONSOLE_HELPER%" pause_then_clear
 )
 exit /b %RC%

@@ -2,6 +2,7 @@
 setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 
 set "NO_PAUSE=0"
 set "INFER_GLOBS=0"
@@ -15,14 +16,14 @@ set "MIGRATE_TOOL=%TEMPLATES_ROOT%\contexts\project_bootstrap\adapters\cli\proje
 
 if not exist "%MIGRATE_TOOL%" (
     echo [ERROR] Migration tool not found: %MIGRATE_TOOL%
-    if "%NO_PAUSE%"=="0" pause
+    if "%NO_PAUSE%"=="0" call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
 where node >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] Node.js is required.
-    if "%NO_PAUSE%"=="0" pause
+    if "%NO_PAUSE%"=="0" call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -41,5 +42,5 @@ if not "%RC%"=="0" (
     echo [DONE] Migration completed successfully.
 )
 
-if "%NO_PAUSE%"=="0" pause
+if "%NO_PAUSE%"=="0" call "%CONSOLE_HELPER%" pause_then_clear
 exit /b %RC%

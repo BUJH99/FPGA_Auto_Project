@@ -2,12 +2,13 @@
 setlocal EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
     echo Usage: %~nx0 ^<Project_Directory^>
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -18,7 +19,7 @@ if exist "%MANIFEST_CTX%" (
     call "%MANIFEST_CTX%" "%TARGET_PROJECT%"
     if errorlevel 1 (
         echo [ERROR] Manifest context initialization failed.
-        pause
+        call "%CONSOLE_HELPER%" pause_then_clear
         exit /b 1
     )
 )
@@ -36,7 +37,7 @@ echo.
 
 if not exist "%TEMPLATES_ROOT%\contexts\reporting\adapters\cli\report_generate_doc_cli.js" (
     echo [Error] Tool script not found in canonical reporting context.
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -48,13 +49,13 @@ node "%TEMPLATES_ROOT%\contexts\reporting\adapters\cli\report_generate_doc_cli.j
 
 if errorlevel 1 (
     echo [FAILURE] Documentation generation failed.
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
 echo.
 echo [SUCCESS] Documentation generated for %TARGET_PROJECT%
-pause
+call "%CONSOLE_HELPER%" pause_then_clear
 exit /b 0
 
 :prompt_run_or_cancel

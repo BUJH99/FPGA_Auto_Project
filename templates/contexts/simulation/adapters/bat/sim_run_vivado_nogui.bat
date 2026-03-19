@@ -2,12 +2,13 @@
 setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
     echo Usage: %~nx0 ^<Project_Directory^>
-    pause
+    if /i not "%FPGA_AUTO_NO_PAUSE%"=="1" call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -22,14 +23,14 @@ set "MANIFEST_CTX=%TEMPLATES_ROOT%\shared\adapters\bat\bootstrap_manifest_contex
 
 if not exist "%TCL_SCRIPT%" (
     echo [ERROR] Tcl script not found: %TCL_SCRIPT%
-    pause
+    if /i not "%FPGA_AUTO_NO_PAUSE%"=="1" call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
 call "%MANIFEST_CTX%" "%TARGET_PROJECT%"
 if errorlevel 1 (
     echo [ERROR] Manifest context initialization failed.
-    pause
+    if /i not "%FPGA_AUTO_NO_PAUSE%"=="1" call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -40,7 +41,7 @@ if not exist "%SIM_LOG_DIR%" mkdir "%SIM_LOG_DIR%"
 where vivado >nul 2>nul
 if %errorlevel% neq 0 (
     echo [ERROR] Vivado executable not found in PATH.
-    pause
+    if /i not "%FPGA_AUTO_NO_PAUSE%"=="1" call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -58,13 +59,13 @@ if %PS_RC% equ %USER_CANCEL_RC% exit /b %USER_CANCEL_RC%
 if %PS_RC% neq 0 (
     echo.
     echo [FAILURE] NO GUI Vivado simulation failed.
-    pause
+    if /i not "%FPGA_AUTO_NO_PAUSE%"=="1" call "%CONSOLE_HELPER%" pause_then_clear
     exit /b %PS_RC%
 )
 
 echo.
 echo [SUCCESS] NO GUI Vivado simulation finished.
-pause
+if /i not "%FPGA_AUTO_NO_PAUSE%"=="1" call "%CONSOLE_HELPER%" pause_then_clear
 exit /b 0
 
 :POWERSHELL_SCRIPT_START
@@ -150,6 +151,8 @@ $vivadoJournalFile = ""
 $resolvedVivadoLogFile = ""
 $resolvedVivadoJournalFile = ""
 $runStartedAt = (Get-Date).ToString("o")
+$folderPromptWarning = ""
+$tbPromptWarning = ""
 
 function Resolve-ExistingVivadoArtifact {
     param(
@@ -339,34 +342,53 @@ $folderEntries = @(
         }
 )
 
-Write-Host "-----------------------------------------------------------" -ForegroundColor Cyan
-Write-Host "      NO GUI Vivado Simulation Launcher" -ForegroundColor Cyan
-Write-Host "-----------------------------------------------------------" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Select TB Folder:" -ForegroundColor Yellow
-Write-Host "[INFO] Enter Q to return to menu." -ForegroundColor DarkGray
+function Show-TbFolderMenu {
+    param(
+        [Parameter(Mandatory = $true)][object[]]$Folders,
+        [Parameter(Mandatory = $false)][string]$WarningText = ""
+    )
 
-for ($i = 0; $i -lt $folderEntries.Count; $i++) {
-    $folder = $folderEntries[$i]
-    Write-Host ("[{0}] {1} ({2} files)" -f ($i + 1), $folder.Name, $folder.Entries.Count)
+    Clear-Host
+    Write-Host "-----------------------------------------------------------" -ForegroundColor Cyan
+    Write-Host "      NO GUI Vivado Simulation Launcher" -ForegroundColor Cyan
+    Write-Host "-----------------------------------------------------------" -ForegroundColor Cyan
+    Write-Host ""
+    if (-not [string]::IsNullOrWhiteSpace($WarningText)) {
+        Write-Host $WarningText -ForegroundColor DarkYellow
+        Write-Host ""
+    }
+    Write-Host "Select TB Folder:" -ForegroundColor Yellow
+    Write-Host "[INFO] Enter Q to return to menu." -ForegroundColor DarkGray
+
+    for ($i = 0; $i -lt $Folders.Count; $i++) {
+        $folder = $Folders[$i]
+        Write-Host ("[{0}] {1} ({2} files)" -f ($i + 1), $folder.Name, $folder.Entries.Count)
+    }
 }
 
-while ($true) {
-    $folderRaw = Read-Host " Folder >"
-    if ($folderRaw -match '^(?i)q$') {
-        Invoke-VivadoSummaryWriter -Status "cancelled"
-        exit 99
+if ($folderEntries.Count -eq 1) {
+    $folderSelection = 1
+    $folderPromptWarning = ("[INFO] Auto-selected TB folder: {0}" -f $folderEntries[0].Name)
+} else {
+    while ($true) {
+        Show-TbFolderMenu -Folders $folderEntries -WarningText $folderPromptWarning
+        $folderPromptWarning = ""
+        $folderRaw = Read-Host " Folder >"
+        if ($folderRaw -match '^(?i)q$') {
+            Invoke-VivadoSummaryWriter -Status "cancelled"
+            exit 99
+        }
+        if ($folderRaw -notmatch "^\d+$") {
+            $folderPromptWarning = "[WARN] Enter a valid folder number."
+            continue
+        }
+        $folderSelection = [int]$folderRaw
+        if ($folderSelection -lt 1 -or $folderSelection -gt $folderEntries.Count) {
+            $folderPromptWarning = "[WARN] Folder selection out of range."
+            continue
+        }
+        break
     }
-    if ($folderRaw -notmatch "^\d+$") {
-        Write-Host "[WARN] Enter a valid folder number." -ForegroundColor DarkYellow
-        continue
-    }
-    $folderSelection = [int]$folderRaw
-    if ($folderSelection -lt 1 -or $folderSelection -gt $folderEntries.Count) {
-        Write-Host "[WARN] Folder selection out of range." -ForegroundColor DarkYellow
-        continue
-    }
-    break
 }
 
 $selectedFolder = $folderEntries[$folderSelection - 1]
@@ -376,42 +398,64 @@ $topFolderFiles = @($selectedFolderFiles | Where-Object { $_.HasTop })
 $tbSelectList = $topFolderFiles
 
 if ($tbSelectList.Count -eq 0) {
-    Write-Host ""
-    Write-Host ("[WARN] No module/program top candidate found in folder '{0}'. Showing HDL files as fallback." -f $selectedFolder.Name) -ForegroundColor DarkYellow
+    $tbPromptWarning = ("[WARN] No module/program top candidate found in folder '{0}'. Showing HDL files as fallback." -f $selectedFolder.Name)
     $tbSelectList = $selectedFolderFiles
 }
 
-Write-Host ""
-Write-Host ("Selected folder: {0}" -f $selectedFolder.Name) -ForegroundColor Green
-Write-Host "Select Testbench Top Source:" -ForegroundColor Yellow
-Write-Host "[INFO] Enter Q to return to menu." -ForegroundColor DarkGray
+function Show-TbFileMenu {
+    param(
+        [Parameter(Mandatory = $true)][string]$FolderName,
+        [Parameter(Mandatory = $true)][object[]]$Entries,
+        [Parameter(Mandatory = $false)][string]$WarningText = ""
+    )
 
-for ($i = 0; $i -lt $tbSelectList.Count; $i++) {
-    $entry = $tbSelectList[$i]
-    if ($entry.HasTop) {
-        Write-Host ("[{0}] {1}  (top: {2})" -f ($i + 1), $entry.FileDisplay, $entry.TopCandidate)
-    } else {
-        $fallbackTop = [System.IO.Path]::GetFileNameWithoutExtension($entry.File.Name)
-        Write-Host ("[{0}] {1}  (top fallback: {2})" -f ($i + 1), $entry.FileDisplay, $fallbackTop)
+    Clear-Host
+    Write-Host "-----------------------------------------------------------" -ForegroundColor Cyan
+    Write-Host "      NO GUI Vivado Simulation Launcher" -ForegroundColor Cyan
+    Write-Host "-----------------------------------------------------------" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host ("Selected folder: {0}" -f $FolderName) -ForegroundColor Green
+    if (-not [string]::IsNullOrWhiteSpace($WarningText)) {
+        Write-Host $WarningText -ForegroundColor DarkYellow
+        Write-Host ""
+    }
+    Write-Host "Select Testbench Top Source:" -ForegroundColor Yellow
+    Write-Host "[INFO] Enter Q to return to menu." -ForegroundColor DarkGray
+
+    for ($i = 0; $i -lt $Entries.Count; $i++) {
+        $entry = $Entries[$i]
+        if ($entry.HasTop) {
+            Write-Host ("[{0}] {1}  (top: {2})" -f ($i + 1), $entry.FileDisplay, $entry.TopCandidate)
+        } else {
+            $fallbackTop = [System.IO.Path]::GetFileNameWithoutExtension($entry.File.Name)
+            Write-Host ("[{0}] {1}  (top fallback: {2})" -f ($i + 1), $entry.FileDisplay, $fallbackTop)
+        }
     }
 }
 
-while ($true) {
-    $tbRaw = Read-Host " TB file >"
-    if ($tbRaw -match '^(?i)q$') {
-        Invoke-VivadoSummaryWriter -Status "cancelled"
-        exit 99
+if ($tbSelectList.Count -eq 1) {
+    $tbSelection = 1
+    $tbPromptWarning = ("[INFO] Auto-selected TB file: {0}" -f $tbSelectList[0].FileDisplay)
+} else {
+    while ($true) {
+        Show-TbFileMenu -FolderName $selectedFolder.Name -Entries $tbSelectList -WarningText $tbPromptWarning
+        $tbPromptWarning = ""
+        $tbRaw = Read-Host " TB file >"
+        if ($tbRaw -match '^(?i)q$') {
+            Invoke-VivadoSummaryWriter -Status "cancelled"
+            exit 99
+        }
+        if ($tbRaw -notmatch "^\d+$") {
+            $tbPromptWarning = "[WARN] Enter a valid TB file number."
+            continue
+        }
+        $tbSelection = [int]$tbRaw
+        if ($tbSelection -lt 1 -or $tbSelection -gt $tbSelectList.Count) {
+            $tbPromptWarning = "[WARN] TB file selection out of range."
+            continue
+        }
+        break
     }
-    if ($tbRaw -notmatch "^\d+$") {
-        Write-Host "[WARN] Enter a valid TB file number." -ForegroundColor DarkYellow
-        continue
-    }
-    $tbSelection = [int]$tbRaw
-    if ($tbSelection -lt 1 -or $tbSelection -gt $tbSelectList.Count) {
-        Write-Host "[WARN] TB file selection out of range." -ForegroundColor DarkYellow
-        continue
-    }
-    break
 }
 
 $selectedEntry = $tbSelectList[$tbSelection - 1]

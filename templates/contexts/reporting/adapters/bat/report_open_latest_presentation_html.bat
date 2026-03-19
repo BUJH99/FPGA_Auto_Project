@@ -1,11 +1,14 @@
 @echo off
 setlocal EnableDelayedExpansion
+set "SCRIPT_DIR=%~dp0"
+for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
     echo [ERROR] Target project path is required.
     echo Usage: %~nx0 ^<Project_Directory^>
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -14,14 +17,14 @@ set "PRESENTATION_DIR=%TARGET_PROJECT%\Presentation"
 
 if not exist "%TARGET_PROJECT%\" (
     echo [ERROR] Target project not found: %TARGET_PROJECT%
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
 if not exist "%PRESENTATION_DIR%\" (
     echo [ERROR] Presentation directory not found: %PRESENTATION_DIR%
     echo [INFO] Run report_generate_presentation.bat first.
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -33,7 +36,7 @@ for /f "usebackq delims=" %%F in (`powershell -NoProfile -Command "$dir='%PRESEN
 if not defined TARGET_HTML (
     echo [ERROR] No presentation HTML file found in: %PRESENTATION_DIR%
     echo [INFO] Run report_generate_presentation.bat first.
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -42,7 +45,7 @@ if errorlevel %USER_CANCEL_RC% exit /b %USER_CANCEL_RC%
 
 echo [INFO] Opening: !TARGET_HTML!
 start "" "!TARGET_HTML!"
-pause
+call "%CONSOLE_HELPER%" pause_then_clear
 exit /b 0
 
 :prompt_run_or_cancel

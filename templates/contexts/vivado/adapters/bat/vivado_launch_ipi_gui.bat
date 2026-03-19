@@ -2,12 +2,13 @@
 setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
     echo Usage: %~nx0 ^<Project_Directory^>
-    pause
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -31,6 +32,7 @@ where vivado >nul 2>nul
 if %errorlevel% neq 0 (
     echo [ERROR] Vivado executable not found in PATH.
     echo         Please add Vivado bin directory to your System PATH.
+    call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
 
@@ -40,6 +42,7 @@ if errorlevel %USER_CANCEL_RC% exit /b %USER_CANCEL_RC%
 echo [INFO] Launching Vivado GUI with IP Integrator...
 vivado -mode gui -source "%TEMPLATES_ROOT%\contexts\vivado\adapters\tcl\vivado_launch_ipi_gui.tcl" -tclargs "%TARGET_PROJECT%" "%MANIFEST_SRC_LIST%" "%MANIFEST_TB_LIST%" "%MANIFEST_XDC_LIST%" -notrace -log "%GUI_LOG%" -journal "%GUI_JOU%"
 call :route_vivado_artifacts
+call "%CONSOLE_HELPER%" pause_then_clear
 endlocal
 exit /b 0
 
