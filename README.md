@@ -164,100 +164,112 @@ flowchart LR
 
 #### 🏗️ [ Project Bootstrap / Management ]
 
-1. **Create New Project** (`contexts\project_bootstrap\adapters\bat\project_create.bat`)
+- **`MAIN.bat` project-selection option**: `S` Setup New Project.
+
+S. **Setup New Project** (`templates\contexts\project_bootstrap\adapters\bat\project_create.bat`)
    - Scaffolds a new FPGA project directory structure complete with a valid `fpga_auto.yml` manifest.
-   - **Usage**: Run the script and enter the new project name when prompted.
+   - **Usage**: From the project selection screen, press `S`, or run the BAT directly and enter the new project name when prompted.
 
 #### 🎨 [ Code & Schematic Generation ]
 
-2. **Draw Schematic** (`contexts\code_intel\adapters\bat\code_draw_schematic.bat`)
+- **`MAIN.bat` code menu map**: `1` Draw Schematic, `2` Browse HDL Hierarchy, `3` Draw FSM, `4` Generate Presentation.
+
+1. **Draw Schematic** (`templates\contexts\code_intel\adapters\bat\code_draw_schematic.bat`)
    - Uses Yosys to parse `.v`/`.sv` modules and outputs SVG logic schematics to `output/Diagram/`.
    - **Usage**: Select the target project and the top module from the interactive menu.
 
-3. **Browse HDL Hierarchy** (`contexts\code_intel\adapters\bat\code_browse_hierarchy.bat`)
+2. **Browse HDL Hierarchy** (`templates\contexts\code_intel\adapters\bat\code_browse_hierarchy.bat`)
    - Explores design structure natively in the terminal. Use `--include-tb` to inspect testbench dependencies.
    - **Usage**: Choose the project and entry file. The hierarchy tree will be printed directly to the console.
 
-4. **Draw FSM** (`contexts\code_intel\adapters\bat\code_draw_fsm.bat`)
+3. **Draw FSM** (`templates\contexts\code_intel\adapters\bat\code_draw_fsm.bat`)
    - Automatically extracts Finite State Machine logic and visualizes state transition diagrams.
    - **Usage**: Run the script and select the module containing your FSM logic.
 
-5. **Generate Presentation** (`contexts\reporting\adapters\bat\report_generate_presentation.bat`)
+4. **Generate Presentation** (`templates\contexts\reporting\adapters\bat\report_generate_presentation.bat`)
    - Generates a single HTML presentation from module metadata, TB scaffold files, and report artifacts.
    - **Usage**: Runs with project context and emits `Presentation\presentation_<project>_<timestamp>.html`.
-   - **Preview**: Open the latest generated HTML through `MAIN.bat -> 18. Open Latest Presentation HTML` (`contexts\reporting\adapters\bat\report_open_latest_presentation_html.bat`).
+   - **Preview**: Open the latest generated HTML through `MAIN.bat -> 18. Open Latest Presentation HTML` (`templates\contexts\reporting\adapters\bat\report_open_latest_presentation_html.bat`).
 
 #### 🕹️ [ Simulation ]
 
 - **`MAIN.bat` simulation menu map**: `5` Run Vivado Simulation, `6` Auto Sim + Report, `7` Run Iverilog VCD, `8` Generate SVG from VCD, `9` Generate WaveDrom from VCD, `19` Create DUT TB Scaffold, `20` NO GUI Run Vivado Simulation.
 
-6. **Run Vivado Simulation** (`contexts\simulation\adapters\bat\sim_run_vivado.bat`)
+5. **Run Vivado Simulation** (`templates\contexts\simulation\adapters\bat\sim_run_vivado.bat`)
    - Launches Vivado xsim for RTL simulation. After waveform setup is loaded (or initialized), it automatically executes `restart` and `run all`.
    - **Usage**: Select your project and testbench file. This remains the manual GUI path for waveform inspection.
 
-19. **Create DUT TB Scaffold** (`contexts\simulation\adapters\bat\sim_create_dut_tb_scaffold.bat`)
-   - Scaffolds a foundational SystemVerilog testbench layout for a specified Design Under Test (DUT).
-   - **Usage**: Select the target DUT module, and a boilerplate `.sv` testbench will be generated in your `tb/` folder.
-
-20. **NO GUI Run Vivado Simulation** (`contexts\simulation\adapters\bat\sim_run_vivado_nogui.bat`)
-   - Runs the same Vivado replay flow in batch mode without opening the GUI, then stores the selected TB log/journal in the intended TB folder.
-   - **Usage**: Select the TB folder and TB file. The script executes `restart` + `run all` silently and updates `output/run_summary.json`.
-
-7. **Auto Sim + Report** (`contexts\simulation\adapters\bat\sim_run_auto_report.bat`)
+6. **Auto Sim + Report** (`templates\contexts\simulation\adapters\bat\sim_run_auto_report.bat`)
    - Fully automated validation loop: runs simulation silently and passes VCD/logs directly to the report generator.
    - **Usage**: Choose the project and TB. Wait for the background process to finish and check the `output/` folder.
 
-8. **Run Iverilog VCD (Select TB)** (`contexts\simulation\adapters\bat\sim_run_iverilog_vcd.bat`)
+7. **Run Iverilog VCD (Select TB)** (`templates\contexts\simulation\adapters\bat\sim_run_iverilog_vcd.bat`)
    - Lightweight simulation using open-source Icarus Verilog, outputting VCD waveforms.
    - **Usage**: Select the project and TB. A VCD file will be instantly dumped to the `output/` directory.
 
-9. **Generate SVG from VCD (Select)** (`contexts\simulation\adapters\bat\sim_convert_vcd_svg.bat`)
+8. **Generate SVG from VCD (Select)** (`templates\contexts\simulation\adapters\bat\sim_convert_vcd_svg.bat`)
    - Converts targeted chunks of a `.vcd` waveform trace into scalable vector graphics (`.svg`).
    - **Usage**: Select the valid VCD file and configure the cycle segment you want to render.
 
-10. **Generate WaveDrom from VCD (Select)** (`contexts\simulation\adapters\bat\sim_convert_vcd_wavedrom.bat`)
-    - Extracts waveform signals into WaveDrom JSON format for text-based diagram rendering.
-    - **Usage**: Select the VCD file; the extracted WaveDrom JSON will map to your `output/` folder.
+9. **Generate WaveDrom from VCD (Select)** (`templates\contexts\simulation\adapters\bat\sim_convert_vcd_wavedrom.bat`)
+   - Extracts waveform signals into WaveDrom JSON format for text-based diagram rendering.
+   - **Usage**: Select the VCD file; the extracted WaveDrom JSON will map to your `output/` folder.
+
+19. **Create DUT TB Scaffold** (`templates\contexts\simulation\adapters\bat\sim_create_dut_tb_scaffold.bat`)
+    - Scaffolds a foundational SystemVerilog testbench layout for a specified Design Under Test (DUT).
+    - **Usage**: Select the target DUT module, and a boilerplate `.sv` testbench will be generated in your `tb/` folder.
+
+20. **NO GUI Run Vivado Simulation** (`templates\contexts\simulation\adapters\bat\sim_run_vivado_nogui.bat`)
+    - Runs the same Vivado replay flow in batch mode without opening the GUI, then stores the selected TB log/journal in the intended TB folder.
+    - **Usage**: Select the TB folder and TB file. The script executes `restart` + `run all` silently and updates `output/run_summary.json`.
 
 #### 📄 [ Report (Vivado HTML / Docs) ]
 
-11. **Report Generator** (`contexts\reporting\adapters\bat\report_generate_legacy_html.bat`)
+- **`MAIN.bat` report menu map**: `10` Report Generator, `11` Docs Generator, `18` Open Latest Presentation HTML.
+
+10. **Report Generator** (`templates\contexts\reporting\adapters\bat\report_generate_legacy_html.bat`)
     - Consolidates complex Vivado synthesis/implementation logs into a readable HTML digest.
     - **Usage**: Run post-build to aggregate the `.log` and `.rpt` files into the `output/FINALReport/` directory.
 
-12. **Docs Generator** (`contexts\reporting\adapters\bat\report_generate_docs.bat`)
+11. **Docs Generator** (`templates\contexts\reporting\adapters\bat\report_generate_docs.bat`)
     - Parses source module declarations (`.v`, `.sv`) into unified markdown/HTML manual structures.
     - **Usage**: Run at any time to generate updated Markdown and HTML documentation from your code comments.
 
+18. **Open Latest Presentation HTML** (`templates\contexts\reporting\adapters\bat\report_open_latest_presentation_html.bat`)
+    - Opens the newest `presentation_*.html` file from the target project's `Presentation/` directory.
+    - **Usage**: Run after generating a presentation to quickly preview the latest HTML in your default browser.
+
 #### 🚀 [ Vivado Flow & FPGA ]
 
-13. **Open Vivado Project GUI** (`contexts\vivado\adapters\bat\vivado_open_project_gui.bat`)
+- **`MAIN.bat` Vivado menu map**: `12` Open Vivado Project GUI (Auto TOP), `13` Run Vivado Build Flow, `14` Finalize Block Design, `15` Retarget IP to Part, `16` Program FPGA Device, `17` Auto Build + Program.
+
+12. **Open Vivado Project GUI (Auto TOP)** (`templates\contexts\vivado\adapters\bat\vivado_open_project_gui.bat`)
     - Opens the selected project in Vivado GUI mode after collecting manifest-based RTL/XDC/include inputs and setting `TOP` as the synthesis top.
     - **Usage**: Select your project to launch the full `.xpr` Vivado workspace with sources loaded automatically.
 
-14. **Run Vivado Build Flow** (`contexts\vivado\adapters\bat\vivado_run_build_flow.bat`)
+13. **Run Vivado Build Flow** (`templates\contexts\vivado\adapters\bat\vivado_run_build_flow.bat`)
     - A CLI pipeline that performs Vivado synthesis and implementation processing silently.
     - **Usage**: Trigger the build and monitor the terminal. It completes the workflow up to bitstream generation.
 
-15. **Finalize Block Design** (`contexts\vivado\adapters\bat\vivado_finalize_block_design.bat`)
+14. **Finalize Block Design** (`templates\contexts\vivado\adapters\bat\vivado_finalize_block_design.bat`)
     - Validates block design connections and regenerates BD wrapper structures.
     - **Usage**: Useful if manually editing BDs outside Vivado to force strict wrapper updates.
 
-16. **Retarget IP to Part** (`contexts\vivado\adapters\bat\vivado_retarget_ip_part.bat`)
+15. **Retarget IP to Part** (`templates\contexts\vivado\adapters\bat\vivado_retarget_ip_part.bat`)
     - Aligns and upgrades custom IP specifications with connection to a new target FPGA part number.
     - **Usage**: Execute to bulk-update missing IP references when changing the target FPGA board.
 
-17. **Program FPGA Device** (`contexts\vivado\adapters\bat\vivado_program_fpga.bat`)
+16. **Program FPGA Device** (`templates\contexts\vivado\adapters\bat\vivado_program_fpga.bat`)
     - Scans for a connected JTAG device and flashes the constructed `.bit` bitstream file directly to the board.
     - **Usage**: Connect your board via USB/JTAG and run this to deploy immediately.
 
-18. **Auto Build + Program** (`contexts\vivado\adapters\bat\vivado_run_build_and_program.bat`)
-    - Endless execution: Runs the full build flow chain (Synthesis -> Impl) and automatically programs the target right after completion.
-    - **Usage**: Connect the board and select the project. The ultimate one-click testing sequence.
+17. **Auto Build + Program** (`templates\contexts\vivado\adapters\bat\vivado_run_build_and_program.bat`)
+   - Endless execution: Runs the full build flow chain (Synthesis -> Impl) and automatically programs the target right after completion.
+   - **Usage**: Connect the board and select the project. The ultimate one-click testing sequence.
 
 #### 🩺 [ Project Health ]
 
-21. **Toolkit Doctor** (`shared\adapters\bat\toolkit_doctor.bat`)
+21. **Toolkit Doctor** (`templates\shared\adapters\bat\toolkit_doctor.bat`)
     - Runs a project health check over the manifest, resolved file catalog, output/log paths, testbench naming, and tool availability (`node`, `python`, `vivado`, `yosys`).
     - **Usage**: Use this before long simulations or builds to quickly detect missing tools, broken manifests, or layout issues. The summary is written to `output/doctor_summary.json`.
 
@@ -453,100 +465,112 @@ flowchart LR
 
 #### 🏗️ [ Project Bootstrap / Management (프로젝트 초기화) ]
 
-1. **Create New Project** (`contexts\project_bootstrap\adapters\bat\project_create.bat`)
+- **`MAIN.bat` 프로젝트 선택 옵션**: `S` Setup New Project.
+
+S. **Setup New Project** (`templates\contexts\project_bootstrap\adapters\bat\project_create.bat`)
    - 새 FPGA 프로젝트에 필요한 기본 디렉토리 구조와 `fpga_auto.yml` 필수 매니페스트를 자동으로 생성합니다.
-   - **사용 방법**: 스크립트를 실행하고 프롬프트 창에 새로운 프로젝트 이름을 입력합니다.
+   - **사용 방법**: 프로젝트 선택 화면에서 `S`를 누르거나, BAT를 직접 실행한 뒤 프롬프트 창에 새로운 프로젝트 이름을 입력합니다.
 
 #### 🎨 [ Code & Schematic Generation (코드 및 시각화 생성) ]
 
-2. **Draw Schematic** (`contexts\code_intel\adapters\bat\code_draw_schematic.bat`)
+- **`MAIN.bat` 코드 메뉴 맵**: `1` Draw Schematic, `2` Browse HDL Hierarchy, `3` Draw FSM, `4` Generate Presentation.
+
+1. **Draw Schematic** (`templates\contexts\code_intel\adapters\bat\code_draw_schematic.bat`)
    - Yosys 파서를 활용하여 `.v` / `.sv` 내부 블록을 스캔하고 벡터(SVG) 회로도로 렌더링하여 `output/Diagram/`에 저장합니다.
    - **사용 방법**: 대화형 메뉴에서 분석할 프로젝트와 최상위(Top) 모듈을 선택합니다.
 
-3. **Browse HDL Hierarchy** (`contexts\code_intel\adapters\bat\code_browse_hierarchy.bat`)
+2. **Browse HDL Hierarchy** (`templates\contexts\code_intel\adapters\bat\code_browse_hierarchy.bat`)
    - 터미널 트리(Tree) 계층도를 출력합니다. `--include-tb` 활성화 시 숨겨진 테스트벤치 참조 파일까지 연결하여 보여줍니다.
    - **사용 방법**: 대상 파일을 선택하면 텍스트 기반의 계층 트리가 즉시 콘솔에 출력됩니다.
 
-4. **Draw FSM** (`contexts\code_intel\adapters\bat\code_draw_fsm.bat`)
+3. **Draw FSM** (`templates\contexts\code_intel\adapters\bat\code_draw_fsm.bat`)
    - 소스코드 내 상태머신(FSM) 정의를 추적하여 상태 전이 다이어그램을 렌더링합니다.
    - **사용 방법**: 스크립트를 실행하고 FSM 로직이 포함되어있는 구조 모듈을 선택합니다.
 
-5. **Generate Presentation** (`contexts\reporting\adapters\bat\report_generate_presentation.bat`)
+4. **Generate Presentation** (`templates\contexts\reporting\adapters\bat\report_generate_presentation.bat`)
    - 모듈 메타데이터, TB scaffold, 리포트 산출물을 기반으로 단일 HTML 발표자료를 생성합니다.
    - **사용 방법**: 실행 시 `Presentation\\presentation_<project>_<timestamp>.html` 파일을 생성합니다.
-   - **미리보기**: `MAIN.bat -> 18. Open Latest Presentation HTML` (`contexts\reporting\adapters\bat\report_open_latest_presentation_html.bat`)로 최신 HTML을 엽니다.
+   - **미리보기**: `MAIN.bat -> 18. Open Latest Presentation HTML` (`templates\contexts\reporting\adapters\bat\report_open_latest_presentation_html.bat`)로 최신 HTML을 엽니다.
 
 #### 🕹️ [ Simulation (시뮬레이션 구동 및 파형 분석) ]
 
 - **`MAIN.bat` 시뮬레이션 메뉴 맵**: `5` Run Vivado Simulation, `6` Auto Sim + Report, `7` Run Iverilog VCD, `8` Generate SVG from VCD, `9` Generate WaveDrom from VCD, `19` Create DUT TB Scaffold, `20` NO GUI Run Vivado Simulation.
 
-6. **Run Vivado Simulation** (`contexts\simulation\adapters\bat\sim_run_vivado.bat`)
+5. **Run Vivado Simulation** (`templates\contexts\simulation\adapters\bat\sim_run_vivado.bat`)
    - 테스트벤치 선택 후 Vivado xsim GUI를 열고, 웨이브폼 설정 로드(또는 초기화) 직후 자동으로 `restart`와 `run all`을 실행합니다.
    - **사용 방법**: 프로젝트와 TB를 선택하면 파형 창 표시 후 자동 재실행이 1회 수행됩니다. 이 경로는 GUI 수동 확인용으로 유지됩니다.
 
-19. **Create DUT TB Scaffold** (`contexts\simulation\adapters\bat\sim_create_dut_tb_scaffold.bat`)
-   - 선택한 대상(DUT, Design Under Test) 모듈의 인터페이스를 분석하여 기본 뼈대를 갖춘 SystemVerilog 테스트벤치(Scaffold) 파일을 자동 생성합니다.
-   - **사용 방법**: 대상 DUT 모듈을 선택하면, 시뮬레이션 코드 작성을 바로 시작할 수 있는 최적화된 `.sv` 파일이 `tb/` 폴더 내부에 준비됩니다.
-
-20. **NO GUI Run Vivado Simulation** (`contexts\simulation\adapters\bat\sim_run_vivado_nogui.bat`)
-   - GUI 없이 Vivado batch 모드로 동일한 `restart` + `run all` 흐름을 수행하고, 선택한 TB 기준 로그/저널과 `output/run_summary.json`을 갱신합니다.
-   - **사용 방법**: TB 폴더와 TB 파일을 고르면 NO GUI 시뮬레이션이 바로 실행되고 결과 로그가 해당 TB 위치에 저장됩니다.
-
-7. **Auto Sim + Report** (`contexts\simulation\adapters\bat\sim_run_auto_report.bat`)
+6. **Auto Sim + Report** (`templates\contexts\simulation\adapters\bat\sim_run_auto_report.bat`)
    - 시뮬레이션 직후 추출된 VCD 파형과 검증 로그를 HTML 문서화 프로세스에 자동으로 넘겨 문서 형태로 기록합니다.
    - **사용 방법**: 테스트를 선택하고 기다리기만 하면 됩니다. 완료 후 `output/` 에서 결과를 확인하세요.
 
-8. **Run Iverilog VCD (Select TB)** (`contexts\simulation\adapters\bat\sim_run_iverilog_vcd.bat`)
+7. **Run Iverilog VCD (Select TB)** (`templates\contexts\simulation\adapters\bat\sim_run_iverilog_vcd.bat`)
    - 가벼운 오픈소스 Icarus Verilog 엔진을 통해 컴파일하고 VCD 파형 파일을 즉시 덤프해냅니다.
    - **사용 방법**: 실행할 테스트벤치를 고르면 컴파일 후 VCD 파일 추출까지 한 번에 동작합니다.
 
-9. **Generate SVG from VCD (Select)** (`contexts\simulation\adapters\bat\sim_convert_vcd_svg.bat`)
+8. **Generate SVG from VCD (Select)** (`templates\contexts\simulation\adapters\bat\sim_convert_vcd_svg.bat`)
    - 추출된 거대한 VCD 파형에서 특정 사이클 구간 만을 골라 깔끔한 벡터(SVG) 이미지로 기록/변화시킵니다.
    - **사용 방법**: 생성된 VCD를 고른 다음 추출하고 싶은 구간(사이클, 엣지 등)을 설정합니다.
 
-10. **Generate WaveDrom from VCD (Select)** (`contexts\simulation\adapters\bat\sim_convert_vcd_wavedrom.bat`)
-    - 파형 신호를 다이어그램 타이밍 전용 문법인 WaveDrom(JSON) 형태로 파싱해냅니다.
-    - **사용 방법**: 파일만 선택하면 WaveDrom 코드로 변환해줍니다. 이를 다이어그램 렌더링에 사용할 수 있습니다.
+9. **Generate WaveDrom from VCD (Select)** (`templates\contexts\simulation\adapters\bat\sim_convert_vcd_wavedrom.bat`)
+   - 파형 신호를 다이어그램 타이밍 전용 문법인 WaveDrom(JSON) 형태로 파싱해냅니다.
+   - **사용 방법**: 파일만 선택하면 WaveDrom 코드로 변환해줍니다. 이를 다이어그램 렌더링에 사용할 수 있습니다.
+
+19. **Create DUT TB Scaffold** (`templates\contexts\simulation\adapters\bat\sim_create_dut_tb_scaffold.bat`)
+    - 선택한 대상(DUT, Design Under Test) 모듈의 인터페이스를 분석하여 기본 뼈대를 갖춘 SystemVerilog 테스트벤치(Scaffold) 파일을 자동 생성합니다.
+    - **사용 방법**: 대상 DUT 모듈을 선택하면, 시뮬레이션 코드 작성을 바로 시작할 수 있는 최적화된 `.sv` 파일이 `tb/` 폴더 내부에 준비됩니다.
+
+20. **NO GUI Run Vivado Simulation** (`templates\contexts\simulation\adapters\bat\sim_run_vivado_nogui.bat`)
+    - GUI 없이 Vivado batch 모드로 동일한 `restart` + `run all` 흐름을 수행하고, 선택한 TB 기준 로그/저널과 `output/run_summary.json`을 갱신합니다.
+    - **사용 방법**: TB 폴더와 TB 파일을 고르면 NO GUI 시뮬레이션이 바로 실행되고 결과 로그가 해당 TB 위치에 저장됩니다.
 
 #### 📄 [ Report (Vivado HTML / Docs 생태계) ]
 
-11. **Report Generator** (`contexts\reporting\adapters\bat\report_generate_legacy_html.bat`)
+- **`MAIN.bat` 리포트 메뉴 맵**: `10` Report Generator, `11` Docs Generator, `18` Open Latest Presentation HTML.
+
+10. **Report Generator** (`templates\contexts\reporting\adapters\bat\report_generate_legacy_html.bat`)
     - 흩어져있는 Vivado GUI 에러/합성/구현 로그들을 하나로 모아 보기 편한 통합 HTML 리포트로 구워냅니다.
     - **사용 방법**: Vivado 빌드를 한 번 마친 후 실행하여 `output/FINALReport/` 디렉토리에 요약본을 생성합니다.
 
-12. **Docs Generator** (`contexts\reporting\adapters\bat\report_generate_docs.bat`)
+11. **Docs Generator** (`templates\contexts\reporting\adapters\bat\report_generate_docs.bat`)
     - 전통적 방식의 레거시 모듈 코드 분석기가 각 스크립트를 파싱해 마크다운 및 HTML 명세서를 산출합니다.
     - **사용 방법**: 코딩 및 주석 작성을 마친 후 언제든지 실행하여 API 컴포넌트 백과사전 문서처럼 활용합니다.
 
+18. **Open Latest Presentation HTML** (`templates\contexts\reporting\adapters\bat\report_open_latest_presentation_html.bat`)
+    - 대상 프로젝트의 `Presentation/` 폴더에서 가장 최신 `presentation_*.html` 파일을 찾아 엽니다.
+    - **사용 방법**: 발표자료 생성 후 실행하면 기본 브라우저로 최신 HTML 결과를 빠르게 확인할 수 있습니다.
+
 #### 🚀 [ Vivado Flow & FPGA (빌드 파이프라인 및 보드 플래싱) ]
 
-13. **Open Vivado Project GUI** (`contexts\vivado\adapters\bat\vivado_open_project_gui.bat`)
+- **`MAIN.bat` Vivado 메뉴 맵**: `12` Open Vivado Project GUI (Auto TOP), `13` Run Vivado Build Flow, `14` Finalize Block Design, `15` Retarget IP to Part, `16` Program FPGA Device, `17` Auto Build + Program.
+
+12. **Open Vivado Project GUI (Auto TOP)** (`templates\contexts\vivado\adapters\bat\vivado_open_project_gui.bat`)
     - 선택된 프로젝트의 manifest 기준 RTL/XDC/include를 자동 반영하고 `TOP`을 top으로 지정한 뒤 Vivado `.xpr` GUI를 엽니다.
     - **사용 방법**: 프로젝트를 선택하면 소스가 자동 로드된 Vivado 창이 바로 열립니다.
 
-14. **Run Vivado Build Flow** (`contexts\vivado\adapters\bat\vivado_run_build_flow.bat`)
+13. **Run Vivado Build Flow** (`templates\contexts\vivado\adapters\bat\vivado_run_build_flow.bat`)
     - GUI 노출 없이 백그라운드상에서 전체 논리합성(Synthesis)과 구현(Implementation)을 일괄 관통합니다.
     - **사용 방법**: 한 번의 클릭으로 터미널에서 상태를 보며 비트스트림 추출까지 전부 자동으로 처리합니다.
 
-15. **Finalize Block Design** (`contexts\vivado\adapters\bat\vivado_finalize_block_design.bat`)
+14. **Finalize Block Design** (`templates\contexts\vivado\adapters\bat\vivado_finalize_block_design.bat`)
     - 블록 디자인(BD) 구조를 검증하고 내부 래퍼(Wrapper) 파일을 최신으로 강제 자동화/재계산합니다.
     - **사용 방법**: IP나 블록 디자인을 외부에서 건드렸을 때, 이를 연동시키기 위해서 1회 실행해 줍니다.
 
-16. **Retarget IP to Part** (`contexts\vivado\adapters\bat\vivado_retarget_ip_part.bat`)
+15. **Retarget IP to Part** (`templates\contexts\vivado\adapters\bat\vivado_retarget_ip_part.bat`)
     - 프로젝트 타겟 FPGA 부품(Part)이 바뀌었을 경우 관련 IP 코어들을 자동 업그레이드 연동 시킵니다.
     - **사용 방법**: 디바이스 설정이 물리적으로 변경된 후 이 스크립트를 실행하여 파트(Part) 호환성을 강제 일치시킵니다.
 
-17. **Program FPGA Device** (`contexts\vivado\adapters\bat\vivado_program_fpga.bat`)
+16. **Program FPGA Device** (`templates\contexts\vivado\adapters\bat\vivado_program_fpga.bat`)
     - 새로 빌드된 `.bit` 파일을 가져다가 USB/JTAG가 연결된 FPGA 타겟 보드에 다이렉트로 프로그램(굽기) 합니다.
     - **사용 방법**: 실물 보드와 PC를 연결한 후 실행하면 메뉴 화면 없이 곧바로 하드웨어에 동작이 주입(Deploy)됩니다.
 
-18. **Auto Build + Program** (`contexts\vivado\adapters\bat\vivado_run_build_and_program.bat`)
-    - 원클릭 시스템: 14번 스크립트 기반 합성과 빌드를 진행한 후 성공 시 자동으로 17번 JTAG 플래시 과정을 이어붙여 수행합니다.
-    - **사용 방법**: 보드 연결 및 세팅 후 실행하세요. 개발부터 단말 펌웨어 업데이트까지 논스탑으로 진행되는 마법의 버튼입니다.
+17. **Auto Build + Program** (`templates\contexts\vivado\adapters\bat\vivado_run_build_and_program.bat`)
+   - 원클릭 시스템: 13번 스크립트 기반 합성과 빌드를 진행한 후 성공 시 자동으로 16번 JTAG 플래시 과정을 이어붙여 수행합니다.
+   - **사용 방법**: 보드 연결 및 세팅 후 실행하세요. 개발부터 단말 펌웨어 업데이트까지 논스탑으로 진행되는 마법의 버튼입니다.
 
 #### 🩺 [ Project Health (프로젝트 상태 점검) ]
 
-21. **Toolkit Doctor** (`shared\adapters\bat\toolkit_doctor.bat`)
+21. **Toolkit Doctor** (`templates\shared\adapters\bat\toolkit_doctor.bat`)
     - 매니페스트, 해석된 파일 목록, output/log 경로, 테스트벤치 이름 규칙, 필수 도구(`node`, `python`, `vivado`, `yosys`) 상태를 한 번에 점검합니다.
     - **사용 방법**: 장시간 시뮬레이션이나 빌드 전에 실행하여 누락 도구, 손상된 manifest, 프로젝트 레이아웃 문제를 빠르게 확인할 수 있습니다. 결과는 `output/doctor_summary.json`에 저장됩니다.
 

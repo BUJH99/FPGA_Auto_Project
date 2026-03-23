@@ -42,6 +42,7 @@ class VivadoOpenProjectGuiTemplateTests(unittest.TestCase):
         self.assertIn('set top_module "TOP"', script_text)
         self.assertIn("apply_include_dirs sources_1 $inc_dirs", script_text)
         self.assertIn("set_property top $top_module $source_fs", script_text)
+        self.assertIn("current_fileset -srcset $source_fs", script_text)
         self.assertIn("No manifest testbench files resolved. Skipping sim_1 update.", script_text)
 
 

@@ -209,7 +209,9 @@ update_compile_order -fileset sources_1
 set source_fs [get_filesets -quiet sources_1]
 if {[llength $source_fs] > 0 && $top_module ne ""} {
     set_property top $top_module $source_fs
-    current_fileset $source_fs
+    if {[catch {current_fileset -srcset $source_fs} err]} {
+        puts "\[WARN\] Failed to select sources_1 as current source fileset: $err"
+    }
     puts "\[INFO\] Set synthesis top on sources_1: $top_module"
 }
 
