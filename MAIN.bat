@@ -142,7 +142,7 @@ set "CMD_21=shared\adapters\bat\toolkit_doctor.bat"
 set "CMD_10=contexts\reporting\adapters\bat\report_generate_legacy_html.bat"
 set "CMD_11=contexts\reporting\adapters\bat\report_generate_docs.bat"
 set "CMD_18=contexts\reporting\adapters\bat\report_open_latest_presentation_html.bat"
-set "CMD_12=contexts\vivado\adapters\bat\vivado_launch_ipi_gui.bat"
+set "CMD_12=contexts\vivado\adapters\bat\vivado_open_project_gui.bat"
 set "CMD_13=contexts\vivado\adapters\bat\vivado_run_build_flow.bat"
 set "CMD_14=contexts\vivado\adapters\bat\vivado_finalize_block_design.bat"
 set "CMD_15=contexts\vivado\adapters\bat\vivado_retarget_ip_part.bat"
@@ -173,7 +173,7 @@ echo  18. Open Latest Presentation HTML [!CMD_18!]
 echo.
 
 echo %Yellow%[ Vivado Flow ^& FPGA ]%Reset%
-echo  12. Launch Vivado IPI GUI [!CMD_12!]
+echo  12. Open Vivado Project GUI (Auto TOP) [!CMD_12!]
 echo  13. Run Vivado Build Flow [!CMD_13!]
 echo  14. Finalize Block Design [!CMD_14!]
 echo  15. Retarget IP to Part [!CMD_15!]

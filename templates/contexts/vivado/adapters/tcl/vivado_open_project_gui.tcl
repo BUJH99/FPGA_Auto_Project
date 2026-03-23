@@ -1,12 +1,14 @@
 # =================================================================
-# Open Vivado GUI with IP Integrator ready
+# Open Vivado project GUI with project sources ready
 # - Creates/opens a project
-# - Adds sources/constraints/testbenches
-# - Opens existing block design (does not create a new one)
+# - Adds sources/constraints/testbenches from manifest lists
+# - Applies include directories
+# - Sets the synthesis top module on sources_1
+# - Opens an existing block design if present
 # =================================================================
 
 set part_number "xc7a35tcpg236-1"
-set top_module "Top"
+set top_module "TOP"
 set bd_name "design_1"
 set project_name "vivado_ipi"
 set project_dir "./vivado_ipi"
@@ -17,6 +19,10 @@ set project_root [pwd]
 set src_list_file ""
 set tb_list_file ""
 set xdc_list_file ""
+set inc_list_file ""
+set requested_top_module ""
+set requested_part_number ""
+set requested_project_name ""
 if {[llength $argv] >= 1} {
     set a0 [string trim [lindex $argv 0]]
     if {$a0 ne ""} { set project_root [file normalize $a0] }
@@ -33,10 +39,36 @@ if {[llength $argv] >= 4} {
     set a3 [string trim [lindex $argv 3]]
     if {$a3 ne ""} { set xdc_list_file [file normalize $a3] }
 }
+if {[llength $argv] >= 5} {
+    set a4 [string trim [lindex $argv 4]]
+    if {$a4 ne ""} { set inc_list_file [file normalize $a4] }
+}
+if {[llength $argv] >= 6} {
+    set a5 [string trim [lindex $argv 5]]
+    if {$a5 ne ""} { set requested_top_module $a5 }
+}
+if {[llength $argv] >= 7} {
+    set a6 [string trim [lindex $argv 6]]
+    if {$a6 ne ""} { set requested_part_number $a6 }
+}
+if {[llength $argv] >= 8} {
+    set a7 [string trim [lindex $argv 7]]
+    if {$a7 ne ""} { set requested_project_name $a7 }
+}
 
 if {[file exists $config_file]} {
     puts "\[INFO\] Loading build config: $config_file"
     source $config_file
+}
+
+if {$requested_top_module ne ""} {
+    set top_module $requested_top_module
+}
+if {$requested_part_number ne ""} {
+    set part_number $requested_part_number
+}
+if {$requested_project_name ne ""} {
+    set project_name $requested_project_name
 }
 
 if {[file pathtype $project_dir] eq "absolute"} {
@@ -89,6 +121,25 @@ proc add_missing_files {fileset_name file_list label} {
     }
 }
 
+proc apply_include_dirs {fileset_name inc_dirs} {
+    if {[llength $inc_dirs] == 0} {
+        return
+    }
+
+    set fs [get_filesets -quiet $fileset_name]
+    if {[llength $fs] == 0} {
+        puts "\[WARN\] Fileset not found for include_dirs: $fileset_name"
+        return
+    }
+
+    if {[catch {set_property include_dirs $inc_dirs $fs} err]} {
+        puts "\[WARN\] Failed to apply include_dirs to $fileset_name: $err"
+        return
+    }
+
+    puts "\[INFO\] Applied include_dirs to $fileset_name: [llength $inc_dirs]"
+}
+
 proc read_manifest_list {list_file project_root} {
     set out {}
     if {$list_file eq ""} { return $out }
@@ -117,12 +168,36 @@ if {$src_list_file eq "" || [llength $src_files] == 0} {
 }
 add_missing_files sources_1 $src_files "source"
 
-set tb_files [read_manifest_list $tb_list_file $project_root]
-if {$tb_list_file eq "" || [llength $tb_files] == 0} {
-    puts "\[ERROR\] Manifest testbench list is required and cannot be empty."
-    return -code error
+set inc_entries [read_manifest_list $inc_list_file $project_root]
+set inc_dirs {}
+foreach inc_entry $inc_entries {
+    if {[file isdirectory $inc_entry]} {
+        lappend inc_dirs $inc_entry
+    } elseif {[file exists $inc_entry]} {
+        lappend inc_dirs [file dirname $inc_entry]
+    }
 }
-add_missing_files sim_1 $tb_files "testbench"
+set inc_dirs [lsort -unique $inc_dirs]
+if {$inc_list_file eq ""} {
+    puts "\[WARN\] Manifest include list was not provided."
+} elseif {[llength $inc_dirs] == 0} {
+    puts "\[INFO\] No manifest include directories resolved."
+} else {
+    apply_include_dirs sources_1 $inc_dirs
+}
+
+set tb_files [read_manifest_list $tb_list_file $project_root]
+if {$tb_list_file eq ""} {
+    puts "\[INFO\] Manifest testbench list was not provided."
+} elseif {[llength $tb_files] == 0} {
+    puts "\[INFO\] No manifest testbench files resolved. Skipping sim_1 update."
+} else {
+    add_missing_files sim_1 $tb_files "testbench"
+    if {[llength $inc_dirs] > 0} {
+        apply_include_dirs sim_1 $inc_dirs
+    }
+    update_compile_order -fileset sim_1
+}
 
 set xdc_files [read_manifest_list $xdc_list_file $project_root]
 if {$xdc_list_file eq ""} {
@@ -131,6 +206,12 @@ if {$xdc_list_file eq ""} {
 add_missing_files constrs_1 $xdc_files "constraint"
 
 update_compile_order -fileset sources_1
+set source_fs [get_filesets -quiet sources_1]
+if {[llength $source_fs] > 0 && $top_module ne ""} {
+    set_property top $top_module $source_fs
+    current_fileset $source_fs
+    puts "\[INFO\] Set synthesis top on sources_1: $top_module"
+}
 
 set bd_file [file join $proj_path "${project_name}.srcs" "sources_1" "bd" $bd_name "${bd_name}.bd"]
 if {[file exists $bd_file]} {
@@ -141,4 +222,4 @@ if {[file exists $bd_file]} {
     puts "\[WARN\] Create a block design in the GUI if needed."
 }
 
-puts "\[INFO\] IP Integrator is ready in GUI."
+puts "\[INFO\] Vivado GUI is ready with manifest sources and top=$top_module."

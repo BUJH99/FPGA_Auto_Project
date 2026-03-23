@@ -231,9 +231,9 @@ flowchart LR
 
 #### 🚀 [ Vivado Flow & FPGA ]
 
-13. **Launch Vivado IPI GUI** (`contexts\vivado\adapters\bat\vivado_launch_ipi_gui.bat`)
-    - Opens the current Vivado project in GUI mode for manual verification and block design editing.
-    - **Usage**: Select your project to launch the full `.xpr` Vivado workspace.
+13. **Open Vivado Project GUI** (`contexts\vivado\adapters\bat\vivado_open_project_gui.bat`)
+    - Opens the selected project in Vivado GUI mode after collecting manifest-based RTL/XDC/include inputs and setting `TOP` as the synthesis top.
+    - **Usage**: Select your project to launch the full `.xpr` Vivado workspace with sources loaded automatically.
 
 14. **Run Vivado Build Flow** (`contexts\vivado\adapters\bat\vivado_run_build_flow.bat`)
     - A CLI pipeline that performs Vivado synthesis and implementation processing silently.
@@ -520,9 +520,9 @@ flowchart LR
 
 #### 🚀 [ Vivado Flow & FPGA (빌드 파이프라인 및 보드 플래싱) ]
 
-13. **Launch Vivado IPI GUI** (`contexts\vivado\adapters\bat\vivado_launch_ipi_gui.bat`)
-    - 백그라운드에서 조작하던 Vivado `.xpr` 프로젝트 환경을 화면(그래픽) 상에 띄웁니다.
-    - **사용 방법**: 스크립트 실행 후 프로젝트를 선택하면 수동 검증 및 설정을 위한 Vivado 창이 뜹니다.
+13. **Open Vivado Project GUI** (`contexts\vivado\adapters\bat\vivado_open_project_gui.bat`)
+    - 선택된 프로젝트의 manifest 기준 RTL/XDC/include를 자동 반영하고 `TOP`을 top으로 지정한 뒤 Vivado `.xpr` GUI를 엽니다.
+    - **사용 방법**: 프로젝트를 선택하면 소스가 자동 로드된 Vivado 창이 바로 열립니다.
 
 14. **Run Vivado Build Flow** (`contexts\vivado\adapters\bat\vivado_run_build_flow.bat`)
     - GUI 노출 없이 백그라운드상에서 전체 논리합성(Synthesis)과 구현(Implementation)을 일괄 관통합니다.

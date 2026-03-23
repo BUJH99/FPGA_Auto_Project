@@ -3,6 +3,7 @@
 
 # But exclude (allow) these files and directories
 !/.gitignore
+!/AGENTS.md
 !/ReadMe.md
 !/templates/
 !/MAIN.bat
