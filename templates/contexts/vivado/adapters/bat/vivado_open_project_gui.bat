@@ -3,6 +3,7 @@ setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
 set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
+set "VIVADO_RESOLVER=%TEMPLATES_ROOT%\shared\adapters\bat\resolve_vivado.bat"
 
 if "%~1"=="" (
     echo [ERROR] No target project path provided.
@@ -40,13 +41,15 @@ set "GUI_LOG=%LOG_DIR%\vivado_ipi_gui.log"
 set "GUI_JOU=%LOG_DIR%\vivado_ipi_gui.jou"
 call :route_vivado_artifacts
 
-where vivado >nul 2>nul
-if %errorlevel% neq 0 (
+call "%VIVADO_RESOLVER%" --quiet
+if errorlevel 1 (
     echo [ERROR] Vivado executable not found in PATH.
+    echo         Checked PATH and common install directories, including C:\AMDDesignTools\*\Vivado\bin.
     echo         Please add Vivado bin directory to your System PATH.
     call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
+if /i not "%FPGA_AUTO_VIVADO_SOURCE%"=="PATH" echo [INFO] Resolved Vivado bin: %FPGA_AUTO_VIVADO_BIN%
 
 echo [INFO] Launching Vivado GUI with selected project sources...
 echo        Top      : %BUILD_TOP_MODULE%

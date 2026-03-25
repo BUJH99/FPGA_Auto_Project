@@ -5,6 +5,7 @@ set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
 for %%I in ("%TEMPLATES_ROOT%\..") do set "REPO_ROOT=%%~fI"
 set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
+set "VIVADO_RESOLVER=%TEMPLATES_ROOT%\shared\adapters\bat\resolve_vivado.bat"
 
 set "AUTO_YES=0"
 set "NO_PAUSE=0"
@@ -358,6 +359,10 @@ if defined VIVADO_BIN (
         call :log "[WARN] --vivado-bin path does not contain vivado.bat: %VIVADO_BIN%"
     )
 )
+if exist "%VIVADO_RESOLVER%" (
+    call "%VIVADO_RESOLVER%" --quiet
+    if not errorlevel 1 if defined FPGA_AUTO_VIVADO_BIN call :add_path_candidate "%FPGA_AUTO_VIVADO_BIN%"
+)
 
 call :log "[CHECK] PATH candidate directories:"
 for /f "usebackq delims=" %%D in ("%PATH_CANDIDATES_FILE%") do call :log "  - %%D"
@@ -481,7 +486,7 @@ if errorlevel 1 (
 call :cmd_exists vivado
 if errorlevel 1 (
     call :log "[WARN] Vivado is not found in PATH. Install Vivado manually."
-    if not defined VIVADO_BIN call :log "[INFO] You can pass --vivado-bin \"C:\\Xilinx\\Vivado\\2024.1\\bin\""
+    if not defined VIVADO_BIN call :log "[INFO] You can pass --vivado-bin C:\AMDDesignTools\2025.2\Vivado\bin"
 )
 
 for %%C in (node npm py python iverilog vvp yowasp-yosys vivado) do where %%C >>"%LOG_FILE%" 2>&1

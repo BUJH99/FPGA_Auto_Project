@@ -14,27 +14,134 @@ const {
 } = require("../domain/run_contracts");
 
 function findExecutable(candidates) {
+  return findExecutableWithOptions(candidates);
+}
+
+function findExecutableWithOptions(candidates, options = {}) {
+  const platform = options.platform || process.platform;
+  const execFileSync = typeof options.execFileSync === "function" ? options.execFileSync : cp.execFileSync;
   for (const candidate of candidates) {
     try {
-      const cmd = process.platform === "win32" ? "where" : "which";
-      const out = cp.execFileSync(cmd, [candidate], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      const cmd = platform === "win32" ? "where" : "which";
+      const out = execFileSync(cmd, [candidate], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
       const first = String(out || "").split(/\r?\n/).find(Boolean);
       if (first) {
-        return { ok: true, command: candidate, resolved: first.trim() };
+        return { ok: true, command: candidate, resolved: first.trim(), source: "path" };
       }
     } catch {
       // Continue
     }
   }
+  if (typeof options.fallbackResolver === "function") {
+    const fallback = options.fallbackResolver(options);
+    if (fallback) {
+      return { ok: true, command: candidates[0] || "", resolved: fallback, source: "fallback" };
+    }
+  }
   return { ok: false, command: candidates[0] || "" };
 }
 
-function checkTools() {
+function normalizeVivadoBinCandidate(candidatePath) {
+  const raw = String(candidatePath || "").trim();
+  if (!raw) return "";
+
+  const normalized = raw.replace(/[\\/]+$/, "");
+  const directFile = path.basename(normalized).toLowerCase() === "vivado.bat" ? normalized : "";
+  if (directFile && fs.existsSync(directFile)) {
+    return path.dirname(directFile);
+  }
+
+  const directBin = path.join(normalized, "vivado.bat");
+  if (fs.existsSync(directBin)) {
+    return normalized;
+  }
+
+  const childBin = path.join(normalized, "bin", "vivado.bat");
+  if (fs.existsSync(childBin)) {
+    return path.dirname(childBin);
+  }
+
+  const amdBin = path.join(normalized, "Vivado", "bin", "vivado.bat");
+  if (fs.existsSync(amdBin)) {
+    return path.dirname(amdBin);
+  }
+
+  return "";
+}
+
+function listVersionDirectories(rootDir) {
+  if (!rootDir || !fs.existsSync(rootDir)) return [];
+  try {
+    return fs.readdirSync(rootDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort((left, right) => right.localeCompare(left, undefined, { numeric: true, sensitivity: "base" }))
+      .map((entry) => path.join(rootDir, entry));
+  } catch {
+    return [];
+  }
+}
+
+function defaultVivadoScanRoots(platform) {
+  if (platform === "win32") {
+    return [
+      "C:\\AMDDesignTools",
+      "C:\\Xilinx\\Vivado",
+      "C:\\Program Files\\Xilinx\\Vivado",
+    ];
+  }
+  if (platform === "linux") {
+    return [
+      "/mnt/c/AMDDesignTools",
+      "/mnt/c/Xilinx/Vivado",
+      "/mnt/c/Program Files/Xilinx/Vivado",
+    ];
+  }
+  return [];
+}
+
+function findVivadoInstall(options = {}) {
+  const platform = options.platform || process.platform;
+  const env = options.env && typeof options.env === "object" ? options.env : process.env;
+  const explicitCandidates = [
+    env.FPGA_AUTO_VIVADO_BIN,
+    env.VIVADO_BIN,
+    env.XILINX_VIVADO,
+  ];
+
+  for (const candidate of explicitCandidates) {
+    const resolved = normalizeVivadoBinCandidate(candidate);
+    if (resolved) return resolved;
+  }
+
+  const scanRoots = Array.isArray(options.scanRoots) ? options.scanRoots : defaultVivadoScanRoots(platform);
+  for (const rootDir of scanRoots) {
+    const direct = normalizeVivadoBinCandidate(rootDir);
+    if (direct) return direct;
+    for (const versionDir of listVersionDirectories(rootDir)) {
+      const resolved = normalizeVivadoBinCandidate(versionDir);
+      if (resolved) return resolved;
+    }
+  }
+
+  return "";
+}
+
+function checkTools(options = {}) {
+  const sharedOptions = {
+    platform: options.platform,
+    execFileSync: options.execFileSync,
+  };
   return {
-    node: findExecutable(["node", "node.exe"]),
-    python: findExecutable(["python", "python3", "python.exe"]),
-    vivado: findExecutable(["vivado", "vivado.bat"]),
-    yosys: findExecutable(["yowasp-yosys", "yosys"]),
+    node: findExecutableWithOptions(["node", "node.exe"], sharedOptions),
+    python: findExecutableWithOptions(["python", "python3", "python.exe"], sharedOptions),
+    vivado: findExecutableWithOptions(["vivado", "vivado.bat"], {
+      ...sharedOptions,
+      env: options.env,
+      scanRoots: options.scanRoots,
+      fallbackResolver: findVivadoInstall,
+    }),
+    yosys: findExecutableWithOptions(["yowasp-yosys", "yosys"], sharedOptions),
   };
 }
 
@@ -300,6 +407,8 @@ function writeDoctorArtifacts(projectRoot, manifestJsonPath = "", report, writeP
 }
 
 module.exports = {
+  checkTools,
+  findVivadoInstall,
   runDoctor,
   writeDoctorArtifacts,
 };

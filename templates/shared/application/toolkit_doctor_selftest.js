@@ -3,6 +3,8 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const {
+  checkTools,
+  findVivadoInstall,
   runDoctor,
   writeDoctorArtifacts,
 } = require("./toolkit_doctor_service");
@@ -70,6 +72,32 @@ function runDoctorSelftest() {
     assert.equal(report.ok, false);
     assert.equal(report.status, "failed");
     checks.push("missing_manifest_project");
+  });
+
+  withTempDir("fpga-doctor-", (tempRoot) => {
+    const amdRoot = path.join(tempRoot, "AMDDesignTools");
+    const vivadoBin = path.join(amdRoot, "2025.2", "Vivado", "bin");
+    writeFile(path.join(vivadoBin, "vivado.bat"), "@echo off\n");
+
+    const resolved = findVivadoInstall({
+      platform: "win32",
+      env: {},
+      scanRoots: [amdRoot],
+    });
+    assert.equal(resolved, vivadoBin);
+
+    const tools = checkTools({
+      platform: "win32",
+      env: {},
+      scanRoots: [amdRoot],
+      execFileSync() {
+        throw new Error("not-on-path");
+      },
+    });
+    assert.equal(tools.vivado.ok, true);
+    assert.equal(tools.vivado.resolved, vivadoBin);
+    assert.equal(tools.vivado.source, "fallback");
+    checks.push("vivado_amd_tool_root");
   });
 
   return {

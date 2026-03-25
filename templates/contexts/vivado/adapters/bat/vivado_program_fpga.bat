@@ -3,6 +3,7 @@ setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
 set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
+set "VIVADO_RESOLVER=%TEMPLATES_ROOT%\shared\adapters\bat\resolve_vivado.bat"
 set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
@@ -39,12 +40,14 @@ echo   Vivado Batch Mode - Program Device
 echo ===========================================
 
 :: Check Vivado command availability
-where vivado >nul 2>nul
-if %errorlevel% neq 0 (
+call "%VIVADO_RESOLVER%" --quiet
+if errorlevel 1 (
     echo [ERROR] Vivado executable not found in PATH.
+    echo         Checked PATH and common install directories, including C:\AMDDesignTools\*\Vivado\bin.
     call :maybe_pause
     exit /b 1
 )
+if /i not "%FPGA_AUTO_VIVADO_SOURCE%"=="PATH" echo [INFO] Resolved Vivado bin: %FPGA_AUTO_VIVADO_BIN%
 
 call :prompt_run_or_cancel
 set "PROMPT_RC=%errorlevel%"

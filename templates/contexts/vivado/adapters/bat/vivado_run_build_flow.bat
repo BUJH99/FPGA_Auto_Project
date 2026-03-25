@@ -3,6 +3,7 @@ setlocal enabledelayedexpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
 set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
+set "VIVADO_RESOLVER=%TEMPLATES_ROOT%\shared\adapters\bat\resolve_vivado.bat"
 set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
@@ -57,16 +58,18 @@ echo.
 
 call :print_step "1/15" "Validate Vivado Environment"
 echo [CHECK] Verifying Vivado Environment...
-where vivado >nul 2>nul
-if %errorlevel% neq 0 (
+call "%VIVADO_RESOLVER%" --quiet
+if errorlevel 1 (
     echo.
     echo [ERROR] Vivado executable not found in PATH.
+    echo         Checked PATH and common install directories, including C:\AMDDesignTools\*\Vivado\bin.
     echo         Please add Vivado bin directory to your System PATH.
     echo.
     call :maybe_pause
     exit /b 1
 )
 echo      - Vivado found.
+if /i not "%FPGA_AUTO_VIVADO_SOURCE%"=="PATH" echo      - Resolved Vivado bin: %FPGA_AUTO_VIVADO_BIN%
 echo      - Ready to start build flow.
 
 call :print_step "2/15" "Confirm Build Start"

@@ -3,6 +3,7 @@ setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
 set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
+set "VIVADO_RESOLVER=%TEMPLATES_ROOT%\shared\adapters\bat\resolve_vivado.bat"
 set "USER_CANCEL_RC=99"
 
 if "%~1"=="" (
@@ -38,12 +39,14 @@ if not exist "%VIVADO_ROOT%" mkdir "%VIVADO_ROOT%"
 if not exist "%PROJECT_LOG_DIR%" mkdir "%PROJECT_LOG_DIR%"
 if not exist "%SIM_LOG_DIR%" mkdir "%SIM_LOG_DIR%"
 
-where vivado >nul 2>nul
-if %errorlevel% neq 0 (
+call "%VIVADO_RESOLVER%" --quiet
+if errorlevel 1 (
     echo [ERROR] Vivado executable not found in PATH.
+    echo         Checked PATH and common install directories, including C:\AMDDesignTools\*\Vivado\bin.
     if /i not "%FPGA_AUTO_NO_PAUSE%"=="1" call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )
+if /i not "%FPGA_AUTO_VIVADO_SOURCE%"=="PATH" echo [INFO] Resolved Vivado bin: %FPGA_AUTO_VIVADO_BIN%
 
 set "PS_FILE=%TEMP%\vivado_sim_nogui_runner_%RANDOM%.ps1"
 set "MARKER=:POWERSHELL_SCRIPT_START"
