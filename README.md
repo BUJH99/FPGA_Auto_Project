@@ -113,7 +113,7 @@ The canonical runtime path is Windows. `MAIN.bat`, Telegram execution, Vivado au
    This prepares Node.js/npm, Python 3.13, Icarus Verilog, Python packages (`jinja2`, `yowasp-yosys`), and runs `templates\\npm install`.  
    Vivado remains manual. If Vivado is already installed, you can register the path with:
    ```cmd
-   setup_toolkit.bat --yes --vivado-bin "C:\Xilinx\Vivado\2024.1\bin"
+   setup_toolkit.bat --yes --vivado-bin "C:\AMDDesignTools\2025.2\Vivado\bin"
    ```
 
 2. **Run the Toolkit:**
@@ -414,7 +414,7 @@ graph LR
    이 스크립트는 Node.js/npm, Python 3.13, Icarus Verilog, Python 패키지(`jinja2`, `yowasp-yosys`), `templates\\npm install`까지 한 번에 준비합니다.  
    Vivado는 수동 설치이며, 설치 후 경로 반영은 다음처럼 실행할 수 있습니다.
    ```cmd
-   setup_toolkit.bat --yes --vivado-bin "C:\Xilinx\Vivado\2024.1\bin"
+   setup_toolkit.bat --yes --vivado-bin "C:\AMDDesignTools\2025.2\Vivado\bin"
    ```
 
 2. **툴킷 실행:**

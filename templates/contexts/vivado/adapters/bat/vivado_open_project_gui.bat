@@ -14,6 +14,7 @@ if "%~1"=="" (
 set "TARGET_PROJECT=%~f1"
 set "MANIFEST_CTX=%TEMPLATES_ROOT%\shared\adapters\bat\bootstrap_manifest_context.bat"
 set "BUILD_SUMMARY_TOOL=%TEMPLATES_ROOT%\contexts\vivado\adapters\cli\vivado_capture_build_summary_cli.js"
+set "VIVADO_ENV_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\ensure_vivado_on_path.bat"
 if exist "%MANIFEST_CTX%" (
     call "%MANIFEST_CTX%" "%TARGET_PROJECT%"
     if errorlevel 1 (
@@ -40,10 +41,11 @@ set "GUI_LOG=%LOG_DIR%\vivado_ipi_gui.log"
 set "GUI_JOU=%LOG_DIR%\vivado_ipi_gui.jou"
 call :route_vivado_artifacts
 
+if exist "%VIVADO_ENV_HELPER%" call "%VIVADO_ENV_HELPER%" --quiet >nul 2>nul
 where vivado >nul 2>nul
 if %errorlevel% neq 0 (
     echo [ERROR] Vivado executable not found in PATH.
-    echo         Please add Vivado bin directory to your System PATH.
+    echo         Check VIVADO_BIN or AMD/Xilinx default install paths.
     call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )

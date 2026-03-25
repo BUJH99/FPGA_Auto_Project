@@ -358,9 +358,38 @@ if defined VIVADO_BIN (
         call :log "[WARN] --vivado-bin path does not contain vivado.bat: %VIVADO_BIN%"
     )
 )
+call :add_default_vivado_candidates
 
 call :log "[CHECK] PATH candidate directories:"
 for /f "usebackq delims=" %%D in ("%PATH_CANDIDATES_FILE%") do call :log "  - %%D"
+exit /b 0
+
+:add_default_vivado_candidates
+if not defined SystemDrive set "SystemDrive=C:"
+call :add_latest_amd_vivado_candidate "%SystemDrive%\AMDDesignTools"
+call :add_latest_xilinx_vivado_candidate "%SystemDrive%\Xilinx\Vivado"
+exit /b 0
+
+:add_latest_amd_vivado_candidate
+set "ROOT=%~1"
+if not exist "%ROOT%" exit /b 0
+for /f "delims=" %%V in ('dir /b /ad /o-n "%ROOT%" 2^>nul') do (
+    if exist "%ROOT%\%%V\Vivado\bin\vivado.bat" (
+        call :add_path_candidate "%ROOT%\%%V\Vivado\bin"
+        exit /b 0
+    )
+)
+exit /b 0
+
+:add_latest_xilinx_vivado_candidate
+set "ROOT=%~1"
+if not exist "%ROOT%" exit /b 0
+for /f "delims=" %%V in ('dir /b /ad /o-n "%ROOT%" 2^>nul') do (
+    if exist "%ROOT%\%%V\bin\vivado.bat" (
+        call :add_path_candidate "%ROOT%\%%V\bin"
+        exit /b 0
+    )
+)
 exit /b 0
 
 :persist_user_path
@@ -481,7 +510,7 @@ if errorlevel 1 (
 call :cmd_exists vivado
 if errorlevel 1 (
     call :log "[WARN] Vivado is not found in PATH. Install Vivado manually."
-    if not defined VIVADO_BIN call :log "[INFO] You can pass --vivado-bin \"C:\\Xilinx\\Vivado\\2024.1\\bin\""
+    if not defined VIVADO_BIN call :log "[INFO] You can pass --vivado-bin \"C:\\AMDDesignTools\\2025.2\\Vivado\\bin\""
 )
 
 for %%C in (node npm py python iverilog vvp yowasp-yosys vivado) do where %%C >>"%LOG_FILE%" 2>&1

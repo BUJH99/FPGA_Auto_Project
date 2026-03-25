@@ -42,7 +42,7 @@ class SimulationBatchTemplateTests(unittest.TestCase):
         log_idx = script_text.index('    "-log", $vivadoLogFile,')
         journal_idx = script_text.index('    "-journal", $vivadoJournalFile,')
         notrace_idx = script_text.index('    "-notrace",')
-        tclargs_idx = script_text.index('    "-tclargs", $ProjectRoot, $tbTop, $VivadoRoot, $ManifestSrcList, $ManifestTbList, $ManifestIncList, $selectedTb.FullName, $simMoreOptions, $promptArgMarker, $promptRequestFile, $promptCloseFile, $promptKeepFile')
+        tclargs_idx = script_text.index('    "-tclargs", $ProjectRoot, $tbTop, $VivadoRoot, $ManifestSrcList, $ManifestTbList, $ManifestIncList, $selectedTb.FullName, $simMoreOptions')
 
         self.assertLess(log_idx, tclargs_idx)
         self.assertLess(journal_idx, tclargs_idx)

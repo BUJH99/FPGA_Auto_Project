@@ -20,6 +20,7 @@ set "PROJECT_LOG_DIR=%TARGET_PROJECT%\log"
 set "SIM_LOG_DIR=%PROJECT_LOG_DIR%\vivado_sim"
 set "CALLER_CWD=%CD%"
 set "MANIFEST_CTX=%TEMPLATES_ROOT%\shared\adapters\bat\bootstrap_manifest_context.bat"
+set "VIVADO_ENV_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\ensure_vivado_on_path.bat"
 
 if not exist "%TCL_SCRIPT%" (
     echo [ERROR] Tcl script not found: %TCL_SCRIPT%
@@ -38,9 +39,11 @@ if not exist "%VIVADO_ROOT%" mkdir "%VIVADO_ROOT%"
 if not exist "%PROJECT_LOG_DIR%" mkdir "%PROJECT_LOG_DIR%"
 if not exist "%SIM_LOG_DIR%" mkdir "%SIM_LOG_DIR%"
 
+if exist "%VIVADO_ENV_HELPER%" call "%VIVADO_ENV_HELPER%" --quiet >nul 2>nul
 where vivado >nul 2>nul
 if %errorlevel% neq 0 (
     echo [ERROR] Vivado executable not found in PATH.
+    echo         Check VIVADO_BIN or AMD/Xilinx default install paths.
     if /i not "%FPGA_AUTO_NO_PAUSE%"=="1" call "%CONSOLE_HELPER%" pause_then_clear
     exit /b 1
 )

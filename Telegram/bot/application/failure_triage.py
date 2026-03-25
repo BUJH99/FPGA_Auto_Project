@@ -324,7 +324,7 @@ def _match_text_finding(lines: list[str]) -> FailureFinding | None:
                 title="Vivado is not available",
                 summary="The automation could not launch the `vivado` executable on this machine.",
                 actions=(
-                    "Add the Vivado bin directory to PATH or launch from a Xilinx-enabled shell.",
+                    "Add the Vivado bin directory to PATH, set `VIVADO_BIN`, or launch from an AMD/Xilinx-enabled shell.",
                     "Re-run Toolkit Doctor or `setup_toolkit.bat --check-only` before retrying the flow.",
                 ),
             ),

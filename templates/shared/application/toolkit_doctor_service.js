@@ -29,11 +29,94 @@ function findExecutable(candidates) {
   return { ok: false, command: candidates[0] || "" };
 }
 
+function normalizeExecutableDir(rawValue) {
+  const value = String(rawValue || "").trim();
+  if (!value) return "";
+  const resolved = path.resolve(value);
+  if (!fs.existsSync(resolved)) return "";
+  try {
+    const stat = fs.statSync(resolved);
+    if (stat.isDirectory()) return resolved;
+    if (stat.isFile()) return path.dirname(resolved);
+  } catch {
+    return "";
+  }
+  return "";
+}
+
+function findExecutableInDir(dirPath, candidates) {
+  const baseDir = normalizeExecutableDir(dirPath);
+  if (!baseDir) return { ok: false, command: candidates[0] || "" };
+  for (const candidate of candidates) {
+    const fullPath = path.join(baseDir, candidate);
+    if (fs.existsSync(fullPath)) {
+      return { ok: true, command: candidate, resolved: fullPath };
+    }
+  }
+  return { ok: false, command: candidates[0] || "" };
+}
+
+function findLatestVivadoBin(rootPath, trailingSegments) {
+  if (!rootPath || !Array.isArray(trailingSegments) || trailingSegments.length === 0) return "";
+  if (!fs.existsSync(rootPath)) return "";
+  let entries = [];
+  try {
+    entries = fs.readdirSync(rootPath, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort((left, right) => right.localeCompare(left, undefined, { numeric: true, sensitivity: "base" }));
+  } catch {
+    return "";
+  }
+
+  for (const entry of entries) {
+    const candidateDir = path.join(rootPath, entry, ...trailingSegments);
+    if (findExecutableInDir(candidateDir, ["vivado.bat", "vivado.exe", "vivado"]).ok) {
+      return candidateDir;
+    }
+  }
+  return "";
+}
+
+function listPreferredVivadoBins(env = process.env) {
+  const ordered = [];
+  const seen = new Set();
+
+  function pushCandidate(candidateDir) {
+    const normalized = normalizeExecutableDir(candidateDir);
+    if (!normalized) return;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    ordered.push(normalized);
+  }
+
+  pushCandidate(env.VIVADO_BIN);
+
+  if (process.platform === "win32") {
+    const systemDrive = String(env.SystemDrive || "C:");
+    pushCandidate(findLatestVivadoBin(path.join(systemDrive, "AMDDesignTools"), ["Vivado", "bin"]));
+    pushCandidate(findLatestVivadoBin(path.join(systemDrive, "Xilinx", "Vivado"), ["bin"]));
+  }
+
+  return ordered;
+}
+
+function findVivadoExecutable() {
+  for (const preferredBin of listPreferredVivadoBins()) {
+    const resolved = findExecutableInDir(preferredBin, ["vivado.bat", "vivado.exe", "vivado"]);
+    if (resolved.ok) {
+      return resolved;
+    }
+  }
+  return findExecutable(["vivado", "vivado.bat"]);
+}
+
 function checkTools() {
   return {
     node: findExecutable(["node", "node.exe"]),
     python: findExecutable(["python", "python3", "python.exe"]),
-    vivado: findExecutable(["vivado", "vivado.bat"]),
+    vivado: findVivadoExecutable(),
     yosys: findExecutable(["yowasp-yosys", "yosys"]),
   };
 }

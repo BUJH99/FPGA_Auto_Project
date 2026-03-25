@@ -14,6 +14,7 @@ if "%~1"=="" (
 
 set "TARGET_PROJECT=%~f1"
 set "MANIFEST_CTX=%TEMPLATES_ROOT%\shared\adapters\bat\bootstrap_manifest_context.bat"
+set "VIVADO_ENV_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\ensure_vivado_on_path.bat"
 if exist "%MANIFEST_CTX%" (
     call "%MANIFEST_CTX%" "%TARGET_PROJECT%"
     if errorlevel 1 (
@@ -39,9 +40,11 @@ echo   Vivado Batch Mode - Program Device
 echo ===========================================
 
 :: Check Vivado command availability
+if exist "%VIVADO_ENV_HELPER%" call "%VIVADO_ENV_HELPER%" --quiet >nul 2>nul
 where vivado >nul 2>nul
 if %errorlevel% neq 0 (
     echo [ERROR] Vivado executable not found in PATH.
+    echo         Check VIVADO_BIN or AMD/Xilinx default install paths.
     call :maybe_pause
     exit /b 1
 )

@@ -14,6 +14,7 @@ if "%~1"=="" (
 
 set "TARGET_PROJECT=%~f1"
 set "MANIFEST_CTX=%TEMPLATES_ROOT%\shared\adapters\bat\bootstrap_manifest_context.bat"
+set "VIVADO_ENV_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\ensure_vivado_on_path.bat"
 if exist "%MANIFEST_CTX%" (
     call "%MANIFEST_CTX%" "%TARGET_PROJECT%"
     if errorlevel 1 (
@@ -53,6 +54,16 @@ if not exist "output\reports" (
 
 call :prompt_run_or_cancel
 if %errorlevel% equ %USER_CANCEL_RC% exit /b %USER_CANCEL_RC%
+
+if exist "%VIVADO_ENV_HELPER%" call "%VIVADO_ENV_HELPER%" --quiet >nul 2>nul
+where vivado >nul 2>nul
+if %errorlevel% neq 0 (
+    echo.
+    echo [ERROR] Vivado executable not found in PATH.
+    echo         Check VIVADO_BIN or AMD/Xilinx default install paths.
+    call "%CONSOLE_HELPER%" pause_then_clear
+    exit /b 1
+)
 
 :: Run the Tcl script (force project root path)
 call vivado -mode batch -source "%TEMPLATES_ROOT%\contexts\reporting\adapters\tcl\report_generate_html.tcl" -tclargs "%TARGET_PROJECT%" "%MANIFEST_SRC_LIST%" -notrace -log "%REPORT_LOG%" -journal "%REPORT_JOU%"

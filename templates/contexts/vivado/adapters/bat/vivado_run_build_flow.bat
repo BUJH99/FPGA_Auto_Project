@@ -45,6 +45,7 @@ set "RTL_RC=-1"
 set "REPORT_RC=-1"
 set "PROGRAM_STATUS=NOT_RUN"
 set "BITSTREAM_PATH="
+set "VIVADO_ENV_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\ensure_vivado_on_path.bat"
 
 call :route_vivado_artifacts
 
@@ -57,11 +58,12 @@ echo.
 
 call :print_step "1/15" "Validate Vivado Environment"
 echo [CHECK] Verifying Vivado Environment...
+if exist "%VIVADO_ENV_HELPER%" call "%VIVADO_ENV_HELPER%" --quiet >nul 2>nul
 where vivado >nul 2>nul
 if %errorlevel% neq 0 (
     echo.
     echo [ERROR] Vivado executable not found in PATH.
-    echo         Please add Vivado bin directory to your System PATH.
+    echo         Check VIVADO_BIN or AMD/Xilinx default install paths.
     echo.
     call :maybe_pause
     exit /b 1

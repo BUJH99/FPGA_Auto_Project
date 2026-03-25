@@ -461,7 +461,7 @@ class ExecutionStackTests(unittest.TestCase):
                     "summary": "The automation could not launch the `vivado` executable on this machine.",
                     "evidence": ["[ERROR] Vivado executable not found in PATH."],
                     "actions": [
-                        "Add the Vivado bin directory to PATH or launch from a Xilinx-enabled shell.",
+                        "Add the Vivado bin directory to PATH, set `VIVADO_BIN`, or launch from an AMD/Xilinx-enabled shell.",
                         "Re-run Toolkit Doctor before retrying the flow.",
                     ],
                 }
