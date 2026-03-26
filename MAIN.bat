@@ -257,7 +257,7 @@ echo %Cyan%=====================================================================
 echo.
 
 set "CUSTOMBAT_COUNT=1"
-set "CUSTOMBAT_FILE_1=RISCV_TIMING_VERIFICATION.bat"
+set "CUSTOMBAT_FILE_1=templates\contexts\timing_verification\adapters\bat\timing_run_riscv_verification.bat"
 set "CUSTOMBAT_LABEL_1=RISC-V Timing Verification"
 
 echo %Yellow%[ Custom BAT Entrypoints ]%Reset%
