@@ -53,14 +53,16 @@ echo %Red%[No Projects Found]%Reset%
 echo No valid project folder detected.
 echo.
 echo   %White%[S] Setup New Project%Reset%
+echo   %Yellow%[C] CUSTOMBAT%Reset%
 echo   %Red%[Q] Quit%Reset%
 echo.
 
 set "NO_PROJ_INPUT="
-set /p "NO_PROJ_INPUT=%Cyan%No project found. Run setup now? (S/Q, default S): %Reset%"
+set /p "NO_PROJ_INPUT=%Cyan%No project found. Run setup now? (S/C/Q, default S): %Reset%"
 if "!NO_PROJ_INPUT!"=="" set "NO_PROJ_INPUT=S"
 
 if /i "!NO_PROJ_INPUT!"=="Q" goto :EXIT
+if /i "!NO_PROJ_INPUT!"=="C" goto :CUSTOMBAT_MENU
 if /i "!NO_PROJ_INPUT!"=="S" (
     if not exist "!SETUP_BAT!" (
         echo.
@@ -80,6 +82,7 @@ goto :NO_PROJECT_MENU
 
 echo.
 echo   %White%[S] Setup New Project%Reset%
+echo   %Yellow%[C] CUSTOMBAT%Reset%
 echo   %Red%[Q] Quit%Reset%
 echo.
 
@@ -87,6 +90,7 @@ set "PROJ_INPUT="
 set /p "PROJ_INPUT=%Cyan%Select Project (Number) or Option: %Reset%"
 
 if /i "!PROJ_INPUT!"=="Q" goto :EXIT
+if /i "!PROJ_INPUT!"=="C" goto :CUSTOMBAT_MENU
 if /i "!PROJ_INPUT!"=="S" (
     if not exist "!SETUP_BAT!" (
         echo.
@@ -183,12 +187,13 @@ echo.
 echo %Yellow%[ Project Health ]%Reset%
 echo  21. Toolkit Doctor [!CMD_21!]
 echo.
-echo %Blue%[B] Back to Project Selection%Reset%   %Red%[Q] Quit%Reset%
+echo %Yellow%[C] CUSTOMBAT%Reset%   %Blue%[B] Back to Project Selection%Reset%   %Red%[Q] Quit%Reset%
 
 set "USER_INPUT="
 set /p "USER_INPUT=%Cyan%Select number to run (or B/Q): %Reset%"
 
 if /i "!USER_INPUT!"=="Q" goto :EXIT
+if /i "!USER_INPUT!"=="C" goto :CUSTOMBAT_MENU
 if /i "!USER_INPUT!"=="B" goto :MASTER_MENU
 if "!USER_INPUT!"=="" goto :PROJECT_MENU
 
@@ -242,6 +247,73 @@ echo %Green%[DONE] !TARGET_NAME!%Reset%
 echo.
 call "%CONSOLE_HELPER%" pause_then_clear
 goto :PROJECT_MENU
+
+:CUSTOMBAT_MENU
+mode con: cols=120 lines=40 >nul 2>&1
+call "%CONSOLE_HELPER%" clear
+echo %Cyan%===============================================================================%Reset%
+echo  %Green%FPGA Automation CUSTOMBAT Menu%Reset%
+echo %Cyan%===============================================================================%Reset%
+echo.
+
+set "CUSTOMBAT_COUNT=1"
+set "CUSTOMBAT_FILE_1=RISCV_TIMING_VERIFICATION.bat"
+set "CUSTOMBAT_LABEL_1=RISC-V Timing Verification"
+
+echo %Yellow%[ Custom BAT Entrypoints ]%Reset%
+echo   1. !CUSTOMBAT_LABEL_1! [!CUSTOMBAT_FILE_1!]
+echo.
+echo %Blue%[B] Back%Reset%   %Red%[Q] Quit%Reset%
+echo.
+
+set "CUSTOMBAT_INPUT="
+set /p "CUSTOMBAT_INPUT=%Cyan%Select custom BAT to run (or B/Q): %Reset%"
+
+if /i "!CUSTOMBAT_INPUT!"=="Q" goto :EXIT
+if /i "!CUSTOMBAT_INPUT!"=="B" goto :MASTER_MENU
+if "!CUSTOMBAT_INPUT!"=="" goto :CUSTOMBAT_MENU
+
+echo(!CUSTOMBAT_INPUT!| findstr /r "^[0-9][0-9]*$" >nul
+if errorlevel 1 (
+    echo.
+    echo %Red%[ERROR] Invalid input: !CUSTOMBAT_INPUT!%Reset%
+    timeout /t 1 >nul
+    goto :CUSTOMBAT_MENU
+)
+
+if !CUSTOMBAT_INPUT! lss 1 goto :CUSTOMBAT_MENU
+if !CUSTOMBAT_INPUT! gtr !CUSTOMBAT_COUNT! goto :CUSTOMBAT_MENU
+
+call set "CUSTOMBAT_FILE=%%CUSTOMBAT_FILE_!CUSTOMBAT_INPUT!%%"
+call set "CUSTOMBAT_LABEL=%%CUSTOMBAT_LABEL_!CUSTOMBAT_INPUT!%%"
+set "CUSTOMBAT_PATH=%CD%\!CUSTOMBAT_FILE!"
+
+if not exist "!CUSTOMBAT_PATH!" (
+    echo.
+    echo %Red%[ERROR] Custom BAT not found: !CUSTOMBAT_PATH!%Reset%
+    call "%CONSOLE_HELPER%" pause_then_clear
+    goto :CUSTOMBAT_MENU
+)
+
+call "%CONSOLE_HELPER%" clear
+echo %Green%[RUN] !CUSTOMBAT_LABEL! [!CUSTOMBAT_FILE!]%Reset%
+echo %Cyan%===============================================================================%Reset%
+set "FPGA_AUTO_PARENT_MENU=1"
+cmd /c ""!CUSTOMBAT_PATH!""
+set "CHILD_RC=!errorlevel!"
+set "FPGA_AUTO_PARENT_MENU="
+echo %Cyan%===============================================================================%Reset%
+if "!CHILD_RC!"=="%USER_CANCEL_RC%" goto :CUSTOMBAT_MENU
+if not "!CHILD_RC!"=="0" (
+    echo %Red%[FAIL] !CUSTOMBAT_LABEL! exited with code !CHILD_RC!%Reset%
+    echo.
+    call "%CONSOLE_HELPER%" pause_then_clear
+    goto :CUSTOMBAT_MENU
+)
+echo %Green%[DONE] !CUSTOMBAT_LABEL!%Reset%
+echo.
+call "%CONSOLE_HELPER%" pause_then_clear
+goto :CUSTOMBAT_MENU
 
 :ROUTE_VIVADO_ARTIFACTS
 set "ROUTE_PROJECT=%~f1"
