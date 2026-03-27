@@ -17,7 +17,10 @@ call :status "Python and Vivado launchers resolved"
 
 set "TARGET_INPUT=%~1"
 set "RUN_MODE=%~2"
-set "FOCUS_FILTER_INPUT=%~3"
+set "PROGRAM_INPUT="
+set "FOCUS_FILTER_INPUT="
+call :parse_optional_args PROGRAM_INPUT FOCUS_FILTER_INPUT %3 %4 %5 %6 %7 %8 %9
+if errorlevel 1 goto :FAIL
 
 :SELECT_PROJECT
 if defined TARGET_INPUT goto :NORMALIZE_PROJECT
@@ -82,6 +85,37 @@ if /I "%ANALYSIS_MODE%"=="single_cycle" (
     goto :FAIL
 )
 
+if /I "%ANALYSIS_MODE%"=="pipeline_perf" (
+    set "PROGRAM_INPUT=%PROGRAM_INPUT:"=%"
+    if "%PROGRAM_INPUT%"==" " set "PROGRAM_INPUT="
+    if not defined PROGRAM_INPUT set "PROGRAM_INPUT=full_coverage"
+    if "%PROGRAM_INPUT%"=="" set "PROGRAM_INPUT=full_coverage"
+    call :normalize_program_selection "%PROGRAM_INPUT%" PROGRAM_NORMALIZED PROGRAM_LABEL
+    if errorlevel 1 (
+        echo.
+        echo [ERROR] Invalid timing program "%PROGRAM_INPUT%"
+        echo         Use `full_coverage` or `bubble_sort`.
+        goto :FAIL
+    )
+) else if /I "%ANALYSIS_MODE%"=="single_cycle" (
+    set "PROGRAM_INPUT=%PROGRAM_INPUT:"=%"
+    if "%PROGRAM_INPUT%"==" " set "PROGRAM_INPUT="
+    if not defined PROGRAM_INPUT set "PROGRAM_INPUT=full_coverage"
+    if "%PROGRAM_INPUT%"=="" set "PROGRAM_INPUT=full_coverage"
+    call :normalize_program_selection "%PROGRAM_INPUT%" PROGRAM_NORMALIZED PROGRAM_LABEL
+    if errorlevel 1 (
+        echo.
+        echo [ERROR] Invalid timing program "%PROGRAM_INPUT%"
+        echo         Use `full_coverage` or `bubble_sort`.
+        goto :FAIL
+    )
+)
+
+set "ARTIFACT_ROOT_DISPLAY=%TARGET_PROJECT%\%OUTPUT_RELATIVE%"
+if defined PROGRAM_NORMALIZED (
+    set "ARTIFACT_ROOT_DISPLAY=%TARGET_PROJECT%\%OUTPUT_RELATIVE%\programs\%PROGRAM_NORMALIZED%"
+)
+
 if not exist "%RUN_SCRIPT%" (
     echo.
     echo [ERROR] Python entrypoint not found: "%RUN_SCRIPT%"
@@ -94,8 +128,9 @@ if not exist "%COLLECTOR_TCL%" (
     goto :FAIL
 )
 
+:RESOLVE_RUN_MODE
 if not defined RUN_MODE (
-call :prompt_run_mode RUN_MODE
+    call :prompt_run_mode RUN_MODE
     if errorlevel 1 goto :CANCEL
 )
 
@@ -104,11 +139,19 @@ if errorlevel 1 (
     echo.
     echo [ERROR] Invalid run mode "%RUN_MODE%"
     if /I "%ANALYSIS_MODE%"=="pipeline_perf" (
-        echo         Use 1/full, 2/reuse, 3/base, 4/focus, 5/focus-partial, or 6/pipeline-only.
+        echo         Use 1/full, 2/reuse, 3/base, 4/focus, 5/focus-partial, 6/pipeline-only, or 7/program.
     ) else (
-        echo         Use 1/full for Vivado+Tcl+report, or 2/reuse for report-only reuse.
+        echo         Use 1/full, 2/reuse, or 3/program.
     )
     goto :FAIL
+)
+if /I "%RUN_MODE_NORMALIZED%"=="program_select" (
+    call :prompt_program_selection "%PROGRAM_NORMALIZED%" PROGRAM_INPUT PROGRAM_NORMALIZED PROGRAM_LABEL
+    set "RUN_MODE="
+    if not errorlevel 1 (
+        set "ARTIFACT_ROOT_DISPLAY=%TARGET_PROJECT%\%OUTPUT_RELATIVE%\programs\%PROGRAM_NORMALIZED%"
+    )
+    goto :RESOLVE_RUN_MODE
 )
 call :status "Loaded analysis profile and markdown report location"
 
@@ -138,6 +181,9 @@ if /I "%RUN_MODE_NORMALIZED%"=="pipeline_only" (
     set "RUN_ARGS=--pipeline-only --skip-instruction-focus"
     set "RUN_LABEL=5-stage only ^(pipeline build only, no single-cycle rebuild, no instruction-focus rerun^)"
 )
+if defined PROGRAM_NORMALIZED (
+    set "RUN_ARGS=%RUN_ARGS% --program=""%PROGRAM_NORMALIZED%"""
+)
 set "RUN_ARGS=%RUN_ARGS% %REPORT_ARG_NAME%=""%REPORT_PATH%"""
 call :status "Run mode prepared: %RUN_LABEL%"
 
@@ -150,9 +196,12 @@ echo Project Folder : "%TARGET_PROJECT%"
 echo Analysis Mode  : %FLOW_NAME%
 echo Python Script  : "%RUN_SCRIPT%"
 echo Tcl Collector  : "%COLLECTOR_TCL%"
-echo Artifact Root  : "%TARGET_PROJECT%\%OUTPUT_RELATIVE%"
+echo Artifact Root  : "%ARTIFACT_ROOT_DISPLAY%"
 echo Report Path    : "%REPORT_PATH%"
 echo Run Mode       : %RUN_LABEL%
+if defined PROGRAM_LABEL (
+    echo Program Image  : %PROGRAM_LABEL%
+)
 if defined FOCUS_FILTER_INPUT (
     echo Focus Filter   : %FOCUS_FILTER_INPUT%
 )
@@ -353,15 +402,21 @@ exit /b 1
 call :clear_screen
 echo.
 if /I "%ANALYSIS_MODE%"=="pipeline_perf" (
+    echo Current program image: %PROGRAM_LABEL%
+    echo.
     echo [1] Full timing run ^(single-cycle + pipeline + instruction-focus + report^)
     echo [2] Reuse existing artifacts and regenerate report only
     echo [3] Base comparison only ^(single-cycle + pipeline, skip instruction-focus rerun^)
     echo [4] Instruction-focus only ^(reuse base artifacts, rerun all classes/mnemonics^)
     echo [5] Partial instruction-focus only ^(reuse base artifacts, rerun selected focuses^)
     echo [6] 5-stage only ^(pipeline build only, no single-cycle rebuild, no instruction-focus rerun^)
+    echo [7] Change timing program image
 ) else (
+    echo Current program image: %PROGRAM_LABEL%
+    echo.
     echo [1] Full timing run ^(Vivado + Tcl collector + report^)
     echo [2] Reuse existing artifacts and regenerate report only
+    echo [3] Change timing program image
 )
 set "RUN_MODE_INPUT="
 set /p "RUN_MODE_INPUT=Select mode [1]: "
@@ -377,6 +432,9 @@ if /I "%~1"=="f" set "%~3=full"
 if /I "%~1"=="2" set "%~3=reuse"
 if /I "%~1"=="reuse" set "%~3=reuse"
 if /I "%~1"=="r" set "%~3=reuse"
+if /I "%~1"=="program" set "%~3=program_select"
+if /I "%~1"=="program-select" set "%~3=program_select"
+if /I "%~1"=="ps" set "%~3=program_select"
 if /I "%~2"=="pipeline_perf" (
     if /I "%~1"=="3" set "%~3=base"
     if /I "%~1"=="base" set "%~3=base"
@@ -395,9 +453,130 @@ if /I "%~2"=="pipeline_perf" (
     if /I "%~1"=="pipeline_only" set "%~3=pipeline_only"
     if /I "%~1"=="pipeline-only" set "%~3=pipeline_only"
     if /I "%~1"=="po" set "%~3=pipeline_only"
+    if /I "%~1"=="7" set "%~3=program_select"
+)
+if /I "%~2"=="single_cycle" (
+    if /I "%~1"=="3" set "%~3=program_select"
 )
 if defined %~3 exit /b 0
 exit /b 1
+
+:prompt_program_selection
+set "PROGRAM_PICK_CURRENT_LABEL=Full Coverage.mem"
+if /I "%~1"=="bubble_sort" set "PROGRAM_PICK_CURRENT_LABEL=Bubble Sort.mem"
+call :clear_screen
+echo.
+echo ===============================================================
+echo Timing Program Image Selection
+echo ===============================================================
+echo Current program image: %PROGRAM_PICK_CURRENT_LABEL%
+echo.
+echo [1] Full Coverage.mem
+echo [2] Bubble Sort.mem
+echo [Q] Cancel
+echo.
+choice /c 12Q /n /m "Select program [1/2/Q]: "
+if errorlevel 3 exit /b 1
+if errorlevel 2 (
+    set "%~2=bubble_sort"
+    set "%~3=bubble_sort"
+    set "%~4=Bubble Sort.mem"
+    set "PROGRAM_PICK_CURRENT_LABEL="
+    exit /b 0
+)
+if errorlevel 1 (
+    set "%~2=full_coverage"
+    set "%~3=full_coverage"
+    set "%~4=Full Coverage.mem"
+    set "PROGRAM_PICK_CURRENT_LABEL="
+    exit /b 0
+)
+set "PROGRAM_PICK_CURRENT_LABEL="
+exit /b 1
+
+:normalize_program_selection
+set "%~2="
+set "%~3="
+if "%~1"=="" (
+    set "%~2=full_coverage"
+    set "%~3=Full Coverage.mem"
+    exit /b 0
+)
+if /I "%~1"=="full_coverage" (
+    set "%~2=full_coverage"
+    set "%~3=Full Coverage.mem"
+    exit /b 0
+)
+if /I "%~1"=="full coverage" (
+    set "%~2=full_coverage"
+    set "%~3=Full Coverage.mem"
+    exit /b 0
+)
+if /I "%~1"=="Full Coverage.mem" (
+    set "%~2=full_coverage"
+    set "%~3=Full Coverage.mem"
+    exit /b 0
+)
+if /I "%~1"=="bubble_sort" (
+    set "%~2=bubble_sort"
+    set "%~3=Bubble Sort.mem"
+    exit /b 0
+)
+if /I "%~1"=="bubble sort" (
+    set "%~2=bubble_sort"
+    set "%~3=Bubble Sort.mem"
+    exit /b 0
+)
+if /I "%~1"=="Bubble Sort.mem" (
+    set "%~2=bubble_sort"
+    set "%~3=Bubble Sort.mem"
+    exit /b 0
+)
+exit /b 1
+
+:parse_optional_args
+set "%~1="
+set "%~2="
+set "PARSE_PROGRAM_VAR=%~1"
+set "PARSE_FOCUS_VAR=%~2"
+shift
+shift
+set "PARSE_PROGRAM_VALUE="
+set "PARSE_FOCUS_VALUE="
+
+:PARSE_OPTIONAL_ARGS_LOOP
+if "%~1"=="" goto :PARSE_OPTIONAL_ARGS_DONE
+set "PARSE_TOKEN=%~1"
+if /I "%~1"=="--program" (
+    if "%~2"=="" exit /b 1
+    set "PARSE_PROGRAM_VALUE=%~2"
+    shift
+    shift
+    goto :PARSE_OPTIONAL_ARGS_LOOP
+)
+echo(%PARSE_TOKEN%| findstr /b /i "--program=" >nul
+if not errorlevel 1 (
+    set "PARSE_PROGRAM_VALUE=%PARSE_TOKEN:~10%"
+    shift
+    goto :PARSE_OPTIONAL_ARGS_LOOP
+)
+if not defined PARSE_FOCUS_VALUE (
+    set "PARSE_FOCUS_VALUE=%PARSE_TOKEN%"
+) else (
+    set "PARSE_FOCUS_VALUE=%PARSE_FOCUS_VALUE% %PARSE_TOKEN%"
+)
+shift
+goto :PARSE_OPTIONAL_ARGS_LOOP
+
+:PARSE_OPTIONAL_ARGS_DONE
+call set "%PARSE_PROGRAM_VAR%=%%PARSE_PROGRAM_VALUE%%"
+call set "%PARSE_FOCUS_VAR%=%%PARSE_FOCUS_VALUE%%"
+set "PARSE_PROGRAM_VAR="
+set "PARSE_FOCUS_VAR="
+set "PARSE_PROGRAM_VALUE="
+set "PARSE_FOCUS_VALUE="
+set "PARSE_TOKEN="
+exit /b 0
 
 :prompt_focus_filter
 call :clear_screen

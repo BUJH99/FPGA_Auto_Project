@@ -17,16 +17,54 @@ from .common import (
     write_wrapper_tcl,
     wsl_to_windows,
 )
-from .rv32i import DEFAULT_CLASS_ORDER, classify_mnemonic, classify_word, parse_instruction_program
+from .execution_metrics import (
+    analyze_program_trace,
+    compute_runtime_speedup,
+    estimate_pipeline_5stage_execution,
+    estimate_single_cycle_execution,
+    format_ratio,
+    format_runtime_ns,
+)
+from .focus import find_module_source_path, parse_ansi_module_ports, render_defparam_wrapper, sanitize_token
+from .rv32i import DEFAULT_CLASS_ORDER, classify_word, parse_asm_instructions
 
 
 RESERVED_ARTIFACT_KEYS = {"actual", "hierarchical"}
+PROGRAM_LIBRARY: dict[str, dict[str, pathlib.Path | str]] = {
+    "full_coverage": {
+        "label": "Full Coverage",
+        "mem_relpath": pathlib.Path("src") / "InstructionFORTIMING.mem",
+        "asm_relpath": pathlib.Path("src") / "InstructionFORTIMING.s",
+    },
+    "bubble_sort": {
+        "label": "Bubble Sort",
+        "mem_relpath": pathlib.Path("src") / "timing_programs" / "Bubble Sort.mem",
+        "asm_relpath": pathlib.Path("src") / "timing_programs" / "Bubble Sort.s",
+    },
+}
+
+PROGRAM_ALIASES = {
+    "full_coverage": "full_coverage",
+    "fullcoverage": "full_coverage",
+    "full_coverage_mem": "full_coverage",
+    "full_coverage_s": "full_coverage",
+    "bubble_sort": "bubble_sort",
+    "bubblesort": "bubble_sort",
+    "bubble_sort_mem": "bubble_sort",
+    "bubble_sort_s": "bubble_sort",
+}
 
 
 def fmt_float(value: float | None, digits: int = 3) -> str:
     if value is None:
         return "NA"
     return f"{value:.{digits}f}"
+
+
+def fmt_int(value: int | None) -> str:
+    if value is None:
+        return "NA"
+    return str(value)
 
 
 def safe_mean(values: list[float]) -> float | None:
@@ -61,11 +99,120 @@ def unique_strings(values: list[str]) -> list[str]:
     return ordered
 
 
-def build_single_cycle_metadata(contract: dict[str, Any], output_dir: pathlib.Path) -> dict[str, Any]:
+def normalize_program_key(raw_value: str | None) -> str:
+    token = (raw_value or "full_coverage").strip().lower()
+    if token.endswith(".mem") or token.endswith(".s"):
+        token = token.rsplit(".", 1)[0]
+    token = re.sub(r"[^a-z0-9]+", "_", token).strip("_")
+    return PROGRAM_ALIASES.get(token, token)
+
+
+def resolve_selected_program(project_root: pathlib.Path, raw_value: str | None) -> dict[str, Any]:
+    program_key = normalize_program_key(raw_value)
+    if program_key not in PROGRAM_LIBRARY:
+        supported = ", ".join(sorted(PROGRAM_LIBRARY))
+        raise ValueError(f"Unsupported timing program `{raw_value}`. Supported values: {supported}.")
+
+    program_cfg = PROGRAM_LIBRARY[program_key]
+    mem_path = (project_root / pathlib.Path(program_cfg["mem_relpath"])).resolve()
+    asm_path = (project_root / pathlib.Path(program_cfg["asm_relpath"])).resolve()
+    if not mem_path.exists():
+        raise FileNotFoundError(f"Timing program image was not found: {mem_path}")
+
+    return {
+        "key": program_key,
+        "label": str(program_cfg["label"]),
+        "mem_path": mem_path,
+        "asm_path": asm_path if asm_path.exists() else None,
+        "display_name": f"{program_cfg['label']}.mem",
+    }
+
+
+def parse_selected_instruction_program(program_selection: dict[str, Any]) -> tuple[dict[str, int], str, list[str]]:
+    asm_path = pathlib.Path(program_selection["asm_path"]) if program_selection.get("asm_path") else None
+    mem_path = pathlib.Path(program_selection["mem_path"]).resolve()
+    class_counts = Counter({class_name: 0 for class_name in DEFAULT_CLASS_ORDER})
+    warnings: list[str] = []
+
+    if asm_path and asm_path.exists():
+        instructions = parse_asm_instructions(asm_path)
+        for row in instructions:
+            class_counts[row["class_name"]] += 1
+        return dict(class_counts), str(asm_path), warnings
+
+    for raw_line in mem_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        token = raw_line.strip().replace("_", "")
+        if not token:
+            continue
+        try:
+            class_name = classify_word(int(token, 16))
+        except ValueError:
+            continue
+        if class_name:
+            class_counts[class_name] += 1
+
+    warnings.append(f"{mem_path.name} was used, so mnemonic-level timing rows could not be resolved.")
+    return dict(class_counts), str(mem_path), warnings
+
+
+def resolve_program_output_dir(
+    requested_output_dir: pathlib.Path,
+    default_output_dir: pathlib.Path,
+    program_key: str,
+) -> pathlib.Path:
+    requested_resolved = requested_output_dir.resolve()
+    default_resolved = default_output_dir.resolve()
+    if requested_resolved == default_resolved:
+        return default_resolved / "programs" / program_key
+    return requested_resolved
+
+
+def prepare_program_wrapper_assets(
+    contract: dict[str, Any],
+    output_dir: pathlib.Path,
+    program_selection: dict[str, Any],
+) -> dict[str, Any]:
+    wrapper_dir = output_dir / "program_wrapper"
+    wrapper_dir.mkdir(parents=True, exist_ok=True)
+
+    top_name = str(contract["top_name"])
+    top_source_path = find_module_source_path(list(contract["source_files"]), top_name)
+    top_ports = parse_ansi_module_ports(top_source_path.read_text(encoding="utf-8", errors="ignore"), top_name)
+    wrapper_module_name = (
+        "TimingProgramTop_"
+        + sanitize_token(f"{contract['project_name']}_{program_selection['key']}").upper()
+    )
+    wrapper_path = wrapper_dir / f"{wrapper_module_name}.sv"
+    wrapper_path.write_text(
+        render_defparam_wrapper(
+            wrapper_module_name=wrapper_module_name,
+            top_name=top_name,
+            top_ports=top_ports,
+            clock_port=str(contract["clock_port"]),
+            reset_port=str(contract["reset_port"]),
+            instance_name="uDesign",
+            rom_param_path="uInstrRom.P_INIT_FILE",
+            mem_file_path=pathlib.Path(program_selection["mem_path"]),
+        ),
+        encoding="utf-8",
+    )
+
+    return {
+        "wrapper_path": wrapper_path,
+        "wrapper_module_name": wrapper_module_name,
+        "source_files": list(contract["source_files"]) + [wrapper_path],
+    }
+
+
+def build_single_cycle_metadata(
+    contract: dict[str, Any],
+    output_dir: pathlib.Path,
+    program_selection: dict[str, Any],
+) -> dict[str, Any]:
     profile = contract["profile"]
     probe_families = [dict(row) for row in profile.get("probe_families", [])]
     legacy_probe_families = [dict(row) for row in profile.get("legacy_probe_families", [])]
-    class_counts, instruction_source, warnings = parse_instruction_program(contract["project_root"])
+    class_counts, instruction_source, warnings = parse_selected_instruction_program(program_selection)
     warnings = list(contract.get("warnings", [])) + warnings
     class_coverage = {class_name: count for class_name, count in class_counts.items() if count > 0}
 
@@ -83,6 +230,9 @@ def build_single_cycle_metadata(contract: dict[str, Any], output_dir: pathlib.Pa
         "reset_port": contract["reset_port"],
         "clock_period_ns": float(contract["clock_period_ns"]),
         "output_dir": str(output_dir.resolve()),
+        "program_key": str(program_selection["key"]),
+        "program_image": str(program_selection["display_name"]),
+        "program_memory": str(program_selection["mem_path"]),
         "resolved_source_files": [str(path) for path in contract["source_files"]],
         "probe_families": probe_families,
         "known_probe_families": probe_families + legacy_probe_families,
@@ -111,6 +261,9 @@ def build_wrapper_variables(
     contract: dict[str, Any],
     output_dir: pathlib.Path,
     metadata: dict[str, Any],
+    *,
+    source_files: list[pathlib.Path] | None = None,
+    top_name: str | None = None,
 ) -> dict[str, Any]:
     family_configs = []
     for family in metadata["probe_families"]:
@@ -124,11 +277,11 @@ def build_wrapper_variables(
         )
 
     return {
-        "source_files": [wsl_to_windows(path) for path in contract["source_files"]],
+        "source_files": [wsl_to_windows(path) for path in (source_files or contract["source_files"])],
         "output_dir": wsl_to_windows(output_dir),
         "repo_root": wsl_to_windows(contract["repo_root"]),
         "part_name": contract["part_name"],
-        "top_name": contract["top_name"],
+        "top_name": top_name or contract["top_name"],
         "clock_port": contract["clock_port"],
         "reset_port": contract["reset_port"],
         "clk_period_ns": float(contract["clock_period_ns"]),
@@ -143,14 +296,21 @@ def run_vivado(
     contract: dict[str, Any],
     metadata: dict[str, Any],
     *,
+    program_selection: dict[str, Any] | None = None,
     progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> pathlib.Path:
     tools_dir = project_root / "tools"
     wrapper_tcl = output_dir / "run_single_cycle_perf_wrapper.tcl"
     log_path = output_dir / "vivado_run.log"
+    source_files = list(contract["source_files"])
+    top_name = str(contract["top_name"])
+    if program_selection is not None:
+        wrapper_assets = prepare_program_wrapper_assets(contract, output_dir, program_selection)
+        source_files = list(wrapper_assets["source_files"])
+        top_name = str(wrapper_assets["wrapper_module_name"])
     write_wrapper_tcl(
         wrapper_tcl,
-        variables=build_wrapper_variables(contract, output_dir, metadata),
+        variables=build_wrapper_variables(contract, output_dir, metadata, source_files=source_files, top_name=top_name),
         source_path=tools_dir / "single_cycle_perf_collect.tcl",
     )
     return run_vivado_batch(
@@ -215,6 +375,67 @@ def parse_timing_summary(path: pathlib.Path) -> dict[str, float]:
             result["setup_failing_endpoints"] = float(match.group(1))
             break
     return result
+
+
+def parse_post_route_min_period(path: pathlib.Path, clock_period_ns: float) -> float | None:
+    if not path.exists():
+        return None
+
+    lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    for idx, line in enumerate(lines):
+        if "WNS(ns)" not in line or "TNS(ns)" not in line:
+            continue
+        for look_ahead in range(idx + 1, min(idx + 8, len(lines))):
+            candidate = lines[look_ahead].strip()
+            match = re.match(r"([-\d.]+)\s+([-\d.]+)\s+\d+\s+\d+\s+([-\d.]+)\s+([-\d.]+)", candidate)
+            if not match:
+                continue
+            return float(clock_period_ns) - float(match.group(1))
+    return None
+
+
+def resolve_existing_output_dir(preferred_dir: pathlib.Path, legacy_dir: pathlib.Path) -> pathlib.Path:
+    if (preferred_dir / "post_route_timing_summary.rpt").exists():
+        return preferred_dir
+    if (legacy_dir / "post_route_timing_summary.rpt").exists():
+        return legacy_dir
+    if (preferred_dir / "actual_timing_summary.rpt").exists():
+        return preferred_dir
+    if (legacy_dir / "actual_timing_summary.rpt").exists():
+        return legacy_dir
+    return preferred_dir
+
+
+def resolve_pipeline_reference_metrics(
+    project_root: pathlib.Path,
+    program_key: str,
+) -> dict[str, Any] | None:
+    if project_root.name != "RISCV_32I_SINGLE":
+        return None
+
+    pipeline_root = project_root.parent / "RISCV_32I_5STAGE"
+    if not pipeline_root.exists():
+        return None
+
+    pipeline_contract = load_project_contract(pipeline_root)
+    pipeline_profile = pipeline_contract["profile"]
+    default_output_root = pipeline_root / str(pipeline_profile.get("default_output_root", ".analysis/pipeline_perf"))
+    preferred_output_dir = default_output_root / "programs" / program_key / "pipeline"
+    legacy_output_dir = default_output_root / "pipeline"
+    output_dir = resolve_existing_output_dir(preferred_output_dir, legacy_output_dir)
+
+    min_period_ns = parse_post_route_min_period(
+        output_dir / "post_route_timing_summary.rpt",
+        float(pipeline_contract["clock_period_ns"]),
+    )
+    if min_period_ns is None and not (output_dir / "post_route_timing_summary.rpt").exists():
+        return None
+
+    return {
+        "project_name": str(pipeline_contract["project_name"]),
+        "output_dir": output_dir,
+        "min_period_ns": min_period_ns,
+    }
 
 
 def parse_high_fanout_report(path: pathlib.Path) -> list[dict[str, Any]]:
@@ -683,6 +904,17 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
     tns_ns = timing_summary.get("tns_ns")
     min_period_ns = float(worst_path["min_period_ns"])
     fmax_mhz = 1000.0 / min_period_ns if min_period_ns > 0 else None
+    program_mem_path = pathlib.Path(str(metadata["program_memory"]))
+    trace_summary = analyze_program_trace(program_mem_path)
+    single_execution = estimate_single_cycle_execution(trace_summary, min_period_ns)
+    pipeline_reference = resolve_pipeline_reference_metrics(
+        pathlib.Path(str(metadata["project_root"])),
+        str(metadata["program_key"]),
+    )
+    pipeline_execution = estimate_pipeline_5stage_execution(
+        trace_summary,
+        pipeline_reference["min_period_ns"] if pipeline_reference is not None else None,
+    )
     failing_endpoints = int(timing_summary.get("setup_failing_endpoints", 0))
     available_family_rows = [row for row in family_timing_rows if row["worst_path"]]
     worst_family_row = max(available_family_rows, key=lambda row: float(row["min_period_ns"])) if available_family_rows else None
@@ -814,6 +1046,8 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
     report_lines.append(f"- ISA profile: `{metadata['isa_profile']}`")
     report_lines.append(f"- Top: `{metadata['top_name']}`")
     report_lines.append(f"- Part: `{metadata['part_name']}`")
+    report_lines.append(f"- Program image: `{metadata['program_image']}`")
+    report_lines.append(f"- Program memory: `{metadata['program_memory']}`")
     report_lines.append(f"- Raw output directory: `{output_dir}`")
     report_lines.append("")
     report_lines.append("## Contract Resolution")
@@ -826,6 +1060,8 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
     report_lines.append(f"| Resolved top | `{metadata['top_name']}` |")
     report_lines.append(f"| Source file count | {len(metadata['resolved_source_files'])} |")
     report_lines.append(f"| Probe family count | {len(metadata.get('probe_families', []))} |")
+    report_lines.append(f"| Program image | `{metadata['program_image']}` |")
+    report_lines.append(f"| Program memory | `{metadata['program_memory']}` |")
     report_lines.append(f"| Instruction-class source | `{metadata['instruction_class_source']}` |")
     report_lines.append("")
     report_lines.append("## Analysis Health")
@@ -847,6 +1083,42 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
     report_lines.append(f"| Worst endpoint | `{worst_path['end_pin']}` |")
     report_lines.append(f"| Worst structural bucket | `{bucket_rows[0][0] if bucket_rows else 'NA'}` |")
     report_lines.append(f"| Worst canonical family | `{worst_family_row['label'] if worst_family_row else 'NA'}` |")
+    report_lines.append("")
+    report_lines.append("## Program Execution Metrics")
+    report_lines.append("")
+    report_lines.append("- Instruction/cycle/CPI/runtime are estimated from the selected timing-program trace.")
+    report_lines.append("- 5-stage reference uses `retired + 4 fill + load-use stalls + 2-cycle taken redirects before the terminal self-loop`.")
+    report_lines.append("")
+    report_lines.append("| Architecture | Instruction Count | Cycle Count | CPI | Estimated Runtime |")
+    report_lines.append("| --- | ---: | ---: | ---: | --- |")
+    report_lines.append(
+        f"| {single_execution['architecture']} | {fmt_int(single_execution['instruction_count'])} | {fmt_int(single_execution['cycle_count'])} | {fmt_float(single_execution['cpi'])} | {format_runtime_ns(single_execution['runtime_ns'])} |"
+    )
+    report_lines.append(
+        f"| {pipeline_execution['architecture']} | {fmt_int(pipeline_execution['instruction_count'])} | {fmt_int(pipeline_execution['cycle_count'])} | {fmt_float(pipeline_execution['cpi'])} | {format_runtime_ns(pipeline_execution['runtime_ns'])} |"
+    )
+    report_lines.append("")
+    runtime_delta_ns = None
+    if single_execution["runtime_ns"] is not None and pipeline_execution["runtime_ns"] is not None:
+        runtime_delta_ns = float(pipeline_execution["runtime_ns"]) - float(single_execution["runtime_ns"])
+    cycle_delta = int(pipeline_execution["cycle_count"]) - int(single_execution["cycle_count"])
+    cpi_delta = None
+    if single_execution["cpi"] is not None and pipeline_execution["cpi"] is not None:
+        cpi_delta = float(pipeline_execution["cpi"]) - float(single_execution["cpi"])
+    runtime_speedup = compute_runtime_speedup(single_execution["runtime_ns"], pipeline_execution["runtime_ns"])
+    report_lines.append("## Architecture Comparison")
+    report_lines.append("")
+    if pipeline_reference is not None:
+        report_lines.append(f"- Companion pipeline artifacts: `{pipeline_reference['output_dir']}`")
+    else:
+        report_lines.append("- Companion pipeline artifacts were not found, so pipeline runtime stays `NA` while cycle/CPI remain trace-based estimates.")
+    report_lines.append("")
+    report_lines.append("| Comparison | Value |")
+    report_lines.append("| --- | --- |")
+    report_lines.append(f"| Pipeline cycle delta vs single | {cycle_delta:+d} cycles |")
+    report_lines.append(f"| Pipeline CPI delta vs single | {fmt_float(cpi_delta)} |")
+    report_lines.append(f"| Pipeline runtime delta vs single | {format_runtime_ns(runtime_delta_ns)} |")
+    report_lines.append(f"| Pipeline runtime speedup vs single | {format_ratio(runtime_speedup)} |")
     report_lines.append("")
     report_lines.append("## Canonical Timing Families")
     report_lines.append("")
@@ -1030,9 +1302,11 @@ def run(project_root: pathlib.Path, argv: list[str] | None = None) -> int:
     parser.add_argument("--output-dir", type=pathlib.Path, default=default_output_dir)
     parser.add_argument("--report-path", type=pathlib.Path, default=default_report_path)
     parser.add_argument("--reuse-existing", action="store_true", help="Reuse existing raw outputs instead of launching Vivado.")
+    parser.add_argument("--program", default="full_coverage", help="Timing program image to use: `full_coverage` or `bubble_sort`.")
     args = parser.parse_args(argv)
 
-    output_dir = args.output_dir.resolve()
+    selected_program = resolve_selected_program(project_root, args.program)
+    output_dir = resolve_program_output_dir(args.output_dir, default_output_dir, str(selected_program["key"]))
     report_path = args.report_path.resolve()
     report_path.parent.mkdir(parents=True, exist_ok=True)
     reuse_existing = args.reuse_existing and all(
@@ -1050,10 +1324,10 @@ def run(project_root: pathlib.Path, argv: list[str] | None = None) -> int:
     total_progress_units = 4 + (1 if reuse_existing else vivado_units)
     tracker = ProgressTracker(total_progress_units)
     tracker.step(
-        f"Loaded single-cycle timing contract for {contract['project_name']} | Artifacts: {output_dir} | Report: {report_path}"
+        f"Loaded single-cycle timing contract for {contract['project_name']} | Program: {selected_program['display_name']} | Artifacts: {output_dir} | Report: {report_path}"
     )
 
-    metadata = build_single_cycle_metadata(contract, output_dir)
+    metadata = build_single_cycle_metadata(contract, output_dir, selected_program)
     write_metadata(output_dir, metadata)
     tracker.step("Timing metadata prepared")
 
@@ -1065,6 +1339,7 @@ def run(project_root: pathlib.Path, argv: list[str] | None = None) -> int:
             output_dir,
             contract,
             metadata,
+            program_selection=selected_program,
             progress_callback=tracker.make_subrun_callback(
                 tracker.completed_units,
                 vivado_units,
