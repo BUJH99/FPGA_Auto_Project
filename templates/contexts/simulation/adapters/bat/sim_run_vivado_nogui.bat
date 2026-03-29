@@ -95,6 +95,15 @@ if (-not (Test-Path $SimLogDir)) {
 
 Set-Location -Path $VivadoRoot
 
+function Set-ReadableConsoleTheme {
+    try {
+        $rawUi = $Host.UI.RawUI
+        $rawUi.ForegroundColor = [System.ConsoleColor]::Gray
+        $rawUi.BackgroundColor = [System.ConsoleColor]::Black
+    } catch {
+    }
+}
+
 function Move-VivadoArtifacts {
     param(
         [Parameter(Mandatory = $true)][string]$RootDir,
@@ -351,6 +360,7 @@ function Show-TbFolderMenu {
         [Parameter(Mandatory = $false)][string]$WarningText = ""
     )
 
+    Set-ReadableConsoleTheme
     Clear-Host
     Write-Host "-----------------------------------------------------------" -ForegroundColor Cyan
     Write-Host "      NO GUI Vivado Simulation Launcher" -ForegroundColor Cyan
@@ -376,7 +386,9 @@ if ($folderEntries.Count -eq 1) {
     while ($true) {
         Show-TbFolderMenu -Folders $folderEntries -WarningText $folderPromptWarning
         $folderPromptWarning = ""
-        $folderRaw = Read-Host " Folder >"
+        Write-Host ""
+        Write-Host " Folder > " -ForegroundColor White -NoNewline
+        $folderRaw = Read-Host
         if ($folderRaw -match '^(?i)q$') {
             Invoke-VivadoSummaryWriter -Status "cancelled"
             exit 99
@@ -412,6 +424,7 @@ function Show-TbFileMenu {
         [Parameter(Mandatory = $false)][string]$WarningText = ""
     )
 
+    Set-ReadableConsoleTheme
     Clear-Host
     Write-Host "-----------------------------------------------------------" -ForegroundColor Cyan
     Write-Host "      NO GUI Vivado Simulation Launcher" -ForegroundColor Cyan
@@ -443,7 +456,9 @@ if ($tbSelectList.Count -eq 1) {
     while ($true) {
         Show-TbFileMenu -FolderName $selectedFolder.Name -Entries $tbSelectList -WarningText $tbPromptWarning
         $tbPromptWarning = ""
-        $tbRaw = Read-Host " TB file >"
+        Write-Host ""
+        Write-Host " TB file > " -ForegroundColor White -NoNewline
+        $tbRaw = Read-Host
         if ($tbRaw -match '^(?i)q$') {
             Invoke-VivadoSummaryWriter -Status "cancelled"
             exit 99
