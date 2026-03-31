@@ -13,9 +13,6 @@
 !/tests/**
 !/Telegram/
 !/Telegram/**
-!/Project/
-/Project/*
-!/Project/.gitkeep
 !/setup_toolkit.bat
 !SV_SUPPORT_MID_CHECK_2026-02-24.md
 # Ignore local sync helper script

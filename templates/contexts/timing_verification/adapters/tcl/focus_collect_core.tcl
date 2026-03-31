@@ -35,6 +35,7 @@ riscv_timing_analysis::ensure_default route_directive "Explore"
 riscv_timing_analysis::ensure_default post_route_phys_opt_directive "AggressiveExplore"
 riscv_timing_analysis::ensure_default family_configs {}
 riscv_timing_analysis::maybe_cd_repo_root
+riscv_timing_analysis::configure_max_threads
 
 proc report_focus_stage_artifacts {output_dir stage_key} {
   report_timing_summary -delay_type max -file [file join $output_dir "${stage_key}_timing_summary.rpt"]

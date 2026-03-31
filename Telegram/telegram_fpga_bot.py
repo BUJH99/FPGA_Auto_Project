@@ -67,6 +67,10 @@ SVG_PREVIEW_SCALE = 2.0
 SVG_PREVIEW_DPI = 192
 
 
+def default_managed_project_root(repo_root: Path) -> Path:
+    return repo_root.parent / "Project"
+
+
 class RuntimeState:
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -466,7 +470,9 @@ def load_config() -> Config:
     main_bat_path = Path(os.getenv("FPGA_MAIN_BAT_PATH", str(automation_repo_root / "MAIN.bat"))).expanduser()
     menu_registry = parse_main_menu_registry(main_bat_path, automation_templates_root)
 
-    project_root = Path(os.getenv("FPGA_PROJECT_ROOT", str(automation_repo_root / "Project"))).expanduser()
+    project_root = Path(
+        os.getenv("FPGA_PROJECT_ROOT", str(default_managed_project_root(automation_repo_root)))
+    ).expanduser()
     poll_timeout_sec = int(os.getenv("TELEGRAM_POLL_TIMEOUT_SEC", "25"))
     command_timeout_sec = int(os.getenv("TELEGRAM_CMD_TIMEOUT_SEC", "7200"))
     skip_pending_updates = parse_bool(os.getenv("TELEGRAM_SKIP_PENDING_UPDATES"), True)

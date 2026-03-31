@@ -3,6 +3,7 @@ setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
 set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
+set "PROJECT_ROOT_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\resolve_managed_project_root.bat"
 
 set "SYNC_BAT=%TEMPLATES_ROOT%\..\SyncProjectsToSourceProject.bat"
 set "MANIFEST_TEMPLATE=%TEMPLATES_ROOT%\manifest\fpga_auto.template.yml"
@@ -40,7 +41,12 @@ if /i not "%HDL_EXT%"=="v" if /i not "%HDL_EXT%"=="sv" set "HDL_EXT=v"
 pushd "%TEMPLATES_ROOT%\.." >nul 2>nul
 set "REPO_ROOT=%CD%"
 popd >nul 2>nul
-set "PROJECT_ROOT=%REPO_ROOT%\Project"
+if exist "%PROJECT_ROOT_HELPER%" call "%PROJECT_ROOT_HELPER%" "%REPO_ROOT%"
+if defined FPGA_AUTO_PROJECT_ROOT (
+    set "PROJECT_ROOT=%FPGA_AUTO_PROJECT_ROOT%"
+) else (
+    for %%I in ("%REPO_ROOT%\..") do set "PROJECT_ROOT=%%~fI\Project"
+)
 if not exist "%PROJECT_ROOT%" mkdir "%PROJECT_ROOT%" >nul 2>nul
 
 if not defined PROJECT_NAME goto PROMPT

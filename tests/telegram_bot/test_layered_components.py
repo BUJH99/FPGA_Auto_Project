@@ -151,7 +151,7 @@ class LayeredComponentTests(unittest.TestCase):
 
     def test_command_resolver_assigns_interaction_contracts_and_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            project_root = Path(temp_dir) / "Project"
+            project_root = Path(temp_dir) / "managed_root" / "Project"
             project_path = project_root / "Demo"
             project_path.mkdir(parents=True)
             config = self.make_config(project_root)

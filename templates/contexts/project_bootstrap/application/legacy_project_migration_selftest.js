@@ -15,19 +15,21 @@ function writeFile(targetPath, contents) {
 
 function withTempDir(prefix, fn) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const repoRoot = path.join(tempDir, "FPGA_Auto_Project");
+  fs.mkdirSync(repoRoot, { recursive: true });
   try {
-    return fn(tempDir);
+    return fn(repoRoot, tempDir);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
 function runLegacyProjectMigrationSelftest() {
-  return withTempDir("fpga-migrate-", (repoRoot) => {
+  return withTempDir("fpga-migrate-", (repoRoot, workspaceRoot) => {
     writeFile(path.join(repoRoot, "alpha", "src", "TOP.v"), "module TOP; endmodule\n");
     writeFile(path.join(repoRoot, "alpha", "tb", "tb_TOP.v"), "module tb_TOP; TOP dut(); endmodule\n");
 
-    const projectRoot = path.join(repoRoot, "Project");
+    const projectRoot = path.join(workspaceRoot, "Project");
     const report = executeLegacyProjectMigration({
       repoRoot,
       projectRoot,

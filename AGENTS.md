@@ -6,14 +6,14 @@ This file defines the default working contract for Codex agents operating anywhe
 
 - Treat this repo as two connected layers:
   - automation framework: `MAIN.bat`, `templates/contexts/*`, `templates/shared/*`, `Telegram/*`, `tests/*`
-  - managed workspaces: `Project/*/src`, `Project/*/tb`, `Project/*/fpga_auto.yml`, plus project-local outputs
+  - managed workspaces: `../Project/*/src`, `../Project/*/tb`, `../Project/*/fpga_auto.yml`, plus project-local outputs
 - `MAIN.bat` is the top-level menu contract.
-- Valid projects are discovered only from `Project/*` directories that contain both `src/` and `fpga_auto.yml`.
+- Valid projects are discovered only from sibling `../Project/*` directories that contain both `src/` and `fpga_auto.yml`.
 - The runtime is Windows-first. WSL is fine for inspection, grep, patching, and many tests, but batch/Vivado flows should be treated as Windows-oriented.
 
 ## Required reading order
 
-- For project-local HDL work, read `Project/<name>/fpga_auto.yml` before changing source, testbench, include, or constraint files.
+- For project-local HDL work, read `../Project/<name>/fpga_auto.yml` before changing source, testbench, include, or constraint files.
 - Read files in this order when possible:
   1. manifest and top-level contract files
   2. directly affected source or testbench files

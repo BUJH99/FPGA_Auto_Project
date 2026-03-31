@@ -68,7 +68,7 @@ graph LR
 ```
 
 - **`MAIN.bat`**: The primary menu-driven launcher for the entire toolkit.
-- **`Project/`**: The default directory containing individual FPGA projects (discovered automatically if they include valid manifests).
+- **`../Project/`**: The default sibling directory containing individual FPGA projects (discovered automatically if they include valid manifests).
 - **`templates/`**: Contains all shared scripts, tools, and configurations that power the toolkit.
   - **`templates/contexts/`**: Contains the core logic scripts organized logically into specific bounded contexts:
     - 🔍 `code_intel/`: Scripts for parsing RTL, building hierarchy trees, and generating schematics.
@@ -117,10 +117,10 @@ The canonical runtime path is Windows. `MAIN.bat`, Telegram execution, Vivado au
    ```
 
 2. **Run the Toolkit:**
-   Simply double-click or run `MAIN.bat` from your command prompt. It will automatically detect valid projects inside the `Project/` directory (those containing an `fpga_auto.yml` manifest file) and provide an interactive terminal menu mapping out all available automation tasks.
+   Simply double-click or run `MAIN.bat` from your command prompt. It will automatically detect valid projects inside the sibling `../Project/` directory (those containing an `fpga_auto.yml` manifest file) and provide an interactive terminal menu mapping out all available automation tasks.
 
 3. *(Optional)* **Legacy Project Migration**:
-   To migrate root-level legacy projects into the structured `Project/*` format, you can run the bootstrap script:
+   To migrate root-level legacy projects into the structured sibling `../Project/*` format, you can run the bootstrap script:
    ```cmd
    templates\contexts\project_bootstrap\adapters\bat\project_migrate_legacy.bat
    ```
@@ -287,7 +287,7 @@ The toolkit provides extensive capabilities around the SystemVerilog (SV) standa
 When projects are managed successfully by the toolkit, they follow this strictly defined layout:
 
 ```text
-Project/
+../Project/
 `-- [ProjectName]/
     |-- fpga_auto.yml             # Critical toolkit manifest file
     |-- src/                      # Your RTL design sources (.v, .sv)
@@ -369,7 +369,7 @@ graph LR
 ```
 
 - **`MAIN.bat`**: 가장 상위 메뉴 형태 구성을 보여주는 툴킷 메인 실행(런처) 파일.
-- **`Project/`**: 개별 FPGA 프로젝트들이 담기는 기본 디렉토리 공간.
+- **`../Project/`**: 저장소와 같은 상위 레벨에 위치한 FPGA 프로젝트 기본 디렉토리 공간.
 - **`templates/`**: 툴킷을 작동시키는 공용 스크립트, 도구, 설정 파일들이 모여있는 핵심 공간.
   - **`templates/contexts/`**: 주요 로직 스크립트들이 논리적 바운디드 컨텍스트(Bounded Context) 단위로 분할되어 있습니다:
     - 🔍 `code_intel/`: RTL 구문 파싱, 계층 트리 생성, 회로도 렌더링 스크립트.
@@ -418,10 +418,10 @@ graph LR
    ```
 
 2. **툴킷 실행:**
-   단순히 `MAIN.bat` 파일을 더블 클릭하거나 명령 프롬프트에서 직접 실행하십시오. 스크립트가 `Project/` 내부의 유효한 프로젝트(`fpga_auto.yml` 보유 폴더)를 모두 자동 감지하고, 활용 가능한 인터랙티브 실행 메뉴를 띄워줍니다.
+   단순히 `MAIN.bat` 파일을 더블 클릭하거나 명령 프롬프트에서 직접 실행하십시오. 스크립트가 저장소와 같은 상위 레벨의 `../Project/` 내부 유효한 프로젝트(`fpga_auto.yml` 보유 폴더)를 모두 자동 감지하고, 활용 가능한 인터랙티브 실행 메뉴를 띄워줍니다.
 
 3. *(선택)* **구버전 프로젝트 마이그레이션**:
-   기존 루트 경로 등에 무질서하게 배치된 레거시 프로젝트를 표준 `Project/*` 구조로 복사/통합하려면 다음 스크립트를 사용하십시오.
+   기존 루트 경로 등에 무질서하게 배치된 레거시 프로젝트를 표준 `../Project/*` 구조로 복사/통합하려면 다음 스크립트를 사용하십시오.
    ```cmd
    templates\contexts\project_bootstrap\adapters\bat\project_migrate_legacy.bat
    ```
@@ -588,7 +588,7 @@ S. **Setup New Project** (`templates\contexts\project_bootstrap\adapters\bat\pro
 툴킷에 의해 관리되는 각 프로젝트는 모두 공통적으로 다음과 같이 통일된 표준 레이아웃을 가지게 됩니다:
 
 ```text
-Project/
+../Project/
 `-- [Project_Name]/
     |-- fpga_auto.yml             # 필수 매니페스트 파일 (이 파일이 있어야 툴이 감지함)
     |-- src/                      # RTL 원본 소스코드 저장 영역 (.v, .sv)

@@ -61,7 +61,7 @@ class TelegramBotTests(unittest.TestCase):
         )
 
     def create_project_root(self, base_dir: Path) -> tuple[Path, Path]:
-        project_root = base_dir / "Project"
+        project_root = base_dir / "managed_root" / "Project"
         project_path = project_root / "Demo"
         (project_path / "src").mkdir(parents=True, exist_ok=True)
         write_text(project_path / "fpga_auto.yml", "name: Demo\n")
@@ -125,7 +125,7 @@ class TelegramBotTests(unittest.TestCase):
     def test_extract_hierarchy_log_candidates_from_run_log_reads_current_log_hint(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
-            hinted_log = temp_root / "Project" / "log" / "hierarchy" / "hierarchy_20260306_123456_001.log"
+            hinted_log = temp_root / "managed_root" / "Project" / "log" / "hierarchy" / "hierarchy_20260306_123456_001.log"
             write_text(
                 temp_root / "telegram_fpga_hierarchy.log",
                 "\n".join(
@@ -143,7 +143,7 @@ class TelegramBotTests(unittest.TestCase):
     def test_extract_hierarchy_log_candidates_from_summary_marker_reads_summary_payload(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
-            project_root = temp_root / "Project"
+            project_root = temp_root / "managed_root" / "Project"
             hinted_log = project_root / "log" / "hierarchy" / "hierarchy_20260306_123456_001.log"
             summary_path = project_root / "output" / "history" / "hierarchy_view" / "r1" / "run_summary.json"
             write_text(hinted_log, "+-- TOP\n")
@@ -166,7 +166,7 @@ class TelegramBotTests(unittest.TestCase):
     def test_extract_vivado_log_candidates_from_summary_marker_reads_summary_payload(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
-            project_root = temp_root / "Project"
+            project_root = temp_root / "managed_root" / "Project"
             hinted_log = project_root / "tb" / "smoke" / "vivado_sim_tb_smoke.log"
             summary_path = project_root / "output" / "history" / "vivado_sim_nogui" / "r1" / "run_summary.json"
             write_text(hinted_log, "[INFO] Auto replay completed\n")
@@ -189,7 +189,7 @@ class TelegramBotTests(unittest.TestCase):
     def test_extract_vivado_log_candidates_from_run_summary_marker_reads_summary_payload(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
-            project_root = temp_root / "Project"
+            project_root = temp_root / "managed_root" / "Project"
             hinted_log = project_root / "custom_logs" / "vivado_sim_tb_smoke.log"
             summary_path = project_root / "output" / "history" / "vivado_sim_nogui" / "r1" / "run_summary.json"
             write_text(hinted_log, "[INFO] Auto replay completed\n")
@@ -212,7 +212,7 @@ class TelegramBotTests(unittest.TestCase):
     def test_extract_vivado_log_candidates_from_resolved_log_line(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
-            hinted_log = temp_root / "Project" / "vivado_project" / "vivado.log"
+            hinted_log = temp_root / "managed_root" / "Project" / "vivado_project" / "vivado.log"
             write_text(hinted_log, "[INFO] Auto replay run all completed.\n")
             write_text(
                 temp_root / "telegram_fpga_vivado.log",

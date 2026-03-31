@@ -60,7 +60,7 @@ function parseArgs(argv) {
   }
 
   if (!opts.projectRoot) {
-    opts.projectRoot = path.join(opts.repoRoot, "Project");
+    opts.projectRoot = path.resolve(opts.repoRoot, "..", "Project");
   }
 
   return opts;

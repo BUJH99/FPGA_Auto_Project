@@ -3,8 +3,15 @@ setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 title FPGA Automation - MAIN
 set "SETUP_BAT=%CD%\templates\contexts\project_bootstrap\adapters\bat\project_create.bat"
-set "PROJECT_ROOT=%CD%\Project"
 set "CONSOLE_HELPER=%CD%\templates\shared\adapters\bat\console_ui.bat"
+set "PROJECT_ROOT_HELPER=%CD%\templates\shared\adapters\bat\resolve_managed_project_root.bat"
+
+if exist "%PROJECT_ROOT_HELPER%" call "%PROJECT_ROOT_HELPER%" "%CD%"
+if defined FPGA_AUTO_PROJECT_ROOT (
+    set "PROJECT_ROOT=%FPGA_AUTO_PROJECT_ROOT%"
+) else (
+    for %%I in ("%CD%\..") do set "PROJECT_ROOT=%%~fI\Project"
+)
 
 :: Define ESC character for ANSI colors
 for /F %%a in ('echo prompt $E ^| cmd') do set "ESC=%%a"
@@ -28,7 +35,7 @@ echo  %Green%FPGA Automation MASTER Menu%Reset%
 echo %Cyan%===============================================================================%Reset%
 echo.
 
-:: Scan only Project/* directories (manifest-only policy)
+:: Scan only sibling ../Project/* directories (manifest-only policy)
 set "PROJ_COUNT=0"
 echo Available Projects:
 if exist "%PROJECT_ROOT%\" (
@@ -37,8 +44,8 @@ if exist "%PROJECT_ROOT%\" (
             if exist "%%~fD\fpga_auto.yml" (
                 set /a PROJ_COUNT+=1
                 set "PROJ_PATH_!PROJ_COUNT!=%%~fD"
-                set "PROJ_LABEL_!PROJ_COUNT!=Project\%%~nxD"
-                echo   %White%[!PROJ_COUNT!] Project\%%~nxD%Reset%
+                set "PROJ_LABEL_!PROJ_COUNT!=..\Project\%%~nxD"
+                echo   %White%[!PROJ_COUNT!] ..\Project\%%~nxD%Reset%
             )
         )
     )
@@ -50,7 +57,8 @@ goto :PROJECT_SELECT_MENU
 :NO_PROJECT_MENU
 echo.
 echo %Red%[No Projects Found]%Reset%
-echo No valid project folder detected.
+echo No valid project folder detected under:
+echo   %PROJECT_ROOT%
 echo.
 echo   %White%[S] Setup New Project%Reset%
 echo   %Yellow%[C] CUSTOMBAT%Reset%
@@ -338,10 +346,11 @@ exit /b 0
 :SET_PROJECT_LABEL
 set "TARGET_PROJECT_ABS=%~f1"
 set "TARGET_PROJECT=%TARGET_PROJECT_ABS%"
-set "TMP_REL=!TARGET_PROJECT_ABS:%CD%\=!"
+set "TMP_REL=!TARGET_PROJECT_ABS:%PROJECT_ROOT%\=!"
 if not "!TMP_REL!"=="!TARGET_PROJECT_ABS!" (
     if "!TMP_REL:~0,1!"=="\" set "TMP_REL=!TMP_REL:~1!"
-    if not "!TMP_REL!"=="" set "TARGET_PROJECT=!TMP_REL!"
+    set "TARGET_PROJECT=..\Project"
+    if not "!TMP_REL!"=="" set "TARGET_PROJECT=..\Project\!TMP_REL!"
 )
 exit /b 0
 

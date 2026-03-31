@@ -7,11 +7,11 @@
 - Project root: `<project>/fpga_auto.yml`
 
 ## Project Root Policy
-- New projects are created under `<repo>/Project/<name>/`.
+- New projects are created under `<repo-parent>/Project/<name>/`.
 - Canonical project-create entrypoint is `templates/contexts/project_bootstrap/adapters/bat/project_create.bat`.
 - Project creation auto-generates `<project>/fpga_auto.yml` from `templates/manifest/fpga_auto.template.yml`.
-- `MAIN.bat` discovers only `Project/*` projects with valid `fpga_auto.yml`.
-- Legacy root projects can be copied to `Project/*` with `templates/contexts/project_bootstrap/adapters/bat/project_migrate_legacy.bat`.
+- `MAIN.bat` discovers only sibling `../Project/*` projects with valid `fpga_auto.yml`.
+- Legacy root projects can be copied to sibling `../Project/*` with `templates/contexts/project_bootstrap/adapters/bat/project_migrate_legacy.bat`.
 
 ## v0 Required Fields
 All fields below are required in v0:

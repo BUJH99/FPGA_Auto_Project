@@ -49,7 +49,7 @@ def make_config(project_root: Path) -> Config:
 
 class ExecutionStackTests(unittest.TestCase):
     def create_project(self, root: Path) -> Path:
-        project_root = root / "Project"
+        project_root = root / "managed_root" / "Project"
         project_path = project_root / "Demo"
         (project_path / "src").mkdir(parents=True, exist_ok=True)
         write_text(project_path / "fpga_auto.yml", "name: Demo\n")

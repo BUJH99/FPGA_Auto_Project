@@ -3,6 +3,7 @@ setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
 set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
+set "PROJECT_ROOT_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\resolve_managed_project_root.bat"
 
 set "NO_PAUSE=0"
 set "INFER_GLOBS=0"
@@ -13,6 +14,12 @@ if /i "%~2"=="--infer-globs" set "INFER_GLOBS=1"
 
 for %%I in ("%TEMPLATES_ROOT%\..") do set "REPO_ROOT=%%~fI"
 set "MIGRATE_TOOL=%TEMPLATES_ROOT%\contexts\project_bootstrap\adapters\cli\project_migrate_legacy_cli.js"
+if exist "%PROJECT_ROOT_HELPER%" call "%PROJECT_ROOT_HELPER%" "%REPO_ROOT%"
+if defined FPGA_AUTO_PROJECT_ROOT (
+    set "PROJECT_ROOT=%FPGA_AUTO_PROJECT_ROOT%"
+) else (
+    for %%I in ("%REPO_ROOT%\..") do set "PROJECT_ROOT=%%~fI\Project"
+)
 
 if not exist "%MIGRATE_TOOL%" (
     echo [ERROR] Migration tool not found: %MIGRATE_TOOL%
@@ -29,9 +36,9 @@ if errorlevel 1 (
 
 pushd "%REPO_ROOT%" >nul 2>nul
 if "%INFER_GLOBS%"=="1" (
-    node "%MIGRATE_TOOL%" --repo "%REPO_ROOT%" --infer-globs
+    node "%MIGRATE_TOOL%" --repo "%REPO_ROOT%" --project-root "%PROJECT_ROOT%" --infer-globs
 ) else (
-    node "%MIGRATE_TOOL%" --repo "%REPO_ROOT%"
+    node "%MIGRATE_TOOL%" --repo "%REPO_ROOT%" --project-root "%PROJECT_ROOT%"
 )
 set "RC=%errorlevel%"
 popd >nul 2>nul

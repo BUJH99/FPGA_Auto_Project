@@ -442,12 +442,12 @@ function buildDirectoryTreeSnippet(directoryNames) {
   const present = Array.isArray(directoryNames) ? directoryNames.filter(Boolean) : [];
   if (present.length === 0) {
     return [
-      "Project/",
+      "../Project/",
       "└── src/",
     ].join("\n");
   }
 
-  const lines = ["Project/"];
+  const lines = ["../Project/"];
   present.forEach((name, index) => {
     const isLast = index === present.length - 1;
     lines.push(`${isLast ? "└──" : "├──"} ${name}/`);

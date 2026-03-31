@@ -2,10 +2,16 @@
 setlocal EnableExtensions DisableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..\..") do set "REPO_ROOT=%%~fI"
+set "PROJECT_ROOT_HELPER=%REPO_ROOT%\templates\shared\adapters\bat\resolve_managed_project_root.bat"
 cd /d "%REPO_ROOT%"
 title RISC-V Timing Verification
 
-set "PROJECT_ROOT=%REPO_ROOT%\Project"
+if exist "%PROJECT_ROOT_HELPER%" call "%PROJECT_ROOT_HELPER%" "%REPO_ROOT%"
+if defined FPGA_AUTO_PROJECT_ROOT (
+    set "PROJECT_ROOT=%FPGA_AUTO_PROJECT_ROOT%"
+) else (
+    for %%I in ("%REPO_ROOT%\..") do set "PROJECT_ROOT=%%~fI\Project"
+)
 set "DEFAULT_VIVADO_BAT=C:\AMDDesignTools\2025.2\Vivado\bin\vivado.bat"
 set "USER_CANCEL_RC=99"
 
@@ -17,6 +23,8 @@ call :status "Python and Vivado launchers resolved"
 
 set "TARGET_INPUT=%~1"
 set "RUN_MODE=%~2"
+set "RUN_MODE_SOURCE="
+if defined RUN_MODE set "RUN_MODE_SOURCE=provided"
 set "PROGRAM_INPUT="
 set "FOCUS_FILTER_INPUT="
 call :parse_optional_args PROGRAM_INPUT FOCUS_FILTER_INPUT %3 %4 %5 %6 %7 %8 %9
@@ -33,7 +41,7 @@ if not errorlevel 1 goto :PROJECT_READY
 
 echo.
 echo [ERROR] Invalid project folder: "%TARGET_INPUT%"
-echo         Select a folder under Project\* that contains:
+echo         Select a folder under "%PROJECT_ROOT%\*" that contains:
 echo         - fpga_auto.yml
 echo         - src\
 echo         - tools\timing_analysis_profile.json
@@ -132,13 +140,20 @@ if not exist "%COLLECTOR_TCL%" (
 if not defined RUN_MODE (
     call :prompt_run_mode RUN_MODE
     if errorlevel 1 goto :CANCEL
+    set "RUN_MODE_SOURCE=prompt"
 )
 
 call :normalize_run_mode "%RUN_MODE%" "%ANALYSIS_MODE%" RUN_MODE_NORMALIZED
 if errorlevel 1 (
     echo.
     echo [ERROR] Invalid run mode "%RUN_MODE%"
-    if /I "%ANALYSIS_MODE%"=="pipeline_perf" (
+    if /I "%RUN_MODE_SOURCE%"=="prompt" (
+        if /I "%ANALYSIS_MODE%"=="pipeline_perf" (
+            echo         Use 1, 2, 3, 4, or 5 from the menu.
+        ) else (
+            echo         Use 1, 2, or 3 from the menu.
+        )
+    ) else if /I "%ANALYSIS_MODE%"=="pipeline_perf" (
         echo         Use 1/full, 2/reuse, 3/base, 4/focus, 5/focus-partial, 6/pipeline-only, or 7/program.
     ) else (
         echo         Use 1/full, 2/reuse, or 3/program.
@@ -157,6 +172,43 @@ call :status "Loaded analysis profile and markdown report location"
 
 set "RUN_ARGS="
 set "RUN_LABEL=Vivado + Tcl + report"
+set "RUN_REFRESH_ALL=0"
+if /I "%RUN_MODE_NORMALIZED%"=="single_full_coverage" (
+    set "PROGRAM_NORMALIZED=full_coverage"
+    set "PROGRAM_LABEL=Full Coverage.mem"
+)
+if /I "%RUN_MODE_NORMALIZED%"=="single_bubble_sort" (
+    set "PROGRAM_NORMALIZED=bubble_sort"
+    set "PROGRAM_LABEL=Bubble Sort.mem"
+)
+if /I "%RUN_MODE_NORMALIZED%"=="pipeline_full_coverage" (
+    set "PROGRAM_NORMALIZED=full_coverage"
+    set "PROGRAM_LABEL=Full Coverage.mem"
+    set "RUN_ARGS=--pipeline-only --skip-instruction-focus"
+    set "RUN_LABEL=Pipeline only ^(5-stage build + report^)"
+)
+if /I "%RUN_MODE_NORMALIZED%"=="focus_full_coverage" (
+    set "PROGRAM_NORMALIZED=full_coverage"
+    set "PROGRAM_LABEL=Full Coverage.mem"
+    set "RUN_ARGS=--focus-only"
+    set "RUN_LABEL=Instruction-focus only ^(reuse base artifacts, rerun all classes/mnemonics^)"
+)
+if /I "%RUN_MODE_NORMALIZED%"=="pipeline_bubble_sort" (
+    set "PROGRAM_NORMALIZED=bubble_sort"
+    set "PROGRAM_LABEL=Bubble Sort.mem"
+    set "RUN_ARGS=--pipeline-only --skip-instruction-focus"
+    set "RUN_LABEL=Pipeline only ^(5-stage build + report^)"
+)
+if /I "%RUN_MODE_NORMALIZED%"=="focus_bubble_sort" (
+    set "PROGRAM_NORMALIZED=bubble_sort"
+    set "PROGRAM_LABEL=Bubble Sort.mem"
+    set "RUN_ARGS=--focus-only"
+    set "RUN_LABEL=Instruction-focus only ^(reuse base artifacts, rerun all classes/mnemonics^)"
+)
+if /I "%RUN_MODE_NORMALIZED%"=="report_refresh_all" (
+    set "RUN_REFRESH_ALL=1"
+    set "RUN_LABEL=Report refresh only ^(reuse existing artifacts for all timing program images^)"
+)
 if /I "%RUN_MODE_NORMALIZED%"=="reuse" (
     set "RUN_ARGS=%REUSE_FLAG%"
     set "RUN_LABEL=Reuse existing artifacts + regenerate report"
@@ -181,10 +233,16 @@ if /I "%RUN_MODE_NORMALIZED%"=="pipeline_only" (
     set "RUN_ARGS=--pipeline-only --skip-instruction-focus"
     set "RUN_LABEL=5-stage only ^(pipeline build only, no single-cycle rebuild, no instruction-focus rerun^)"
 )
-if defined PROGRAM_NORMALIZED (
+set "ARTIFACT_ROOT_DISPLAY=%TARGET_PROJECT%\%OUTPUT_RELATIVE%"
+if /I "%RUN_REFRESH_ALL%"=="1" (
+    set "ARTIFACT_ROOT_DISPLAY=%TARGET_PROJECT%\%OUTPUT_RELATIVE%\programs"
+) else if defined PROGRAM_NORMALIZED (
+    set "ARTIFACT_ROOT_DISPLAY=%TARGET_PROJECT%\%OUTPUT_RELATIVE%\programs\%PROGRAM_NORMALIZED%"
+)
+if /I not "%RUN_REFRESH_ALL%"=="1" if defined PROGRAM_NORMALIZED (
     set "RUN_ARGS=%RUN_ARGS% --program=""%PROGRAM_NORMALIZED%"""
 )
-set "RUN_ARGS=%RUN_ARGS% %REPORT_ARG_NAME%=""%REPORT_PATH%"""
+if /I not "%RUN_REFRESH_ALL%"=="1" set "RUN_ARGS=%RUN_ARGS% %REPORT_ARG_NAME%=""%REPORT_PATH%"""
 call :status "Run mode prepared: %RUN_LABEL%"
 
 call :clear_screen
@@ -199,13 +257,15 @@ echo Tcl Collector  : "%COLLECTOR_TCL%"
 echo Artifact Root  : "%ARTIFACT_ROOT_DISPLAY%"
 echo Report Path    : "%REPORT_PATH%"
 echo Run Mode       : %RUN_LABEL%
-if defined PROGRAM_LABEL (
+if /I "%RUN_REFRESH_ALL%"=="1" (
+    echo Program Scope  : Full Coverage.mem + Bubble Sort.mem
+) else if defined PROGRAM_LABEL (
     echo Program Image  : %PROGRAM_LABEL%
 )
 if defined FOCUS_FILTER_INPUT (
     echo Focus Filter   : %FOCUS_FILTER_INPUT%
 )
-if /I not "%RUN_MODE_NORMALIZED%"=="reuse" (
+if /I not "%RUN_MODE_NORMALIZED%"=="reuse" if /I not "%RUN_REFRESH_ALL%"=="1" (
     if defined VIVADO_BAT (
         echo Vivado Bat    : "%VIVADO_BAT%"
     ) else (
@@ -216,7 +276,11 @@ echo ===============================================================
 echo.
 
 call :status "Launching timing analysis Python flow"
-"%PYTHON_EXE%" %PYTHON_FLAGS% "%RUN_SCRIPT%" %RUN_ARGS%
+if /I "%RUN_REFRESH_ALL%"=="1" (
+    call :run_report_refresh_all
+) else (
+    "%PYTHON_EXE%" %PYTHON_FLAGS% "%RUN_SCRIPT%" %RUN_ARGS%
+)
 set "EXIT_CODE=%ERRORLEVEL%"
 if not "%EXIT_CODE%"=="0" (
     echo.
@@ -356,7 +420,7 @@ for /d %%D in ("%PROJECT_ROOT%\*") do (
             if exist "%%~fD\tools\timing_analysis_profile.json" (
                 call set /a TIMING_PROJECT_COUNT+=1
                 call set "TIMING_PROJECT_PATH_%%TIMING_PROJECT_COUNT%%=%%~fD"
-                call set "TIMING_PROJECT_LABEL_%%TIMING_PROJECT_COUNT%%=Project\%%~nxD"
+                call set "TIMING_PROJECT_LABEL_%%TIMING_PROJECT_COUNT%%=..\Project\%%~nxD"
             )
         )
     )
@@ -402,21 +466,15 @@ exit /b 1
 call :clear_screen
 echo.
 if /I "%ANALYSIS_MODE%"=="pipeline_perf" (
-    echo Current program image: %PROGRAM_LABEL%
-    echo.
-    echo [1] Full timing run ^(single-cycle + pipeline + instruction-focus + report^)
-    echo [2] Reuse existing artifacts and regenerate report only
-    echo [3] Base comparison only ^(single-cycle + pipeline, skip instruction-focus rerun^)
-    echo [4] Instruction-focus only ^(reuse base artifacts, rerun all classes/mnemonics^)
-    echo [5] Partial instruction-focus only ^(reuse base artifacts, rerun selected focuses^)
-    echo [6] 5-stage only ^(pipeline build only, no single-cycle rebuild, no instruction-focus rerun^)
-    echo [7] Change timing program image
+    echo [1] Pipeline - FullCoverage
+    echo [2] Instruction - FullCoverage
+    echo [3] Pipeline - BubbleSort
+    echo [4] Instruction - BubbleSort
+    echo [5] Report refresh only ^(use when 1-4 failed and you only need report regeneration^)
 ) else (
-    echo Current program image: %PROGRAM_LABEL%
-    echo.
-    echo [1] Full timing run ^(Vivado + Tcl collector + report^)
-    echo [2] Reuse existing artifacts and regenerate report only
-    echo [3] Change timing program image
+    echo [1] FullCoverage
+    echo [2] BubbleSort
+    echo [3] Report refresh only ^(use when 1-2 failed and you only need report regeneration^)
 )
 set "RUN_MODE_INPUT="
 set /p "RUN_MODE_INPUT=Select mode [1]: "
@@ -426,37 +484,69 @@ exit /b 0
 
 :normalize_run_mode
 set "%~3="
-if /I "%~1"=="1" set "%~3=full"
+if /I "%RUN_MODE_SOURCE%"=="prompt" (
+    if /I "%~2"=="pipeline_perf" (
+        if /I "%~1"=="1" set "%~3=pipeline_full_coverage"
+        if /I "%~1"=="2" set "%~3=focus_full_coverage"
+        if /I "%~1"=="3" set "%~3=pipeline_bubble_sort"
+        if /I "%~1"=="4" set "%~3=focus_bubble_sort"
+        if /I "%~1"=="5" set "%~3=report_refresh_all"
+    )
+    if /I "%~2"=="single_cycle" (
+        if /I "%~1"=="1" set "%~3=single_full_coverage"
+        if /I "%~1"=="2" set "%~3=single_bubble_sort"
+        if /I "%~1"=="3" set "%~3=report_refresh_all"
+    )
+)
+if /I not "%RUN_MODE_SOURCE%"=="prompt" (
+    if /I "%~1"=="1" set "%~3=full"
+    if /I "%~1"=="2" set "%~3=reuse"
+)
 if /I "%~1"=="full" set "%~3=full"
 if /I "%~1"=="f" set "%~3=full"
-if /I "%~1"=="2" set "%~3=reuse"
 if /I "%~1"=="reuse" set "%~3=reuse"
 if /I "%~1"=="r" set "%~3=reuse"
+if /I "%~1"=="single_full_coverage" set "%~3=single_full_coverage"
+if /I "%~1"=="single-full-coverage" set "%~3=single_full_coverage"
+if /I "%~1"=="single_bubble_sort" set "%~3=single_bubble_sort"
+if /I "%~1"=="single-bubble-sort" set "%~3=single_bubble_sort"
+if /I "%~1"=="pipeline_full_coverage" set "%~3=pipeline_full_coverage"
+if /I "%~1"=="pipeline-full-coverage" set "%~3=pipeline_full_coverage"
+if /I "%~1"=="focus_full_coverage" set "%~3=focus_full_coverage"
+if /I "%~1"=="focus-full-coverage" set "%~3=focus_full_coverage"
+if /I "%~1"=="pipeline_bubble_sort" set "%~3=pipeline_bubble_sort"
+if /I "%~1"=="pipeline-bubble-sort" set "%~3=pipeline_bubble_sort"
+if /I "%~1"=="focus_bubble_sort" set "%~3=focus_bubble_sort"
+if /I "%~1"=="focus-bubble-sort" set "%~3=focus_bubble_sort"
+if /I "%~1"=="report_refresh_all" set "%~3=report_refresh_all"
+if /I "%~1"=="report-refresh-all" set "%~3=report_refresh_all"
+if /I "%~1"=="refresh_all" set "%~3=report_refresh_all"
+if /I "%~1"=="refresh-all" set "%~3=report_refresh_all"
 if /I "%~1"=="program" set "%~3=program_select"
 if /I "%~1"=="program-select" set "%~3=program_select"
 if /I "%~1"=="ps" set "%~3=program_select"
 if /I "%~2"=="pipeline_perf" (
-    if /I "%~1"=="3" set "%~3=base"
+    if /I not "%RUN_MODE_SOURCE%"=="prompt" if /I "%~1"=="3" set "%~3=base"
     if /I "%~1"=="base" set "%~3=base"
     if /I "%~1"=="b" set "%~3=base"
-    if /I "%~1"=="4" set "%~3=focus"
+    if /I not "%RUN_MODE_SOURCE%"=="prompt" if /I "%~1"=="4" set "%~3=focus"
     if /I "%~1"=="focus" set "%~3=focus"
     if /I "%~1"=="focus-only" set "%~3=focus"
     if /I "%~1"=="fo" set "%~3=focus"
-    if /I "%~1"=="5" set "%~3=focus_partial"
+    if /I not "%RUN_MODE_SOURCE%"=="prompt" if /I "%~1"=="5" set "%~3=focus_partial"
     if /I "%~1"=="focus_partial" set "%~3=focus_partial"
     if /I "%~1"=="focus-partial" set "%~3=focus_partial"
     if /I "%~1"=="partial" set "%~3=focus_partial"
     if /I "%~1"=="fp" set "%~3=focus_partial"
-    if /I "%~1"=="6" set "%~3=pipeline_only"
+    if /I not "%RUN_MODE_SOURCE%"=="prompt" if /I "%~1"=="6" set "%~3=pipeline_only"
     if /I "%~1"=="pipeline" set "%~3=pipeline_only"
     if /I "%~1"=="pipeline_only" set "%~3=pipeline_only"
     if /I "%~1"=="pipeline-only" set "%~3=pipeline_only"
     if /I "%~1"=="po" set "%~3=pipeline_only"
-    if /I "%~1"=="7" set "%~3=program_select"
+    if /I not "%RUN_MODE_SOURCE%"=="prompt" if /I "%~1"=="7" set "%~3=program_select"
 )
 if /I "%~2"=="single_cycle" (
-    if /I "%~1"=="3" set "%~3=program_select"
+    if /I not "%RUN_MODE_SOURCE%"=="prompt" if /I "%~1"=="3" set "%~3=program_select"
 )
 if defined %~3 exit /b 0
 exit /b 1
@@ -593,6 +683,24 @@ if not defined FOCUS_FILTER_PROMPT (
 )
 set "%~1=%FOCUS_FILTER_PROMPT%"
 exit /b 0
+
+:run_report_refresh_all
+set "RUN_REFRESH_COMMAND_RC=0"
+for %%P in (full_coverage bubble_sort) do (
+    call :status "Refreshing report data for %%P"
+    if /I "%ANALYSIS_MODE%"=="pipeline_perf" (
+        "%PYTHON_EXE%" %PYTHON_FLAGS% "%RUN_SCRIPT%" --skip-vivado --program="%%P" %REPORT_ARG_NAME%="%REPORT_PATH%"
+    ) else (
+        "%PYTHON_EXE%" %PYTHON_FLAGS% "%RUN_SCRIPT%" --reuse-existing --program="%%P" %REPORT_ARG_NAME%="%REPORT_PATH%"
+    )
+    if errorlevel 1 (
+        set "RUN_REFRESH_COMMAND_RC=1"
+        goto :RUN_REPORT_REFRESH_ALL_DONE
+    )
+)
+
+:RUN_REPORT_REFRESH_ALL_DONE
+exit /b %RUN_REFRESH_COMMAND_RC%
 
 :pause_if_interactive
 if /I "%NO_PAUSE%"=="1" exit /b 0

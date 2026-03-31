@@ -19,6 +19,23 @@ proc riscv_timing_analysis::maybe_cd_repo_root {} {
   }
 }
 
+proc riscv_timing_analysis::configure_max_threads {{default_threads 20}} {
+  set resolved_threads $default_threads
+
+  if {[info exists ::env(NUMBER_OF_PROCESSORS)]} {
+    set candidate [string trim $::env(NUMBER_OF_PROCESSORS)]
+    if {[string is integer -strict $candidate] && $candidate > 0} {
+      set resolved_threads $candidate
+      set_param general.maxThreads $resolved_threads
+      puts " \[INFO\] CPU Optimization Enabled: Using $resolved_threads threads."
+      return
+    }
+  }
+
+  set_param general.maxThreads $resolved_threads
+  puts " \[INFO\] CPU Count detection failed. Defaulting to $resolved_threads threads."
+}
+
 proc riscv_timing_analysis::emit_progress {current_units total_units label} {
   puts "__FPGA_AUTO_PROGRESS__\t${current_units}\t${total_units}\t${label}"
   flush stdout

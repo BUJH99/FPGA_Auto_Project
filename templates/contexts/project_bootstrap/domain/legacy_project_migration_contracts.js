@@ -3,7 +3,7 @@ const { normalizeSlashes } = require("./legacy_project_candidate");
 
 function createLegacyProjectMigrationRequest(payload = {}) {
   const repoRoot = path.resolve(payload.repoRoot || process.cwd());
-  const projectRoot = path.resolve(payload.projectRoot || path.join(repoRoot, "Project"));
+  const projectRoot = path.resolve(payload.projectRoot || path.join(repoRoot, "..", "Project"));
   return {
     repoRoot: normalizeSlashes(repoRoot),
     projectRoot: normalizeSlashes(projectRoot),

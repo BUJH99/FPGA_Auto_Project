@@ -541,30 +541,51 @@ def find_module_source_path(source_files: list[pathlib.Path], module_name: str) 
     raise FileNotFoundError(f"Could not locate source file for module `{module_name}`.")
 
 
-def parse_ansi_module_ports(source_text: str, module_name: str) -> list[dict[str, str]]:
-    cleaned = remove_sv_comments(source_text)
-    module_match = re.search(rf"\bmodule\s+{re.escape(module_name)}\s*\(", cleaned)
-    if not module_match:
-        raise ValueError(f"Could not find ANSI module header for `{module_name}`.")
+def parse_balanced_group(source_text: str, start_index: int) -> tuple[str, int]:
+    if start_index >= len(source_text) or source_text[start_index] != "(":
+        raise ValueError("Balanced-group parse must start at an opening parenthesis.")
 
-    cursor = module_match.end()
+    cursor = start_index + 1
     depth = 1
-    header_chars: list[str] = []
-    while cursor < len(cleaned):
-        char = cleaned[cursor]
+    group_chars: list[str] = []
+    while cursor < len(source_text):
+        char = source_text[cursor]
         if char == "(":
             depth += 1
         elif char == ")":
             depth -= 1
             if depth == 0:
-                break
-        header_chars.append(char)
+                return "".join(group_chars), cursor + 1
+        group_chars.append(char)
         cursor += 1
 
-    if depth != 0:
-        raise ValueError(f"Could not parse module header for `{module_name}`.")
+    raise ValueError("Unterminated parenthesized group.")
 
-    header = "".join(header_chars)
+
+def parse_ansi_module_ports(source_text: str, module_name: str) -> list[dict[str, str]]:
+    cleaned = remove_sv_comments(source_text)
+    module_match = re.search(rf"\bmodule\s+{re.escape(module_name)}\b", cleaned)
+    if not module_match:
+        raise ValueError(f"Could not find ANSI module header for `{module_name}`.")
+
+    cursor = module_match.end()
+    while cursor < len(cleaned) and cleaned[cursor].isspace():
+        cursor += 1
+
+    if cursor < len(cleaned) and cleaned[cursor] == "#":
+        cursor += 1
+        while cursor < len(cleaned) and cleaned[cursor].isspace():
+            cursor += 1
+        if cursor >= len(cleaned) or cleaned[cursor] != "(":
+            raise ValueError(f"Could not parse parameter block for `{module_name}`.")
+        _, cursor = parse_balanced_group(cleaned, cursor)
+        while cursor < len(cleaned) and cleaned[cursor].isspace():
+            cursor += 1
+
+    if cursor >= len(cleaned) or cleaned[cursor] != "(":
+        raise ValueError(f"Could not find ANSI port list for `{module_name}`.")
+
+    header, _ = parse_balanced_group(cleaned, cursor)
     items = split_top_level_commas(header)
 
     ports: list[dict[str, str]] = []

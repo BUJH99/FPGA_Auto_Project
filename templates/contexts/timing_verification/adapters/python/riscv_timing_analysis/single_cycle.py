@@ -8,6 +8,7 @@ import re
 import statistics
 from collections import Counter
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 from .common import (
@@ -26,10 +27,19 @@ from .execution_metrics import (
     format_runtime_ns,
 )
 from .focus import find_module_source_path, parse_ansi_module_ports, render_defparam_wrapper, sanitize_token
+from .integrated_report import (
+    merge_program_detail_section,
+    shift_markdown_headings,
+    strip_first_markdown_heading,
+)
 from .rv32i import DEFAULT_CLASS_ORDER, classify_word, parse_asm_instructions
 
 
 RESERVED_ARTIFACT_KEYS = {"actual", "hierarchical"}
+VIVADO_PHASE_PROGRESS_UNITS = 3
+VIVADO_TOTAL_PROGRESS_UNITS = 6
+VIVADO_EXIT_ACCESS_VIOLATION = "EXCEPTION_ACCESS_VIOLATION"
+
 PROGRAM_LIBRARY: dict[str, dict[str, pathlib.Path | str]] = {
     "full_coverage": {
         "label": "Full Coverage",
@@ -65,6 +75,71 @@ def fmt_int(value: int | None) -> str:
     if value is None:
         return "NA"
     return str(value)
+
+
+def parse_int_metric(value: Any) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+
+    text = str(value).replace(",", "").strip()
+    if not text or text.upper() == "NA":
+        return None
+    try:
+        return int(float(text))
+    except ValueError:
+        return None
+
+
+def fmt_delta_float(left: float | None, right: float | None, digits: int = 3) -> str:
+    if left is None or right is None:
+        return "NA"
+    return f"{right - left:+.{digits}f}"
+
+
+def fmt_delta_int(left: int | None, right: int | None) -> str:
+    if left is None or right is None:
+        return "NA"
+    return f"{right - left:+d}"
+
+
+def fmt_delta_ratio(left: float | None, right: float | None, digits: int = 3) -> str:
+    if left is None or right is None:
+        return "NA"
+    return f"{right - left:+.{digits}f}x"
+
+
+def determine_timing_verdict(
+    *,
+    wns_ns: float | None,
+    failing_endpoints: int,
+    health_rows: list[dict[str, str]],
+) -> str:
+    if wns_ns is not None and wns_ns < 0:
+        return "FAIL"
+    if failing_endpoints > 0:
+        return "FAIL"
+    if any(row["status"] != "PASS" for row in health_rows):
+        return "WARN"
+    return "PASS"
+
+
+def describe_runtime_winner(
+    single_runtime_ns: float | None,
+    pipeline_runtime_ns: float | None,
+) -> str:
+    if single_runtime_ns is None or pipeline_runtime_ns is None:
+        return "NA"
+    if abs(single_runtime_ns - pipeline_runtime_ns) < 1e-9:
+        return "Tie"
+    if pipeline_runtime_ns < single_runtime_ns:
+        return f"5-stage pipeline ({format_runtime_ns(single_runtime_ns - pipeline_runtime_ns)} faster)"
+    return f"Single-cycle ({format_runtime_ns(pipeline_runtime_ns - single_runtime_ns)} faster)"
 
 
 def safe_mean(values: list[float]) -> float | None:
@@ -264,6 +339,7 @@ def build_wrapper_variables(
     *,
     source_files: list[pathlib.Path] | None = None,
     top_name: str | None = None,
+    analysis_phase: str = "full",
 ) -> dict[str, Any]:
     family_configs = []
     for family in metadata["probe_families"]:
@@ -285,9 +361,117 @@ def build_wrapper_variables(
         "clock_port": contract["clock_port"],
         "reset_port": contract["reset_port"],
         "clk_period_ns": float(contract["clock_period_ns"]),
+        "analysis_phase": analysis_phase,
         "family_configs": family_configs,
         "module_metric_exclude_patterns": metadata.get("module_metrics_exclude_patterns", []),
     }
+
+
+def append_vivado_log_section(
+    combined_log_path: pathlib.Path,
+    *,
+    title: str,
+    source_log_path: pathlib.Path,
+) -> None:
+    if not source_log_path.exists():
+        return
+
+    combined_log_path.parent.mkdir(parents=True, exist_ok=True)
+    content = source_log_path.read_text(encoding="utf-8", errors="ignore")
+    with combined_log_path.open("a", encoding="utf-8") as handle:
+        if handle.tell():
+            handle.write("\n")
+        handle.write(f"===== {title} =====\n")
+        handle.write(content)
+        if content and not content.endswith("\n"):
+            handle.write("\n")
+
+
+def expected_actual_phase_artifacts(output_dir: pathlib.Path, metadata: dict[str, Any]) -> list[pathlib.Path]:
+    artifacts = [
+        output_dir / "actual_timing_summary.rpt",
+        output_dir / "actual_timing_top100.rpt",
+        output_dir / "actual_timing_paths.tsv",
+        output_dir / "actual_high_fanout.rpt",
+        output_dir / "actual_utilization.rpt",
+        output_dir / "actual_methodology.rpt",
+        output_dir / "actual_qor_suggestions.rpt",
+        output_dir / "actual_fanout_nets.tsv",
+    ]
+    for family in metadata.get("probe_families", []):
+        artifact_key = str(family.get("artifact_key", family["key"]))
+        artifacts.append(output_dir / f"{artifact_key}_timing_top20.rpt")
+        artifacts.append(output_dir / f"{artifact_key}_timing_paths.tsv")
+    return artifacts
+
+
+def expected_hierarchical_phase_artifacts(output_dir: pathlib.Path) -> list[pathlib.Path]:
+    return [
+        output_dir / "hierarchical_utilization.rpt",
+        output_dir / "hierarchical_timing_top20.rpt",
+        output_dir / "module_metrics.tsv",
+    ]
+
+
+def vivado_exit_crash_is_tolerable(
+    *,
+    log_path: pathlib.Path,
+    completion_marker: str,
+    expected_artifacts: list[pathlib.Path],
+) -> bool:
+    if not log_path.exists():
+        return False
+    log_text = log_path.read_text(encoding="utf-8", errors="ignore")
+    if completion_marker not in log_text:
+        return False
+    if VIVADO_EXIT_ACCESS_VIOLATION not in log_text:
+        return False
+    if "# exit" not in log_text and "Exiting Vivado" not in log_text:
+        return False
+    return all(path.exists() for path in expected_artifacts)
+
+
+def maybe_tolerate_vivado_exit_crash(
+    *,
+    phase_label: str,
+    log_path: pathlib.Path,
+    completion_marker: str,
+    expected_artifacts: list[pathlib.Path],
+) -> bool:
+    if not vivado_exit_crash_is_tolerable(
+        log_path=log_path,
+        completion_marker=completion_marker,
+        expected_artifacts=expected_artifacts,
+    ):
+        return False
+
+    print(
+        f"[WARN] Vivado {phase_label} exited abnormally after writing all requested artifacts. "
+        f"Continuing with collected results from {log_path}.",
+        flush=True,
+    )
+    return True
+
+
+def make_phase_progress_callback(
+    progress_callback: Callable[[int, int, str], None] | None,
+    *,
+    phase_base_units: int,
+    phase_label: str,
+) -> Callable[[int, int, str], None] | None:
+    if progress_callback is None:
+        return None
+
+    def _callback(current_units: int, total_units: int, label: str) -> None:
+        bounded_total = max(1, int(total_units))
+        bounded_current = max(0, min(bounded_total, int(current_units)))
+        translated_units = phase_base_units + min(
+            VIVADO_PHASE_PROGRESS_UNITS,
+            round((VIVADO_PHASE_PROGRESS_UNITS * bounded_current) / bounded_total),
+        )
+        progress_callback(translated_units, VIVADO_TOTAL_PROGRESS_UNITS, f"{phase_label}: {label}")
+
+    return _callback
 
 
 def run_vivado(
@@ -300,26 +484,99 @@ def run_vivado(
     progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> pathlib.Path:
     tools_dir = project_root / "tools"
-    wrapper_tcl = output_dir / "run_single_cycle_perf_wrapper.tcl"
-    log_path = output_dir / "vivado_run.log"
+    actual_wrapper_tcl = output_dir / "run_single_cycle_perf_actual_wrapper.tcl"
+    hierarchical_wrapper_tcl = output_dir / "run_single_cycle_perf_hierarchical_wrapper.tcl"
+    actual_log_path = output_dir / "vivado_actual.log"
+    hierarchical_log_path = output_dir / "vivado_hierarchical.log"
+    combined_log_path = output_dir / "vivado_run.log"
+    if combined_log_path.exists():
+        combined_log_path.unlink()
     source_files = list(contract["source_files"])
     top_name = str(contract["top_name"])
     if program_selection is not None:
         wrapper_assets = prepare_program_wrapper_assets(contract, output_dir, program_selection)
         source_files = list(wrapper_assets["source_files"])
         top_name = str(wrapper_assets["wrapper_module_name"])
+
     write_wrapper_tcl(
-        wrapper_tcl,
-        variables=build_wrapper_variables(contract, output_dir, metadata, source_files=source_files, top_name=top_name),
+        actual_wrapper_tcl,
+        variables=build_wrapper_variables(
+            contract,
+            output_dir,
+            metadata,
+            source_files=source_files,
+            top_name=top_name,
+            analysis_phase="actual_only",
+        ),
         source_path=tools_dir / "single_cycle_perf_collect.tcl",
     )
-    return run_vivado_batch(
-        project_root=project_root,
-        wrapper_tcl=wrapper_tcl,
-        log_path=log_path,
-        progress_label=f"Vivado single-cycle timing run for {contract['project_name']}",
-        progress_callback=progress_callback,
+    try:
+        run_vivado_batch(
+            project_root=project_root,
+            wrapper_tcl=actual_wrapper_tcl,
+            log_path=actual_log_path,
+            progress_label=f"Vivado single-cycle actual timing run for {contract['project_name']}",
+            progress_callback=make_phase_progress_callback(
+                progress_callback,
+                phase_base_units=0,
+                phase_label="Actual timing",
+            ),
+        )
+    except RuntimeError:
+        if not maybe_tolerate_vivado_exit_crash(
+            phase_label="actual timing",
+            log_path=actual_log_path,
+            completion_marker="Completed single-cycle timing artifacts",
+            expected_artifacts=expected_actual_phase_artifacts(output_dir, metadata),
+        ):
+            raise
+    finally:
+        append_vivado_log_section(
+            combined_log_path,
+            title="Actual Timing Run",
+            source_log_path=actual_log_path,
+        )
+
+    write_wrapper_tcl(
+        hierarchical_wrapper_tcl,
+        variables=build_wrapper_variables(
+            contract,
+            output_dir,
+            metadata,
+            source_files=source_files,
+            top_name=top_name,
+            analysis_phase="hierarchical_only",
+        ),
+        source_path=tools_dir / "single_cycle_perf_collect.tcl",
     )
+    try:
+        run_vivado_batch(
+            project_root=project_root,
+            wrapper_tcl=hierarchical_wrapper_tcl,
+            log_path=hierarchical_log_path,
+            progress_label=f"Vivado single-cycle hierarchical timing run for {contract['project_name']}",
+            progress_callback=make_phase_progress_callback(
+                progress_callback,
+                phase_base_units=VIVADO_PHASE_PROGRESS_UNITS,
+                phase_label="Hierarchical timing",
+            ),
+        )
+    except RuntimeError:
+        if not maybe_tolerate_vivado_exit_crash(
+            phase_label="hierarchical timing",
+            log_path=hierarchical_log_path,
+            completion_marker="Completed hierarchical analysis artifacts",
+            expected_artifacts=expected_hierarchical_phase_artifacts(output_dir),
+        ):
+            raise
+    finally:
+        append_vivado_log_section(
+            combined_log_path,
+            title="Hierarchical Timing Run",
+            source_log_path=hierarchical_log_path,
+        )
+
+    return combined_log_path
 
 
 def parse_timing_paths_tsv(path: pathlib.Path) -> list[dict[str, Any]]:
@@ -424,18 +681,77 @@ def resolve_pipeline_reference_metrics(
     legacy_output_dir = default_output_root / "pipeline"
     output_dir = resolve_existing_output_dir(preferred_output_dir, legacy_output_dir)
 
-    min_period_ns = parse_post_route_min_period(
-        output_dir / "post_route_timing_summary.rpt",
-        float(pipeline_contract["clock_period_ns"]),
-    )
-    if min_period_ns is None and not (output_dir / "post_route_timing_summary.rpt").exists():
+    summary_path = output_dir / "post_route_timing_summary.rpt"
+    summary_text = summary_path.read_text(encoding="utf-8", errors="ignore") if summary_path.exists() else ""
+    wns_ns = None
+    min_period_ns = None
+    for idx, line in enumerate(summary_text.splitlines()):
+        if "WNS(ns)" not in line or "TNS(ns)" not in line:
+            continue
+        for look_ahead in range(idx + 1, min(idx + 8, len(summary_text.splitlines()))):
+            candidate = summary_text.splitlines()[look_ahead].strip()
+            match = re.match(r"([-\d.]+)\s+([-\d.]+)\s+\d+\s+\d+\s+([-\d.]+)\s+([-\d.]+)", candidate)
+            if not match:
+                continue
+            wns_ns = float(match.group(1))
+            min_period_ns = float(pipeline_contract["clock_period_ns"]) - float(match.group(1))
+            break
+        if min_period_ns is not None:
+            break
+    if min_period_ns is None:
+        min_period_ns = parse_post_route_min_period(
+            summary_path,
+            float(pipeline_contract["clock_period_ns"]),
+        )
+    if min_period_ns is None and not summary_path.exists():
         return None
+
+    pipeline_util_summary = parse_actual_utilization(output_dir / "post_route_utilization.rpt")
 
     return {
         "project_name": str(pipeline_contract["project_name"]),
         "output_dir": output_dir,
+        "wns_ns": wns_ns,
         "min_period_ns": min_period_ns,
+        "lut_used": parse_int_metric(pipeline_util_summary.get("slice_luts")),
+        "ff_used": parse_int_metric(pipeline_util_summary.get("slice_regs")),
     }
+
+
+def resolve_integrated_report_path(project_root: pathlib.Path) -> pathlib.Path | None:
+    if project_root.name != "RISCV_32I_SINGLE":
+        return None
+
+    pipeline_root = project_root.parent / "RISCV_32I_5STAGE"
+    if not pipeline_root.exists():
+        return None
+
+    pipeline_contract = load_project_contract(pipeline_root)
+    pipeline_profile = pipeline_contract["profile"]
+    return (pipeline_root / str(pipeline_profile.get("integrated_report_path", "md/INTEGRATED_TIMING_REPORT.md"))).resolve()
+
+
+def build_integrated_single_cycle_detail_text(
+    report_text: str,
+    *,
+    project_name: str,
+    artifact_dir: pathlib.Path,
+    report_path: pathlib.Path,
+) -> str:
+    detail_body = shift_markdown_headings(strip_first_markdown_heading(report_text), 2).rstrip()
+    generated_at = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+    lines = [
+        f"- Source project: `{project_name}`",
+        f"- Source artifacts: `{artifact_dir}`",
+        f"- Standalone report path: `{report_path}`",
+        f"- Detail updated: `{generated_at}`",
+        "",
+    ]
+    if detail_body:
+        lines.append(detail_body)
+    else:
+        lines.append("- No single-cycle optimization detail was rendered.")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def parse_high_fanout_report(path: pathlib.Path) -> list[dict[str, Any]]:
@@ -884,7 +1200,7 @@ def write_artifact_manifest(output_dir: pathlib.Path, family_rows: list[dict[str
     return manifest_path
 
 
-def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: dict[str, Any]) -> None:
+def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: dict[str, Any]) -> str:
     timing_summary = parse_timing_summary(output_dir / "actual_timing_summary.rpt")
     timing_paths = parse_timing_paths_tsv(output_dir / "actual_timing_paths.tsv")
     fanout_rows = parse_high_fanout_report(output_dir / "actual_high_fanout.rpt")
@@ -1036,68 +1352,6 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
             )
         )
 
-    report_lines: list[str] = []
-    report_lines.append("# SINGLE_CYCLE Optimization Report")
-    report_lines.append("")
-    report_lines.append("## Scope")
-    report_lines.append("")
-    report_lines.append(f"- Project: `{metadata['project_name']}`")
-    report_lines.append(f"- Analysis mode: `{metadata['analysis_mode']}`")
-    report_lines.append(f"- ISA profile: `{metadata['isa_profile']}`")
-    report_lines.append(f"- Top: `{metadata['top_name']}`")
-    report_lines.append(f"- Part: `{metadata['part_name']}`")
-    report_lines.append(f"- Program image: `{metadata['program_image']}`")
-    report_lines.append(f"- Program memory: `{metadata['program_memory']}`")
-    report_lines.append(f"- Raw output directory: `{output_dir}`")
-    report_lines.append("")
-    report_lines.append("## Contract Resolution")
-    report_lines.append("")
-    report_lines.append("| Item | Resolved Value |")
-    report_lines.append("| --- | --- |")
-    report_lines.append(f"| Manifest | `{metadata['manifest_path']}` |")
-    report_lines.append(f"| Profile | `{metadata['profile_path']}` |")
-    report_lines.append(f"| Manifest top | `{metadata['manifest_top_name']}` |")
-    report_lines.append(f"| Resolved top | `{metadata['top_name']}` |")
-    report_lines.append(f"| Source file count | {len(metadata['resolved_source_files'])} |")
-    report_lines.append(f"| Probe family count | {len(metadata.get('probe_families', []))} |")
-    report_lines.append(f"| Program image | `{metadata['program_image']}` |")
-    report_lines.append(f"| Program memory | `{metadata['program_memory']}` |")
-    report_lines.append(f"| Instruction-class source | `{metadata['instruction_class_source']}` |")
-    report_lines.append("")
-    report_lines.append("## Analysis Health")
-    report_lines.append("")
-    report_lines.append("| Check | Status | Detail |")
-    report_lines.append("| --- | --- | --- |")
-    for row in health_rows:
-        report_lines.append(f"| {row['check']} | {row['status']} | {row['detail']} |")
-    report_lines.append("")
-    report_lines.append("## Executive Summary")
-    report_lines.append("")
-    report_lines.append("| Metric | Value |")
-    report_lines.append("| --- | ---: |")
-    report_lines.append(f"| Post-synth WNS | {fmt_float(wns_ns)} ns |")
-    report_lines.append(f"| Post-synth TNS | {fmt_float(tns_ns)} ns |")
-    report_lines.append(f"| Setup failing endpoints | {failing_endpoints} |")
-    report_lines.append(f"| Minimum period | {fmt_float(min_period_ns)} ns |")
-    report_lines.append(f"| Estimated Fmax | {fmt_float(fmax_mhz, 2)} MHz |")
-    report_lines.append(f"| Worst endpoint | `{worst_path['end_pin']}` |")
-    report_lines.append(f"| Worst structural bucket | `{bucket_rows[0][0] if bucket_rows else 'NA'}` |")
-    report_lines.append(f"| Worst canonical family | `{worst_family_row['label'] if worst_family_row else 'NA'}` |")
-    report_lines.append("")
-    report_lines.append("## Program Execution Metrics")
-    report_lines.append("")
-    report_lines.append("- Instruction/cycle/CPI/runtime are estimated from the selected timing-program trace.")
-    report_lines.append("- 5-stage reference uses `retired + 4 fill + load-use stalls + 2-cycle taken redirects before the terminal self-loop`.")
-    report_lines.append("")
-    report_lines.append("| Architecture | Instruction Count | Cycle Count | CPI | Estimated Runtime |")
-    report_lines.append("| --- | ---: | ---: | ---: | --- |")
-    report_lines.append(
-        f"| {single_execution['architecture']} | {fmt_int(single_execution['instruction_count'])} | {fmt_int(single_execution['cycle_count'])} | {fmt_float(single_execution['cpi'])} | {format_runtime_ns(single_execution['runtime_ns'])} |"
-    )
-    report_lines.append(
-        f"| {pipeline_execution['architecture']} | {fmt_int(pipeline_execution['instruction_count'])} | {fmt_int(pipeline_execution['cycle_count'])} | {fmt_float(pipeline_execution['cpi'])} | {format_runtime_ns(pipeline_execution['runtime_ns'])} |"
-    )
-    report_lines.append("")
     runtime_delta_ns = None
     if single_execution["runtime_ns"] is not None and pipeline_execution["runtime_ns"] is not None:
         runtime_delta_ns = float(pipeline_execution["runtime_ns"]) - float(single_execution["runtime_ns"])
@@ -1106,21 +1360,86 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
     if single_execution["cpi"] is not None and pipeline_execution["cpi"] is not None:
         cpi_delta = float(pipeline_execution["cpi"]) - float(single_execution["cpi"])
     runtime_speedup = compute_runtime_speedup(single_execution["runtime_ns"], pipeline_execution["runtime_ns"])
-    report_lines.append("## Architecture Comparison")
+
+    single_lut_used = parse_int_metric(util_summary.get("slice_luts"))
+    single_ff_used = parse_int_metric(util_summary.get("slice_regs"))
+    pipeline_ref_wns = float(pipeline_reference["wns_ns"]) if pipeline_reference and pipeline_reference.get("wns_ns") is not None else None
+    pipeline_ref_min_period = (
+        float(pipeline_reference["min_period_ns"])
+        if pipeline_reference and pipeline_reference.get("min_period_ns") is not None
+        else None
+    )
+    pipeline_ref_fmax = 1000.0 / pipeline_ref_min_period if pipeline_ref_min_period and pipeline_ref_min_period > 0 else None
+    pipeline_ref_lut = parse_int_metric(pipeline_reference.get("lut_used")) if pipeline_reference else None
+    pipeline_ref_ff = parse_int_metric(pipeline_reference.get("ff_used")) if pipeline_reference else None
+    timing_verdict = determine_timing_verdict(
+        wns_ns=wns_ns,
+        failing_endpoints=failing_endpoints,
+        health_rows=health_rows,
+    )
+    runtime_winner = describe_runtime_winner(single_execution["runtime_ns"], pipeline_execution["runtime_ns"])
+    first_action = (
+        f"`{priorities[0][0]}`: {priorities[0][1]}"
+        if priorities
+        else "Manual review required."
+    )
+
+    report_lines: list[str] = []
+    report_lines.append("# SINGLE_CYCLE Optimization Report")
     report_lines.append("")
-    if pipeline_reference is not None:
-        report_lines.append(f"- Companion pipeline artifacts: `{pipeline_reference['output_dir']}`")
-    else:
-        report_lines.append("- Companion pipeline artifacts were not found, so pipeline runtime stays `NA` while cycle/CPI remain trace-based estimates.")
+    report_lines.append("## Executive Summary")
     report_lines.append("")
-    report_lines.append("| Comparison | Value |")
+    report_lines.append("| Item | Value |")
     report_lines.append("| --- | --- |")
-    report_lines.append(f"| Pipeline cycle delta vs single | {cycle_delta:+d} cycles |")
-    report_lines.append(f"| Pipeline CPI delta vs single | {fmt_float(cpi_delta)} |")
-    report_lines.append(f"| Pipeline runtime delta vs single | {format_runtime_ns(runtime_delta_ns)} |")
-    report_lines.append(f"| Pipeline runtime speedup vs single | {format_ratio(runtime_speedup)} |")
+    report_lines.append(f"| Timing verdict | {timing_verdict} |")
+    report_lines.append(f"| Worst endpoint | `{worst_path['end_pin']}` |")
+    report_lines.append(f"| Worst structural bucket | `{bucket_rows[0][0] if bucket_rows else 'NA'}` |")
+    report_lines.append(f"| Worst canonical family | `{worst_family_row['label'] if worst_family_row else 'NA'}` |")
+    report_lines.append(f"| Runtime winner | {runtime_winner} |")
+    report_lines.append(f"| First optimization target | {first_action} |")
     report_lines.append("")
-    report_lines.append("## Canonical Timing Families")
+    report_lines.append("## Key Metrics")
+    report_lines.append("")
+    report_lines.append("- `Delta` is `5-stage reference - single-cycle`.")
+    report_lines.append("- `Cycles`, `CPI`, and `Runtime` come from the selected timing-program trace model.")
+    report_lines.append("- `Pipeline Speedup` is runtime-based: `single-cycle runtime / 5-stage runtime`, so values above `1.000x` mean the pipeline is faster.")
+    if pipeline_reference is not None:
+        report_lines.append("- Companion pipeline timing and utilization are pulled from the matching 5-stage artifact set when available.")
+    else:
+        report_lines.append("- Companion pipeline artifacts were not found, so 5-stage timing and area cells may appear as `NA`.")
+    report_lines.append("")
+    report_lines.append("| Metric | Single-Cycle | 5-Stage Reference | Delta |")
+    report_lines.append("| --- | ---: | ---: | ---: |")
+    report_lines.append(f"| WNS (ns) | {fmt_float(wns_ns)} | {fmt_float(pipeline_ref_wns)} | {fmt_delta_float(wns_ns, pipeline_ref_wns)} |")
+    report_lines.append(
+        f"| Minimum Period (ns) | {fmt_float(min_period_ns)} | {fmt_float(pipeline_ref_min_period)} | {fmt_delta_float(min_period_ns, pipeline_ref_min_period)} |"
+    )
+    report_lines.append(f"| Fmax (MHz) | {fmt_float(fmax_mhz, 2)} | {fmt_float(pipeline_ref_fmax, 2)} | {fmt_delta_float(fmax_mhz, pipeline_ref_fmax, 2)} |")
+    report_lines.append(f"| LUTs | {fmt_int(single_lut_used)} | {fmt_int(pipeline_ref_lut)} | {fmt_delta_int(single_lut_used, pipeline_ref_lut)} |")
+    report_lines.append(f"| Registers | {fmt_int(single_ff_used)} | {fmt_int(pipeline_ref_ff)} | {fmt_delta_int(single_ff_used, pipeline_ref_ff)} |")
+    report_lines.append(
+        f"| Cycles | {fmt_int(int(single_execution['cycle_count']))} | {fmt_int(int(pipeline_execution['cycle_count']))} | {cycle_delta:+d} |"
+    )
+    report_lines.append(
+        f"| CPI | {fmt_float(single_execution['cpi'])} | {fmt_float(pipeline_execution['cpi'])} | {fmt_delta_float(single_execution['cpi'], pipeline_execution['cpi'])} |"
+    )
+    report_lines.append(
+        f"| Runtime | {format_runtime_ns(single_execution['runtime_ns'])} | {format_runtime_ns(pipeline_execution['runtime_ns'])} | {format_runtime_ns(runtime_delta_ns)} |"
+    )
+    report_lines.append(
+        f"| Pipeline Speedup (x) | {format_ratio(1.0 if runtime_speedup is not None else None)} | {format_ratio(runtime_speedup)} | {fmt_delta_ratio(1.0 if runtime_speedup is not None else None, runtime_speedup)} |"
+    )
+    report_lines.append("")
+    report_lines.append("## Optimization Priority")
+    report_lines.append("")
+    for idx, (title, detail) in enumerate(priorities[:6], start=1):
+        report_lines.append(f"{idx}. `{title}`: {detail}")
+    if not priorities:
+        report_lines.append("1. No strong automatic priority was detected. Review canonical families and path buckets manually.")
+    report_lines.append("")
+    report_lines.append("## Critical Timing Structure")
+    report_lines.append("")
+    report_lines.append("### Canonical Timing Families")
     report_lines.append("")
     report_lines.append("| Family | Focus | Worst Endpoint | Minimum Period (ns) | Est. Fmax (MHz) | Top Paths |")
     report_lines.append("| --- | --- | --- | ---: | ---: | ---: |")
@@ -1135,7 +1454,7 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
                 f"| {family_row['label']} | {family_row['description']} | No retained path data | NA | NA | 0 |"
             )
     report_lines.append("")
-    report_lines.append("## RV32I Instruction-Class Coverage")
+    report_lines.append("### Program Coverage Context")
     report_lines.append("")
     report_lines.append("| Class | Instruction Count | Active Family Hints |")
     report_lines.append("| --- | ---: | --- |")
@@ -1150,7 +1469,7 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
             f"| {class_name} | {metadata['class_instruction_counts'].get(class_name, 0)} | {', '.join(active_families) if active_families else 'NA'} |"
         )
     report_lines.append("")
-    report_lines.append("## Top100 Timing Distribution")
+    report_lines.append("### Top100 Timing Distribution")
     report_lines.append("")
     report_lines.append("| Metric | Worst | P90 | Median | Average |")
     report_lines.append("| --- | ---: | ---: | ---: | ---: |")
@@ -1161,28 +1480,30 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
     report_lines.append(f"| Logic levels | {fmt_float(max(logic_levels), 1)} | {fmt_float(percentile(logic_levels, 0.90), 1)} | {fmt_float(percentile(logic_levels, 0.50), 1)} | {fmt_float(safe_mean(logic_levels), 1)} |")
     report_lines.append(f"| Max fanout seen on path | {fmt_float(max(max_fanouts), 1)} | {fmt_float(percentile(max_fanouts, 0.90), 1)} | {fmt_float(percentile(max_fanouts, 0.50), 1)} | {fmt_float(safe_mean(max_fanouts), 1)} |")
     report_lines.append("")
-    report_lines.append("## Path Family Buckets")
+    report_lines.append("### Path Family Buckets")
     report_lines.append("")
     report_lines.append("| Bucket | Count | Worst Slack (ns) |")
     report_lines.append("| --- | ---: | ---: |")
     for bucket, count in bucket_rows:
         report_lines.append(f"| {bucket} | {count} | {fmt_float(bucket_worst_slack[bucket])} |")
     report_lines.append("")
-    report_lines.append("## Repeated Exact Path Signatures")
+    report_lines.append("### Repeated Exact Path Signatures")
     report_lines.append("")
     report_lines.append("| Signature | Count | Worst Slack (ns) |")
     report_lines.append("| --- | ---: | ---: |")
     for signature, count in signature_rows:
         report_lines.append(f"| {signature} | {count} | {fmt_float(signature_worst_slack[signature])} |")
     report_lines.append("")
-    report_lines.append("## Start/End Module Pairs")
+    report_lines.append("### Start/End Module Pairs")
     report_lines.append("")
     report_lines.append("| Start Module | End Module | Count |")
     report_lines.append("| --- | --- | ---: |")
     for (start_module, end_module), count in start_end_rows:
         report_lines.append(f"| {start_module} | {end_module} | {count} |")
     report_lines.append("")
-    report_lines.append("## Auto-Discovered Module Metrics")
+    report_lines.append("## Implementation Footprint")
+    report_lines.append("")
+    report_lines.append("### Auto-Discovered Module Metrics")
     report_lines.append("")
     report_lines.append("| Instance | Total Cells | FF | LUT | CARRY | RAM | MUXF | Other |")
     report_lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
@@ -1193,7 +1514,7 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
     if not largest_modules:
         report_lines.append("| - | - | - | - | - | - | - | No module metrics were collected |")
     report_lines.append("")
-    report_lines.append("## High-Fanout Nets")
+    report_lines.append("### High-Fanout Nets")
     report_lines.append("")
     report_lines.append("| Rank | Fanout | Driver | Net |")
     report_lines.append("| --- | ---: | --- | --- |")
@@ -1202,7 +1523,7 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
     if not top_non_clock_fanout:
         report_lines.append("| - | - | - | No non-clock/non-reset nets remained after filtering |")
     report_lines.append("")
-    report_lines.append("## Utilization Summary")
+    report_lines.append("### Utilization Summary")
     report_lines.append("")
     report_lines.append("| Resource | Used |")
     report_lines.append("| --- | ---: |")
@@ -1222,7 +1543,7 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
         if key in util_summary:
             report_lines.append(f"| {label} | {util_summary[key]} |")
     report_lines.append("")
-    report_lines.append("## Actual Synth Instance Area")
+    report_lines.append("### Actual Synth Instance Area")
     report_lines.append("")
     report_lines.append("| Instance | Module | Cells |")
     report_lines.append("| --- | --- | ---: |")
@@ -1231,7 +1552,43 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
     if not instance_area_top:
         report_lines.append("| - | - | Instance area table was not parsed from Vivado log |")
     report_lines.append("")
-    report_lines.append("## Methodology / QoR Hints")
+    report_lines.append("## Appendix")
+    report_lines.append("")
+    report_lines.append("### Run Metadata")
+    report_lines.append("")
+    report_lines.append(f"- Project: `{metadata['project_name']}`")
+    report_lines.append(f"- Analysis mode: `{metadata['analysis_mode']}`")
+    report_lines.append(f"- ISA profile: `{metadata['isa_profile']}`")
+    report_lines.append(f"- Top: `{metadata['top_name']}`")
+    report_lines.append(f"- Part: `{metadata['part_name']}`")
+    report_lines.append(f"- Program image: `{metadata['program_image']}`")
+    report_lines.append(f"- Program memory: `{metadata['program_memory']}`")
+    report_lines.append(f"- Raw output directory: `{output_dir}`")
+    if pipeline_reference is not None:
+        report_lines.append(f"- Companion pipeline artifacts: `{pipeline_reference['output_dir']}`")
+    report_lines.append("")
+    report_lines.append("### Contract Resolution")
+    report_lines.append("")
+    report_lines.append("| Item | Resolved Value |")
+    report_lines.append("| --- | --- |")
+    report_lines.append(f"| Manifest | `{metadata['manifest_path']}` |")
+    report_lines.append(f"| Profile | `{metadata['profile_path']}` |")
+    report_lines.append(f"| Manifest top | `{metadata['manifest_top_name']}` |")
+    report_lines.append(f"| Resolved top | `{metadata['top_name']}` |")
+    report_lines.append(f"| Source file count | {len(metadata['resolved_source_files'])} |")
+    report_lines.append(f"| Probe family count | {len(metadata.get('probe_families', []))} |")
+    report_lines.append(f"| Program image | `{metadata['program_image']}` |")
+    report_lines.append(f"| Program memory | `{metadata['program_memory']}` |")
+    report_lines.append(f"| Instruction-class source | `{metadata['instruction_class_source']}` |")
+    report_lines.append("")
+    report_lines.append("### Analysis Health")
+    report_lines.append("")
+    report_lines.append("| Check | Status | Detail |")
+    report_lines.append("| --- | --- | --- |")
+    for row in health_rows:
+        report_lines.append(f"| {row['check']} | {row['status']} | {row['detail']} |")
+    report_lines.append("")
+    report_lines.append("### Methodology / QoR Details")
     report_lines.append("")
     if methodology_severity_counts:
         report_lines.append("| Methodology Severity | Count |")
@@ -1258,14 +1615,7 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
         for line in qor_suggestions[:8]:
             report_lines.append(f"- {line}")
     report_lines.append("")
-    report_lines.append("## Recommended Actions")
-    report_lines.append("")
-    for idx, (title, detail) in enumerate(priorities[:6], start=1):
-        report_lines.append(f"{idx}. `{title}`: {detail}")
-    if not priorities:
-        report_lines.append("1. No strong automatic priority was detected. Review canonical families and path buckets manually.")
-    report_lines.append("")
-    report_lines.append("## Raw Files")
+    report_lines.append("### Raw Files")
     report_lines.append("")
     raw_files = [
         "actual_timing_summary.rpt",
@@ -1278,6 +1628,8 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
         "module_metrics.tsv",
         "analysis_metadata.json",
         "artifact_manifest.json",
+        "vivado_actual.log",
+        "vivado_hierarchical.log",
         "vivado_run.log",
     ]
     raw_files.extend(sorted({row["tsv_path"].name for row in family_timing_rows}))
@@ -1288,8 +1640,10 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
             report_lines.append(f"- `{file_path}`")
     report_lines.append("")
 
-    report_path.write_text("\n".join(report_lines) + "\n", encoding="utf-8")
+    report_text = "\n".join(report_lines) + "\n"
+    report_path.write_text(report_text, encoding="utf-8")
     write_artifact_manifest(output_dir, family_timing_rows)
+    return report_text
 
 
 def run(project_root: pathlib.Path, argv: list[str] | None = None) -> int:
@@ -1347,8 +1701,27 @@ def run(project_root: pathlib.Path, argv: list[str] | None = None) -> int:
             ),
         )
 
-    build_report(output_dir, report_path, metadata)
+    report_text = build_report(output_dir, report_path, metadata)
     tracker.step("Built Markdown timing report")
+
+    integrated_report_path = resolve_integrated_report_path(project_root)
+    if integrated_report_path is not None:
+        integrated_report_path.parent.mkdir(parents=True, exist_ok=True)
+        integrated_report_text = merge_program_detail_section(
+            integrated_report_path,
+            program_selection=selected_program,
+            detail_key="single_cycle",
+            detail_body=build_integrated_single_cycle_detail_text(
+                report_text,
+                project_name=str(metadata["project_name"]),
+                artifact_dir=output_dir,
+                report_path=report_path,
+            ),
+            program_keys=list(PROGRAM_LIBRARY),
+            resolve_program_selection=lambda key: resolve_selected_program(project_root, key),
+        )
+        integrated_report_path.write_text(integrated_report_text, encoding="utf-8")
+
     tracker.step(f"Report written to {report_path}")
     print(f"Report written to {report_path}")
     return 0

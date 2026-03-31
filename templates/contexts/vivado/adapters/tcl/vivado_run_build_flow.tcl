@@ -71,12 +71,12 @@ proc read_manifest_list {list_file project_root} {
 # Windows ???? ???????????????? ???????????? Vivado ???? ???????? ????
 if {[info exists env(NUMBER_OF_PROCESSORS)]} {
     set cpu_count $env(NUMBER_OF_PROCESSORS)
-    # Vivado ?????????? ???? 8?????? ????????????(Standard/Enterprise)
+    # Prefer the detected logical processor count when Windows exposes it.
     set_param general.maxThreads $cpu_count
     print_info "CPU Optimization Enabled: Using $cpu_count threads."
 } else {
-    set_param general.maxThreads 8
-    print_info "CPU Count detection failed. Defaulting to 8 threads."
+    set_param general.maxThreads 20
+    print_info "CPU Count detection failed. Defaulting to 20 threads."
 }
 
 # -----------------------------------------------------------------
