@@ -71,7 +71,7 @@ echo [INFO] Programming target index !SELECTED_TARGET_INDEX!.
 set "FPGA_TARGET_INDEX=!SELECTED_TARGET_INDEX!"
 
 :: Run Hardware Manager script in batch mode
-vivado -mode batch -source "%TEMPLATES_ROOT%\contexts\vivado\adapters\tcl\vivado_program_device.tcl" -notrace -log "%PROGRAM_LOG%" -journal "%PROGRAM_JOU%"
+call vivado -mode batch -source "%TEMPLATES_ROOT%\contexts\vivado\adapters\tcl\vivado_program_device.tcl" -notrace -log "%PROGRAM_LOG%" -journal "%PROGRAM_JOU%"
 set "PROGRAM_RC=%errorlevel%"
 call :route_vivado_artifacts
 
@@ -116,7 +116,7 @@ set "FPGA_HW_TARGETS_FILE=%HW_TARGETS_FILE%"
 
 echo.
 echo [SCAN] Detecting connected hardware targets...
-vivado -mode batch -source "%TEMPLATES_ROOT%\contexts\vivado\adapters\tcl\vivado_list_hw_targets.tcl" -notrace -log "%DISCOVERY_LOG%" -journal "%DISCOVERY_JOU%"
+call vivado -mode batch -source "%TEMPLATES_ROOT%\contexts\vivado\adapters\tcl\vivado_list_hw_targets.tcl" -notrace -log "%DISCOVERY_LOG%" -journal "%DISCOVERY_JOU%"
 set "DISCOVERY_RC=%errorlevel%"
 call :route_vivado_artifacts
 
