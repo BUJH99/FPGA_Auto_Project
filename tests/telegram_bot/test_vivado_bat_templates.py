@@ -40,6 +40,39 @@ class VivadoBatchTemplateTests(unittest.TestCase):
         self.assertIn('AMDDesignTools\\\\2025.2\\\\Vivado\\\\bin', script_text)
         self.assertNotIn('C:\\Xilinx\\Vivado\\2024.1\\bin', script_text)
 
+    def test_program_fpga_batch_prompts_with_target_and_device_candidates(self) -> None:
+        script_path = (
+            REPO_ROOT
+            / "templates"
+            / "contexts"
+            / "vivado"
+            / "adapters"
+            / "bat"
+            / "vivado_program_fpga.bat"
+        )
+        script_text = script_path.read_text(encoding="utf-8")
+
+        self.assertIn('set "SELECTED_DEVICE_INDEX=%FPGA_DEVICE_INDEX%"', script_text)
+        self.assertIn('set "FPGA_DEVICE_INDEX=!SELECTED_DEVICE_INDEX!"', script_text)
+        self.assertIn('tokens=1,2,3* delims=|', script_text)
+        self.assertIn('Select programmable hardware index', script_text)
+
+    def test_hw_discovery_template_lists_programmable_devices(self) -> None:
+        script_path = (
+            REPO_ROOT
+            / "templates"
+            / "contexts"
+            / "vivado"
+            / "adapters"
+            / "tcl"
+            / "vivado_list_hw_targets.tcl"
+        )
+        script_text = script_path.read_text(encoding="utf-8")
+
+        self.assertIn("open_hw_target", script_text)
+        self.assertIn("set devices [get_hw_devices]", script_text)
+        self.assertIn('puts $fh "${candidate_idx}|${candidate_target_idx}|${candidate_device_idx}|${candidate_target} -> ${candidate_device}"', script_text)
+
 
 if __name__ == "__main__":
     unittest.main()
