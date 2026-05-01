@@ -635,6 +635,13 @@ def render_defparam_wrapper(
         wrapper_ports.append(f"  input logic {clock_port}")
     if reset_port:
         wrapper_ports.append(f"  input logic {reset_port}")
+    passthrough_outputs = {
+        port["name"]
+        for port in top_ports
+        if port["direction"] == "output" and port["name"] == "oTimingProbe"
+    }
+    for output_name in sorted(passthrough_outputs):
+        wrapper_ports.append(f"  output logic {output_name}")
 
     inst_lines: list[str] = []
     for port in top_ports:
@@ -644,6 +651,8 @@ def render_defparam_wrapper(
             conn = name
         elif direction == "input":
             conn = "'0"
+        elif name in passthrough_outputs:
+            conn = name
         else:
             conn = ""
         inst_lines.append(f"    .{name}({conn})")

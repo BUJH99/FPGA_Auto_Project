@@ -259,6 +259,50 @@ class ExecutionStackTests(unittest.TestCase):
             self.assertTrue(collected.summary_paths)
             self.assertEqual("toolkit_doctor", collected.structured_payload["summary"]["tool"])
 
+    def test_result_collector_prefers_vitis_summary_from_run_index(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = self.create_project(Path(temp_dir))
+            output_root = project_path / "output"
+            log_root = project_path / "log"
+            summary_path = output_root / "vitis" / "summaries" / "xsa_export_summary.json"
+            write_text(
+                summary_path,
+                '{"tool":"vitis","type":"vitis_summary","step":"export_xsa","status":"ok"}',
+            )
+            write_text(
+                output_root / "run_index.json",
+                (
+                    '{"schemaVersion":1,"kind":"run_index","runs":[{'
+                    '"tool":"vitis","status":"ok",'
+                    f'"summaryPath":"{summary_path.relative_to(project_path).as_posix()}"'
+                    '}]}'
+                ),
+            )
+
+            config = make_config(project_path.parent)
+            resolver = CommandResolver(config)
+            spec, error = resolver.build_menu_command_spec(22, project_path, [], "task")
+            self.assertIsNone(error)
+            assert spec is not None
+            self.assertEqual("vitis", spec.result_kind)
+
+            registry = ResultCollectorRegistry(FilesystemEvidenceReader())
+            base_result = ExecutionResult(
+                command_id=spec.command_id,
+                menu_no=spec.menu_no,
+                project_name=spec.project_name,
+                status="success",
+                return_code=0,
+                started_at=0.0,
+                finished_at=0.0,
+            )
+            collected = registry.collect(
+                base_result,
+                CollectorContext(spec=spec, started_ts=0.0, run_log_path=None, timed_out=False, runtime_metadata={}),
+            )
+            self.assertEqual("summary_json", collected.evidence_source)
+            self.assertEqual("vitis", collected.structured_payload["summary"]["tool"])
+
     def test_result_collector_adds_build_failure_triage_from_summary(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project_path = self.create_project(Path(temp_dir))

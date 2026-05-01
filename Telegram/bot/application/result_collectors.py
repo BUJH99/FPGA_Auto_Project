@@ -592,6 +592,14 @@ class DefaultResultCollector:
             "doctor": ("toolkit_doctor",),
             "hierarchy": ("hierarchy_view",),
             "sim_vivado": ("vivado_sim_nogui",),
+            "vitis": ("vitis",),
+            "vitis_export_xsa": ("vitis",),
+            "vitis_create_platform": ("vitis",),
+            "vitis_create_application": ("vitis",),
+            "vitis_build_platform": ("vitis",),
+            "vitis_build_application": ("vitis",),
+            "vitis_run_application": ("vitis",),
+            "vitis_full_flow": ("vitis",),
         }
         return tool_map.get(command_id, ())
 

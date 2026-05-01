@@ -25,6 +25,10 @@ TOOL_ALIAS_MAP: dict[str, tuple[str, ...]] = {
     "report_docs": ("report_documentation", "report_doc"),
     "report_doc": ("report_documentation", "report_doc"),
     "presentation": ("report_one_source", "report_presentation", "presentation"),
+    "vitis": ("vitis",),
+    "vitis_export_xsa": ("vitis",),
+    "vitis_platform": ("vitis",),
+    "vitis_app": ("vitis",),
 }
 
 TOOL_LABELS: dict[str, str] = {
@@ -39,6 +43,7 @@ TOOL_LABELS: dict[str, str] = {
     "report_doc": "Docs Report",
     "report_presentation": "Presentation",
     "presentation": "Presentation",
+    "vitis": "Vitis Software Flow",
 }
 
 FILTER_LABELS: dict[str, str] = {
@@ -59,6 +64,10 @@ FILTER_LABELS: dict[str, str] = {
     "report_docs": "Docs Report",
     "report_doc": "Docs Report",
     "presentation": "Presentation",
+    "vitis": "Vitis Software Flow",
+    "vitis_export_xsa": "Vitis XSA Export",
+    "vitis_platform": "Vitis Platform",
+    "vitis_app": "Vitis Application",
 }
 
 STATUS_ICONS: dict[str, str] = {

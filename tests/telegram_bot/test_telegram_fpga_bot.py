@@ -657,7 +657,7 @@ class TelegramBotTests(unittest.TestCase):
 
     def test_parse_main_menu_registry_covers_main_menu(self) -> None:
         registry = BOT.parse_main_menu_registry(REPO_ROOT / "MAIN.bat", REPO_ROOT / "templates")
-        self.assertEqual(set(range(1, 22)), set(registry))
+        self.assertEqual(set(range(1, 31)), set(registry))
         self.assertTrue(
             registry[5].script_path.as_posix().endswith("templates/contexts/simulation/adapters/bat/sim_run_vivado.bat")
         )
@@ -675,6 +675,21 @@ class TelegramBotTests(unittest.TestCase):
             registry[21]
             .script_path.as_posix()
             .endswith("templates/shared/adapters/bat/toolkit_doctor.bat")
+        )
+        self.assertTrue(
+            registry[28]
+            .script_path.as_posix()
+            .endswith("templates/contexts/vitis/adapters/bat/vitis_run_full_flow.bat")
+        )
+        self.assertTrue(
+            registry[29]
+            .script_path.as_posix()
+            .endswith("templates/contexts/vivado/adapters/bat/vivado_open_ip_integrator_gui.bat")
+        )
+        self.assertTrue(
+            registry[30]
+            .script_path.as_posix()
+            .endswith("templates/contexts/vivado/adapters/bat/vivado_build_ip_integrator_flow.bat")
         )
 
     def test_make_execution_service_returns_layered_service(self) -> None:
@@ -883,6 +898,41 @@ class TelegramBotTests(unittest.TestCase):
                     None,
                     None,
                 ),
+                (
+                    22,
+                    ["--bit", "latest"],
+                    [str(project_path), "--bit", "latest"],
+                    None,
+                    None,
+                ),
+                (
+                    23,
+                    ["--xsa", "latest"],
+                    [str(project_path), "--xsa", "latest"],
+                    None,
+                    None,
+                ),
+                (
+                    24,
+                    ["--platform", "Demo_platform", "--apps", "hello_world,app_2"],
+                    [str(project_path), "--apps", "hello_world,app_2", "--platform", "Demo_platform"],
+                    None,
+                    None,
+                ),
+                (
+                    26,
+                    ["--all-apps", "--target", "hw"],
+                    [str(project_path), "--all-apps", "--target", "hw"],
+                    None,
+                    None,
+                ),
+                (
+                    28,
+                    ["--run"],
+                    [str(project_path), "--run"],
+                    None,
+                    None,
+                ),
             ]
 
             for menu_no, extras, expected_tail, expected_stdin, expected_close in cases:
@@ -922,6 +972,23 @@ class TelegramBotTests(unittest.TestCase):
             request, error = BOT.parse_task_command(config, "21 Demo extra")
             self.assertIsNone(request)
             self.assertEqual("Usage: /task 21 <project>", error)
+
+    def test_parse_task_command_accepts_vitis_menu_range(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root, project_path = self.create_project_root(Path(temp_dir))
+            config = self.make_config(project_root)
+
+            request, error = BOT.parse_task_command(config, "22 Demo")
+            self.assertIsNone(error)
+            assert request is not None
+            self.assertEqual(22, request.menu_no)
+            self.assertEqual([str(project_path)], list(request.cmd[3:]))
+
+            request, error = BOT.parse_task_command(config, "28 Demo --run")
+            self.assertIsNone(error)
+            assert request is not None
+            self.assertEqual(28, request.menu_no)
+            self.assertEqual([str(project_path), "--run"], list(request.cmd[3:]))
 
     def test_build_menu_invocation_hierarchy_accepts_batch_scope_aliases(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

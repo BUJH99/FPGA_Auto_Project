@@ -35,6 +35,15 @@ MENU_USAGE: dict[int, str] = {
     19: "Usage: /task 19 <project> (--all | --dut <name>) [--force]",
     20: "Usage: /task 20 <project> <folder_idx> <tb_idx>",
     21: "Usage: /task 21 <project>",
+    22: "Usage: /task 22 <project> [bit_name|--bit <name-or-path>]",
+    23: "Usage: /task 23 <project> [xsa_name|--xsa <name-or-path>]",
+    24: "Usage: /task 24 <project> [app_name|--app <name>|--apps a,b|--all-apps] [--platform <name-or-xpfm>]",
+    25: "Usage: /task 25 <project> [platform_name|--platform <name-or-xpfm>]",
+    26: "Usage: /task 26 <project> [app_name|--app <name>|--apps a,b|--all-apps] [--target hw]",
+    27: "Usage: /task 27 <project> [app_name|--app <name>] [--target hw]",
+    28: "Usage: /task 28 <project> [app_name|--app <name>|--apps a,b|--all-apps] [--run]",
+    29: "Usage: /task 29 <project>",
+    30: "Usage: /task 30 <project>",
 }
 
 HIERARCHY_SCOPE_ALIASES: dict[str, str] = {
@@ -317,7 +326,7 @@ class CommandResolver:
             if "--no-pause" not in [a.lower() for a in script_args]:
                 script_args.append("--no-pause")
 
-        elif menu_no in {10, 11, 12, 14, 15, 18}:
+        elif menu_no in {10, 11, 12, 14, 15, 18, 29}:
             if tokens:
                 return None, usage
             stdin_lines.append("")
@@ -391,6 +400,199 @@ class CommandResolver:
         elif menu_no == 21:
             if tokens:
                 return None, usage
+
+        elif menu_no == 22:
+            i = 0
+            bit_selector = ""
+            while i < len(tokens):
+                token = tokens[i]
+                lower = token.lower()
+                if lower == "--no-pause":
+                    pass
+                elif lower in {"--bit", "--bitstream"}:
+                    if i + 1 >= len(tokens):
+                        return None, usage
+                    bit_selector = tokens[i + 1]
+                    i += 1
+                elif lower.startswith("--bit="):
+                    bit_selector = token.split("=", 1)[1].strip()
+                elif lower.startswith("--bitstream="):
+                    bit_selector = token.split("=", 1)[1].strip()
+                elif not bit_selector:
+                    bit_selector = token
+                else:
+                    return None, usage
+                i += 1
+            if bit_selector:
+                metadata["bit"] = bit_selector
+                script_args.extend(["--bit", bit_selector])
+
+        elif menu_no == 23:
+            i = 0
+            xsa_selector = ""
+            while i < len(tokens):
+                token = tokens[i]
+                lower = token.lower()
+                if lower == "--no-pause":
+                    pass
+                elif lower == "--xsa":
+                    if i + 1 >= len(tokens):
+                        return None, usage
+                    xsa_selector = tokens[i + 1]
+                    i += 1
+                elif lower.startswith("--xsa="):
+                    xsa_selector = token.split("=", 1)[1].strip()
+                elif not xsa_selector:
+                    xsa_selector = token
+                else:
+                    return None, usage
+                i += 1
+            if xsa_selector:
+                metadata["xsa"] = xsa_selector
+                script_args.extend(["--xsa", xsa_selector])
+
+        elif menu_no == 25:
+            i = 0
+            platform_selector = ""
+            while i < len(tokens):
+                token = tokens[i]
+                lower = token.lower()
+                if lower == "--no-pause":
+                    pass
+                elif lower == "--platform":
+                    if i + 1 >= len(tokens):
+                        return None, usage
+                    platform_selector = tokens[i + 1]
+                    i += 1
+                elif lower.startswith("--platform="):
+                    platform_selector = token.split("=", 1)[1].strip()
+                elif not platform_selector:
+                    platform_selector = token
+                else:
+                    return None, usage
+                i += 1
+            if platform_selector:
+                metadata["platform"] = platform_selector
+                script_args.extend(["--platform", platform_selector])
+
+        elif menu_no in {24, 26, 27}:
+            i = 0
+            app_name = ""
+            app_names = ""
+            all_apps = False
+            platform_selector = ""
+            target = ""
+            while i < len(tokens):
+                token = tokens[i]
+                lower = token.lower()
+                if lower == "--no-pause":
+                    pass
+                elif lower == "--app":
+                    if i + 1 >= len(tokens):
+                        return None, usage
+                    app_name = tokens[i + 1]
+                    i += 1
+                elif lower.startswith("--app="):
+                    app_name = token.split("=", 1)[1].strip()
+                elif lower == "--apps" and menu_no in {24, 26}:
+                    if i + 1 >= len(tokens):
+                        return None, usage
+                    app_names = tokens[i + 1]
+                    i += 1
+                elif lower.startswith("--apps=") and menu_no in {24, 26}:
+                    app_names = token.split("=", 1)[1].strip()
+                elif lower == "--all-apps" and menu_no in {24, 26}:
+                    all_apps = True
+                elif lower == "--platform" and menu_no == 24:
+                    if i + 1 >= len(tokens):
+                        return None, usage
+                    platform_selector = tokens[i + 1]
+                    i += 1
+                elif lower.startswith("--platform=") and menu_no == 24:
+                    platform_selector = token.split("=", 1)[1].strip()
+                elif lower == "--target" and menu_no in {26, 27}:
+                    if i + 1 >= len(tokens):
+                        return None, usage
+                    target = tokens[i + 1]
+                    i += 1
+                elif lower.startswith("--target=") and menu_no in {26, 27}:
+                    target = token.split("=", 1)[1].strip()
+                elif not app_name:
+                    app_name = token
+                else:
+                    return None, usage
+                i += 1
+            if sum(1 for value in (app_name, app_names, all_apps) if value) > 1:
+                return None, usage
+            if app_name:
+                metadata["app_name"] = app_name
+                script_args.extend(["--app", app_name])
+            if app_names:
+                metadata["app_names"] = app_names
+                script_args.extend(["--apps", app_names])
+            if all_apps:
+                metadata["all_apps"] = True
+                script_args.append("--all-apps")
+            if platform_selector:
+                metadata["platform"] = platform_selector
+                script_args.extend(["--platform", platform_selector])
+            if target:
+                metadata["target"] = target
+                script_args.extend(["--target", target])
+
+        elif menu_no == 28:
+            i = 0
+            app_name = ""
+            app_names = ""
+            all_apps = False
+            run_requested = False
+            while i < len(tokens):
+                token = tokens[i]
+                lower = token.lower()
+                if lower == "--no-pause":
+                    pass
+                elif lower == "--run":
+                    run_requested = True
+                elif lower == "--app":
+                    if i + 1 >= len(tokens):
+                        return None, usage
+                    app_name = tokens[i + 1]
+                    i += 1
+                elif lower.startswith("--app="):
+                    app_name = token.split("=", 1)[1].strip()
+                elif lower == "--apps":
+                    if i + 1 >= len(tokens):
+                        return None, usage
+                    app_names = tokens[i + 1]
+                    i += 1
+                elif lower.startswith("--apps="):
+                    app_names = token.split("=", 1)[1].strip()
+                elif lower == "--all-apps":
+                    all_apps = True
+                elif not app_name:
+                    app_name = token
+                else:
+                    return None, usage
+                i += 1
+            if sum(1 for value in (app_name, app_names, all_apps) if value) > 1:
+                return None, usage
+            if app_name:
+                metadata["app_name"] = app_name
+                script_args.extend(["--app", app_name])
+            if app_names:
+                metadata["app_names"] = app_names
+                script_args.extend(["--apps", app_names])
+            if all_apps:
+                metadata["all_apps"] = True
+                script_args.append("--all-apps")
+            if run_requested:
+                metadata["run"] = True
+                script_args.append("--run")
+
+        elif menu_no == 30:
+            if any(t.lower() != "--no-pause" for t in tokens):
+                return None, usage
+            script_args.append("--no-pause")
 
         else:
             return None, f"Menu {menu_no} is not supported."
@@ -485,11 +687,13 @@ class CommandResolver:
             return "hierarchy"
         if command_id == "doctor" or menu_no == 21:
             return "doctor"
+        if menu_no in {22, 23, 24, 25, 26, 27, 28} or command_id.startswith("vitis"):
+            return "vitis"
         if command_id == "sim_vivado" or menu_no == 20:
             return "sim_vivado"
         if command_id in {"report_html", "report_docs", "presentation"}:
             return "report"
-        if command_id in {"build", "build_program", "program", "vivado_gui", "finalize_bd", "retarget_ip"}:
+        if command_id in {"build", "build_program", "program", "vivado_gui", "finalize_bd", "retarget_ip"} or menu_no in {29, 30}:
             return "build"
         if menu_no == 6:
             return "simulation_report"
@@ -509,11 +713,20 @@ class CommandResolver:
             "open_presentation",
             "setup_project",
             "doctor",
-        }:
+            "vitis",
+        } or menu_no in {29, 30}:
             return InteractionContract(
                 input_mode="direct_execute",
                 selection_source="project",
                 selection_cardinality="single",
+                completion_policy="status_artifacts",
+            )
+        if menu_no in {22, 23, 24, 25, 26, 27, 28} or command_id.startswith("vitis"):
+            return InteractionContract(
+                input_mode="direct_execute",
+                selection_source="project",
+                selection_cardinality="single",
+                progress_policy="long_running",
                 completion_policy="status_artifacts",
             )
         if command_id in {"schematic", "fsm"}:

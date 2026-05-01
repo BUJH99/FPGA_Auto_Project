@@ -209,6 +209,22 @@ def _build_summary_finding(summary: dict[str, object]) -> FailureFinding | None:
                             source="summary",
                         )
 
+    if tool == "vitis" or summary_type == "vitis_summary":
+        step = str(summary.get("step", "")).strip() or "Vitis step"
+        errors = summary.get("errors")
+        evidence = tuple(str(row) for row in errors[:3]) if isinstance(errors, list) else ()
+        return FailureFinding(
+            category="vitis_step_failed",
+            title=f"{step} failed",
+            summary="The Vitis software automation step exited in a failed state.",
+            actions=(
+                "Open the Vitis summary and log paths listed in the run artifacts.",
+                "Check whether the required XSA, XPFM, application source files, and hardware run config exist before rerunning.",
+            ),
+            evidence=evidence,
+            source="summary",
+        )
+
     return None
 
 

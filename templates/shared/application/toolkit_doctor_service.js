@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const cp = require("child_process");
+const fg = require("fast-glob");
 const {
   loadManifestResult,
   loadStrictManifestContext,
@@ -78,6 +79,28 @@ function findLatestVivadoBin(rootPath, trailingSegments) {
   return "";
 }
 
+function findLatestToolBin(rootPath, trailingSegments, executableCandidates) {
+  if (!rootPath || !Array.isArray(trailingSegments) || trailingSegments.length === 0) return "";
+  if (!fs.existsSync(rootPath)) return "";
+  let entries = [];
+  try {
+    entries = fs.readdirSync(rootPath, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort((left, right) => right.localeCompare(left, undefined, { numeric: true, sensitivity: "base" }));
+  } catch {
+    return "";
+  }
+
+  for (const entry of entries) {
+    const candidateDir = path.join(rootPath, entry, ...trailingSegments);
+    if (findExecutableInDir(candidateDir, executableCandidates).ok) {
+      return candidateDir;
+    }
+  }
+  return "";
+}
+
 function listPreferredVivadoBins(env = process.env) {
   const ordered = [];
   const seen = new Set();
@@ -112,11 +135,68 @@ function findVivadoExecutable() {
   return findExecutable(["vivado", "vivado.bat"]);
 }
 
+function listPreferredVitisBins(env = process.env) {
+  const ordered = [];
+  const seen = new Set();
+
+  function pushCandidate(candidateDir) {
+    const normalized = normalizeExecutableDir(candidateDir);
+    if (!normalized) return;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    ordered.push(normalized);
+  }
+
+  pushCandidate(env.VITIS_BIN);
+
+  if (process.platform === "win32") {
+    const systemDrive = String(env.SystemDrive || "C:");
+    pushCandidate(findLatestToolBin(path.join(systemDrive, "AMDDesignTools"), ["Vitis", "bin"], ["vitis.bat", "vitis.exe", "vitis"]));
+    pushCandidate(findLatestToolBin(path.join(systemDrive, "Xilinx", "Vitis"), ["bin"], ["vitis.bat", "vitis.exe", "vitis"]));
+  }
+
+  return ordered;
+}
+
+function findVitisExecutable() {
+  for (const preferredBin of listPreferredVitisBins()) {
+    const resolved = findExecutableInDir(preferredBin, ["vitis.bat", "vitis.exe", "vitis"]);
+    if (resolved.ok) {
+      return resolved;
+    }
+  }
+  return findExecutable(["vitis", "vitis.bat"]);
+}
+
+function captureToolVersion(toolCheck, args = ["-version"]) {
+  if (!toolCheck || !toolCheck.ok) return "";
+  const command = toolCheck.resolved || toolCheck.command || "";
+  if (!command) return "";
+  try {
+    const out = cp.execFileSync(command, args, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 8000,
+    });
+    return String(out || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean)[0] || "";
+  } catch (err) {
+    const stdout = String(err && err.stdout ? err.stdout : "").trim();
+    const stderr = String(err && err.stderr ? err.stderr : "").trim();
+    return (stdout || stderr).split(/\r?\n/).map((line) => line.trim()).filter(Boolean)[0] || "";
+  }
+}
+
 function checkTools() {
+  const vitis = findVitisExecutable();
+  if (vitis.ok) {
+    vitis.version = captureToolVersion(vitis, ["-version"]);
+  }
   return {
     node: findExecutable(["node", "node.exe"]),
     python: findExecutable(["python", "python3", "python.exe"]),
     vivado: findVivadoExecutable(),
+    vitis,
     yosys: findExecutable(["yowasp-yosys", "yosys"]),
   };
 }
@@ -148,6 +228,107 @@ function hasOptionalSection(config, sectionName) {
 
 function basenameWithoutExt(filePath) {
   return path.basename(String(filePath || ""), path.extname(String(filePath || "")));
+}
+
+function interpolateProjectName(value, projectName) {
+  return String(value || "").replace(/\$\{project\.name\}/g, projectName || "");
+}
+
+function resolveProjectRelativePath(projectRoot, rawValue) {
+  const value = String(rawValue || "").trim();
+  if (!value) return "";
+  const interpolated = interpolateProjectName(value, path.basename(projectRoot));
+  return path.isAbsolute(interpolated) ? path.resolve(interpolated) : path.resolve(projectRoot, interpolated);
+}
+
+function defaultVitisPlatformName(projectName) {
+  return `${projectName || "project"}_platform`;
+}
+
+function defaultVitisXsaPath(projectRoot, projectName) {
+  return path.join(projectRoot, "output", "vitis", "xsa", `${projectName || path.basename(projectRoot)}.xsa`);
+}
+
+function defaultVitisWorkspace(projectRoot) {
+  return path.join(projectRoot, "output", "vitis", "workspace");
+}
+
+function defaultVitisXpfmPath(projectRoot, platformName) {
+  return path.join(projectRoot, "output", "vitis", "workspace", platformName, "export", platformName, `${platformName}.xpfm`);
+}
+
+function normalizeStringRows(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row) => String(row || "").trim()).filter(Boolean);
+}
+
+function collectVitisChecks(projectRoot, config) {
+  const root = path.resolve(projectRoot || process.cwd());
+  const projectConfig = config && config.project && typeof config.project === "object" ? config.project : {};
+  const projectName = String(projectConfig.name || path.basename(root));
+  const vitisConfig = config && config.vitis && typeof config.vitis === "object" ? config.vitis : null;
+  const platformConfig = vitisConfig && vitisConfig.platform && typeof vitisConfig.platform === "object" ? vitisConfig.platform : {};
+  const xsaConfig = vitisConfig && vitisConfig.xsa && typeof vitisConfig.xsa === "object" ? vitisConfig.xsa : {};
+  const platformName = interpolateProjectName(platformConfig.name || defaultVitisPlatformName(projectName), projectName);
+  const workspacePath = resolveProjectRelativePath(root, vitisConfig && vitisConfig.workspace ? vitisConfig.workspace : "output/vitis/workspace");
+  const xsaPath = resolveProjectRelativePath(root, xsaConfig.path || `output/vitis/xsa/${projectName}.xsa`);
+  const xpfmPath = resolveProjectRelativePath(
+    root,
+    platformConfig.xpfm || path.relative(root, defaultVitisXpfmPath(root, platformName))
+  );
+  const applications = vitisConfig && Array.isArray(vitisConfig.applications) ? vitisConfig.applications : [];
+
+  const appRows = applications.map((application, index) => {
+    const app = application && typeof application === "object" ? application : {};
+    const name = String(app.name || `app_${index + 1}`);
+    const sourceGlobs = normalizeStringRows(app.sources);
+    const matches = sourceGlobs.length > 0
+      ? fg.sync(sourceGlobs.map((row) => interpolateProjectName(row, projectName)), {
+        cwd: root,
+        onlyFiles: true,
+        dot: false,
+        unique: true,
+      }).sort((left, right) => left.localeCompare(right))
+      : [];
+    return {
+      name,
+      sourceGlobs,
+      sourceMatchCount: matches.length,
+      sourceMatches: matches.slice(0, 25),
+      includes: normalizeStringRows(app.includes),
+      target: String(app.target || "hw"),
+    };
+  });
+
+  return {
+    present: Boolean(vitisConfig),
+    workspace: {
+      path: workspacePath.replace(/\\/g, "/"),
+      parentWritable: isWritableLocation(workspacePath),
+    },
+    xsa: {
+      path: xsaPath.replace(/\\/g, "/"),
+      exists: fs.existsSync(xsaPath),
+    },
+    platform: {
+      name: platformName,
+      xpfm: xpfmPath.replace(/\\/g, "/"),
+      xpfmExists: fs.existsSync(xpfmPath),
+      os: String(platformConfig.os || "standalone"),
+      cpu: String(platformConfig.cpu || "auto"),
+      domainName: String(platformConfig.domain_name || "standalone_domain"),
+    },
+    applications: appRows,
+    run: vitisConfig && vitisConfig.run && typeof vitisConfig.run === "object"
+      ? {
+        mode: String(vitisConfig.run.mode || "hardware"),
+        hwServer: String(vitisConfig.run.hw_server || ""),
+        deviceIndex: Object.prototype.hasOwnProperty.call(vitisConfig.run, "device_index") ? vitisConfig.run.device_index : null,
+        complete: Boolean(String(vitisConfig.run.hw_server || "").trim()) &&
+          Object.prototype.hasOwnProperty.call(vitisConfig.run, "device_index"),
+      }
+      : { mode: "hardware", hwServer: "", deviceIndex: null, complete: false },
+  };
 }
 
 function buildDoctorWarnings(report) {
@@ -184,6 +365,23 @@ function buildDoctorWarnings(report) {
   }
   if (report.resolved && report.resolved.xdcCount === 0) {
     warnings.push("xdc_missing");
+  }
+  if (report.vitis && report.vitis.present) {
+    if (report.vitis.workspace && !report.vitis.workspace.parentWritable) {
+      warnings.push("vitis_workspace_parent_not_writable");
+    }
+    if (report.vitis.applications && report.vitis.applications.some((app) => app.sourceGlobs.length > 0 && app.sourceMatchCount === 0)) {
+      warnings.push("vitis_app_source_glob_no_match");
+    }
+    if (report.vitis.applications && report.vitis.applications.length > 0 && report.vitis.platform && !report.vitis.platform.xpfmExists) {
+      warnings.push("vitis_platform_xpfm_missing");
+    }
+    if (report.vitis.xsa && !report.vitis.xsa.exists) {
+      warnings.push("vitis_xsa_missing");
+    }
+    if (report.vitis.run && !report.vitis.run.complete) {
+      warnings.push("vitis_run_config_incomplete");
+    }
   }
 
   return warnings;
@@ -232,7 +430,9 @@ function runDoctor(projectRoot, manifestJsonPath, loader) {
       sim: { present: hasOptionalSection(snapshotConfig, "sim") },
       vivado: { present: hasOptionalSection(snapshotConfig, "vivado") },
       report: { present: hasOptionalSection(snapshotConfig, "report") },
+      vitis: { present: hasOptionalSection(snapshotConfig, "vitis") },
     },
+    vitis: collectVitisChecks(root, snapshotConfig),
     tbNaming: {
       expectedBaseName: "",
       matched: false,
@@ -315,6 +515,7 @@ function runDoctor(projectRoot, manifestJsonPath, loader) {
       tools: report.tools,
       resolved: report.resolved,
       optionalSections: report.optionalSections,
+      vitis: report.vitis,
       tbNaming: report.tbNaming,
       paths: report.paths,
     },
@@ -330,6 +531,7 @@ function runDoctor(projectRoot, manifestJsonPath, loader) {
     resolved: report.resolved,
     outputDirs: report.outputDirs,
     optionalSections: report.optionalSections,
+    vitis: report.vitis,
     tbNaming: report.tbNaming,
     paths: report.paths,
   };

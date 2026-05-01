@@ -52,6 +52,27 @@ def host_path_exists(path_str: str) -> bool:
         return False
 
 
+def resolve_automation_repo_root(project_root: pathlib.Path) -> pathlib.Path:
+    env_root = os.environ.get("FPGA_AUTOMATION_REPO_ROOT", "").strip()
+    module_root = pathlib.Path(__file__).resolve().parents[6]
+    managed_parent = project_root.resolve().parents[1]
+    candidates = [
+        pathlib.Path(env_root) if env_root else None,
+        managed_parent / "FPGA_Auto_Project",
+        module_root,
+        managed_parent,
+    ]
+
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        marker = candidate / "templates" / "contexts" / "timing_verification" / "adapters" / "tcl" / "common.tcl"
+        if marker.exists():
+            return candidate.resolve()
+
+    return module_root
+
+
 def decode_windows_output(data: bytes) -> str:
     for encoding in ("utf-8", "cp949", "mbcs"):
         try:
@@ -276,7 +297,7 @@ def load_project_contract(
 
     return {
         "project_root": project_root.resolve(),
-        "repo_root": project_root.resolve().parents[1],
+        "repo_root": resolve_automation_repo_root(project_root),
         "manifest_path": manifest_path.resolve(),
         "manifest": manifest,
         "profile_path": (project_root / "tools" / profile_name).resolve(),

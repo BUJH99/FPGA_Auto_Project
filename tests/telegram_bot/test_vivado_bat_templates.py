@@ -9,6 +9,8 @@ VIVADO_BATCH_SCRIPTS = (
     "templates/contexts/simulation/adapters/bat/sim_run_vivado_nogui.bat",
     "templates/contexts/vivado/adapters/bat/vivado_run_build_flow.bat",
     "templates/contexts/vivado/adapters/bat/vivado_open_project_gui.bat",
+    "templates/contexts/vivado/adapters/bat/vivado_open_ip_integrator_gui.bat",
+    "templates/contexts/vivado/adapters/bat/vivado_build_ip_integrator_flow.bat",
     "templates/contexts/vivado/adapters/bat/vivado_program_fpga.bat",
     "templates/contexts/vivado/adapters/bat/vivado_retarget_ip_part.bat",
     "templates/contexts/vivado/adapters/bat/vivado_finalize_block_design.bat",
@@ -24,6 +26,35 @@ class VivadoBatchTemplateTests(unittest.TestCase):
             with self.subTest(script=rel_path):
                 self.assertIn("ensure_vivado_on_path.bat", script_text)
                 self.assertIn('call "%VIVADO_ENV_HELPER%" --quiet >nul 2>nul', script_text)
+
+    def test_ip_integrator_batches_bootstrap_manifest_and_call_new_tcl(self) -> None:
+        gui_text = (
+            REPO_ROOT
+            / "templates"
+            / "contexts"
+            / "vivado"
+            / "adapters"
+            / "bat"
+            / "vivado_open_ip_integrator_gui.bat"
+        ).read_text(encoding="utf-8")
+        build_text = (
+            REPO_ROOT
+            / "templates"
+            / "contexts"
+            / "vivado"
+            / "adapters"
+            / "bat"
+            / "vivado_build_ip_integrator_flow.bat"
+        ).read_text(encoding="utf-8")
+
+        for script_text in (gui_text, build_text):
+            self.assertIn("bootstrap_manifest_context.bat", script_text)
+            self.assertIn("--stage prepare", script_text)
+            self.assertIn("output\\vivado\\%IPI_PROJECT_NAME%\\%IPI_PROJECT_NAME%.xpr", script_text)
+
+        self.assertIn("vivado_open_ip_integrator_gui.tcl", gui_text)
+        self.assertIn("vivado_build_ip_integrator_flow.tcl", build_text)
+        self.assertIn("Run menu 29", build_text)
 
     def test_setup_toolkit_references_new_amd_vivado_path(self) -> None:
         script_path = (

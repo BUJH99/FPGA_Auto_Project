@@ -1,0 +1,46 @@
+version: "1"
+project:
+  name: "ok_vitis"
+hdl:
+  top: "TOP"
+  src_globs:
+    - "src/**/*.sv"
+  tb_globs:
+    - "tb/**/*.sv"
+vitis:
+  workspace: "output/vitis/workspace"
+  xsa:
+    path: "output/vitis/xsa/${project.name}.xsa"
+    export_tcl: "tools/export_xsa.tcl"
+    generated_path: "output/custom/generated.xsa"
+    bit_path: "output/TOP.bit"
+    bit_globs:
+      - "output/*.bit"
+      - "output/vivado/**/*.runs/impl_1/*.bit"
+    vivado_project: "output/vivado/TOP_project/TOP_project.xpr"
+    impl_run: "impl_1"
+    include_bitstream: true
+    fixed: true
+    validate: true
+  platform:
+    name: "${project.name}_platform"
+    xpfm: "output/vitis/workspace/${platform.name}/export/${platform.name}/${platform.name}.xpfm"
+    os: "standalone"
+    cpu: "auto"
+    domain_name: "standalone_domain"
+  applications:
+    - name: "hello_world"
+      template: "empty_application"
+      domain: "standalone_domain"
+      sources:
+        - "sw/apps/hello_world/src/**/*"
+        - "sw/common/src/**/*"
+      includes:
+        - "sw/apps/hello_world/include"
+        - "sw/common/include"
+      linker_script: "sw/apps/hello_world/lscript.ld"
+      target: "hw"
+  run:
+    mode: "hardware"
+    hw_server: "localhost:3121"
+    device_index: 1

@@ -50,7 +50,7 @@ class TimingVerificationThreadTemplateTests(unittest.TestCase):
                 self.assertIn("riscv_timing_analysis::configure_max_threads", script_text)
 
     def test_external_pipeline_collector_calls_shared_thread_helper(self) -> None:
-        script_path = MANAGED_PROJECT_ROOT / "RISCV_32I_5STAGE" / "tools" / "pipeline_perf_collect.tcl"
+        script_path = MANAGED_PROJECT_ROOT / "RISCV_RV32I_5STAGE" / "tools" / "pipeline_perf_collect.tcl"
         if not script_path.exists():
             self.skipTest(f"Managed workspace sample not available: {script_path}")
 

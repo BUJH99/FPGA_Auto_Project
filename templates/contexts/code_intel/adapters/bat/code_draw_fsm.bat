@@ -56,6 +56,10 @@ set "VERILOG_FILES="
 set "ALL_MODULES="
 set "MODULE_COUNT=0"
 set "HAS_TOP=0"
+set "DEFAULT_MODULE_NAME="
+set "DEFAULT_NOTE="
+set "RECOMMENDED_FSM_MODULE="
+set "TOP_HAS_LOCAL_FSM=0"
 
 for /f "usebackq delims=" %%R in ("%MANIFEST_SRC_LIST%") do (
     if not "%%R"=="" (
@@ -79,17 +83,15 @@ if !MODULE_COUNT! equ 0 (
     exit /b 1
 )
 
+call :choose_default_module
+
 :SELECT_MODULES
 call :render_selection_screen
 echo  Input format:
 echo   - Number(s): 1 3 5  ^(space/comma separated^)
 echo   - ALL: generate all modules
 echo   - Q: return to menu
-if "!HAS_TOP!"=="1" (
-    echo   - Enter: default !TOP_MODULE_NAME!
-) else (
-    echo   - Enter: default !MODULE_1!
-)
+echo   - Enter: default !DEFAULT_MODULE_NAME!
 echo.
 
 set "USER_INPUT="
@@ -100,11 +102,7 @@ set "USER_TOKEN="
 for /f "tokens=1 delims= " %%A in ("!USER_INPUT!") do set "USER_TOKEN=%%~A"
 
 if "!USER_INPUT!"=="" (
-    if "!HAS_TOP!"=="1" (
-        set "USER_INPUT=!TOP_MODULE_NAME!"
-    ) else (
-        set "USER_INPUT=!MODULE_1!"
-    )
+    set "USER_INPUT=!DEFAULT_MODULE_NAME!"
     goto :SELECTION_DONE
 )
 
@@ -200,11 +198,70 @@ if defined SELECTION_WARNING (
     echo.
 )
 set "SELECTION_WARNING="
+if defined DEFAULT_NOTE (
+    echo !DEFAULT_NOTE!
+    echo.
+)
 echo  Scanned module files in manifest-resolved source set:
 for /l %%i in (1,1,!MODULE_COUNT!) do (
-    echo   [%%i] !MODULE_%%i!
+    set "ENTRY_SUFFIX="
+    if /i "!MODULE_%%i!"=="!DEFAULT_MODULE_NAME!" set "ENTRY_SUFFIX= (default)"
+    echo   [%%i] !MODULE_%%i!!ENTRY_SUFFIX!
 )
 echo.
+exit /b 0
+
+:choose_default_module
+set "DEFAULT_MODULE_NAME="
+set "DEFAULT_NOTE="
+set "RECOMMENDED_FSM_MODULE="
+set "TOP_HAS_LOCAL_FSM=0"
+
+if "!HAS_TOP!"=="1" if "!HAS_NODE!"=="1" (
+    for /l %%I in (1,1,!MODULE_COUNT!) do (
+        if /i "!MODULE_%%I!"=="!TOP_MODULE_NAME!" if "!TOP_HAS_LOCAL_FSM!"=="0" (
+            call :probe_module_fsm_by_index %%I
+            if "!PROBE_HAS_FSM!"=="1" (
+                set "TOP_HAS_LOCAL_FSM=1"
+                set "DEFAULT_MODULE_NAME=!TOP_MODULE_NAME!"
+                set "RECOMMENDED_FSM_MODULE=!TOP_MODULE_NAME!"
+            )
+        )
+    )
+)
+
+if not defined DEFAULT_MODULE_NAME if "!HAS_NODE!"=="1" (
+    for /l %%I in (1,1,!MODULE_COUNT!) do (
+        if not defined DEFAULT_MODULE_NAME (
+            call :probe_module_fsm_by_index %%I
+            if "!PROBE_HAS_FSM!"=="1" (
+                set "DEFAULT_MODULE_NAME=!MODULE_%%I!"
+                set "RECOMMENDED_FSM_MODULE=!MODULE_%%I!"
+            )
+        )
+    )
+)
+
+if not defined DEFAULT_MODULE_NAME (
+    if "!HAS_TOP!"=="1" (
+        set "DEFAULT_MODULE_NAME=!TOP_MODULE_NAME!"
+    ) else (
+        set "DEFAULT_MODULE_NAME=!MODULE_1!"
+    )
+) else (
+    if "!HAS_TOP!"=="1" if "!TOP_HAS_LOCAL_FSM!"=="0" if /i not "!DEFAULT_MODULE_NAME!"=="!TOP_MODULE_NAME!" (
+        set "DEFAULT_NOTE=[INFO] !TOP_MODULE_NAME! has no local FSM. Press Enter to use !DEFAULT_MODULE_NAME!."
+    )
+)
+exit /b 0
+
+:probe_module_fsm_by_index
+set "PROBE_HAS_FSM=0"
+if "%~1"=="" exit /b 0
+if "!HAS_NODE!"=="0" exit /b 0
+if not defined MODULE_PATH_%~1 exit /b 0
+node "%FSM_TOOL%" --verilog "!MODULE_PATH_%~1!" --module "!MODULE_%~1!" --meta-only >nul 2>nul
+if !errorlevel! equ 0 set "PROBE_HAS_FSM=1"
 exit /b 0
 
 :PROCESS_MODULE
@@ -215,7 +272,9 @@ echo --------------------------------------------------------
 
 set "SOURCE_FILE="
 for /l %%I in (1,1,!MODULE_COUNT!) do (
-    if /i "!MODULE_%%I!"=="!MOD!" if not defined SOURCE_FILE set "SOURCE_FILE=!MODULE_PATH_%%I!"
+    if /i "!MODULE_%%I!"=="!MOD!" if not defined SOURCE_FILE (
+        set "SOURCE_FILE=!MODULE_PATH_%%I!"
+    )
 )
 
 if "!SOURCE_FILE!"=="" (
@@ -232,6 +291,12 @@ if exist "!SVG_FILE!" del /q "!SVG_FILE!" >nul 2>nul
 if exist "!DRAWIO_FILE!" del /q "!DRAWIO_FILE!" >nul 2>nul
 
 if "!HAS_NODE!"=="1" (
+    if "!HAS_TOP!"=="1" if /i "!MOD!"=="!TOP_MODULE_NAME!" if "!TOP_HAS_LOCAL_FSM!"=="0" if defined RECOMMENDED_FSM_MODULE if /i not "!RECOMMENDED_FSM_MODULE!"=="!MOD!" (
+        echo [WARN] !MOD! has no local FSM. Try !RECOMMENDED_FSM_MODULE! or select the module containing your state machine.
+        set /a WARN_COUNT+=1
+        echo.
+        exit /b 0
+    )
     echo [1/2] Parsing source-level FSM...
     node "%FSM_TOOL%" --verilog "!SOURCE_FILE!" --out "!SVG_FILE!" --module "!MOD!" --engine auto --direction both
     if !errorlevel! equ 0 (

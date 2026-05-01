@@ -19,6 +19,7 @@ call :resolve_python
 if errorlevel 1 goto :FAIL
 call :resolve_vivado_bat
 if errorlevel 1 goto :FAIL
+call :configure_pythonpath
 call :status "Python and Vivado launchers resolved"
 
 set "TARGET_INPUT=%~1"
@@ -322,6 +323,14 @@ if not defined RESOLVED_VIVADO_BAT (
     exit /b 1
 )
 set "VIVADO_BAT=%RESOLVED_VIVADO_BAT%"
+exit /b 0
+
+:configure_pythonpath
+if defined PYTHONPATH (
+    set "PYTHONPATH=%REPO_ROOT%;%PYTHONPATH%"
+) else (
+    set "PYTHONPATH=%REPO_ROOT%"
+)
 exit /b 0
 
 :status

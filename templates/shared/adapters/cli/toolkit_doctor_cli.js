@@ -93,6 +93,10 @@ function formatDoctorText(summary, summaryPath, extraWritePath = "") {
   const tbNaming = summary && summary.tbNaming && typeof summary.tbNaming === "object" ? summary.tbNaming : {};
   const paths = summary && summary.paths && typeof summary.paths === "object" ? summary.paths : {};
   const tools = summary && summary.tools && typeof summary.tools === "object" ? summary.tools : {};
+  const vitis = summary && summary.vitis && typeof summary.vitis === "object" ? summary.vitis : {};
+  const vitisWorkspace = vitis.workspace && typeof vitis.workspace === "object" ? vitis.workspace : {};
+  const vitisXsa = vitis.xsa && typeof vitis.xsa === "object" ? vitis.xsa : {};
+  const vitisPlatform = vitis.platform && typeof vitis.platform === "object" ? vitis.platform : {};
 
   const lines = [
     "===============================================================================",
@@ -114,7 +118,14 @@ function formatDoctorText(summary, summaryPath, extraWritePath = "") {
     formatToolState("node", tools.node),
     formatToolState("python", tools.python),
     formatToolState("vivado", tools.vivado),
+    formatToolState("vitis", tools.vitis),
     formatToolState("yosys", tools.yosys),
+    "",
+    "[Vitis]",
+    `  - manifest : ${boolWord(Boolean(vitis.present))}`,
+    `  - workspace: ${String(vitisWorkspace.path || "-")} (parent_writable=${boolWord(Boolean(vitisWorkspace.parentWritable))})`,
+    `  - xsa      : ${String(vitisXsa.path || "-")} (exists=${boolWord(Boolean(vitisXsa.exists))})`,
+    `  - xpfm     : ${String(vitisPlatform.xpfm || "-")} (exists=${boolWord(Boolean(vitisPlatform.xpfmExists))})`,
     "",
     "[Artifacts]",
     `  - summary : ${String(summaryPath || "")}`,

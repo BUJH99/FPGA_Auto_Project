@@ -28,9 +28,15 @@ from .execution_metrics import (
 )
 from .focus import find_module_source_path, parse_ansi_module_ports, render_defparam_wrapper, sanitize_token
 from .integrated_report import (
+    highest_status,
     merge_program_detail_section,
+    render_finding_table,
+    render_recommended_actions,
     shift_markdown_headings,
+    status_badge,
     strip_first_markdown_heading,
+    strip_noisy_report_sections,
+    write_html_report,
 )
 from .rv32i import DEFAULT_CLASS_ORDER, classify_word, parse_asm_instructions
 
@@ -63,6 +69,8 @@ PROGRAM_ALIASES = {
     "bubble_sort_mem": "bubble_sort",
     "bubble_sort_s": "bubble_sort",
 }
+SINGLE_CYCLE_PROJECT_NAMES = {"RISCV_32I_SINGLE", "RISCV_RV32I_SINGLE"}
+PIPELINE_PROJECT_CANDIDATES = ("RISCV_RV32I_5STAGE", "RISCV_32I_5STAGE")
 
 
 def fmt_float(value: float | None, digits: int = 3) -> str:
@@ -172,6 +180,16 @@ def unique_strings(values: list[str]) -> list[str]:
         seen.add(value)
         ordered.append(value)
     return ordered
+
+
+def resolve_companion_pipeline_root(project_root: pathlib.Path) -> pathlib.Path | None:
+    if project_root.name not in SINGLE_CYCLE_PROJECT_NAMES:
+        return None
+    for candidate_name in PIPELINE_PROJECT_CANDIDATES:
+        candidate = project_root.parent / candidate_name
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def normalize_program_key(raw_value: str | None) -> str:
@@ -667,11 +685,8 @@ def resolve_pipeline_reference_metrics(
     project_root: pathlib.Path,
     program_key: str,
 ) -> dict[str, Any] | None:
-    if project_root.name != "RISCV_32I_SINGLE":
-        return None
-
-    pipeline_root = project_root.parent / "RISCV_32I_5STAGE"
-    if not pipeline_root.exists():
+    pipeline_root = resolve_companion_pipeline_root(project_root)
+    if pipeline_root is None:
         return None
 
     pipeline_contract = load_project_contract(pipeline_root)
@@ -719,11 +734,8 @@ def resolve_pipeline_reference_metrics(
 
 
 def resolve_integrated_report_path(project_root: pathlib.Path) -> pathlib.Path | None:
-    if project_root.name != "RISCV_32I_SINGLE":
-        return None
-
-    pipeline_root = project_root.parent / "RISCV_32I_5STAGE"
-    if not pipeline_root.exists():
+    pipeline_root = resolve_companion_pipeline_root(project_root)
+    if pipeline_root is None:
         return None
 
     pipeline_contract = load_project_contract(pipeline_root)
@@ -738,7 +750,8 @@ def build_integrated_single_cycle_detail_text(
     artifact_dir: pathlib.Path,
     report_path: pathlib.Path,
 ) -> str:
-    detail_body = shift_markdown_headings(strip_first_markdown_heading(report_text), 2).rstrip()
+    compact_body = strip_noisy_report_sections(strip_first_markdown_heading(report_text))
+    detail_body = shift_markdown_headings(compact_body, 2).rstrip()
     generated_at = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
     lines = [
         f"- Source project: `{project_name}`",
@@ -1384,264 +1397,223 @@ def build_report(output_dir: pathlib.Path, report_path: pathlib.Path, metadata: 
         else "Manual review required."
     )
 
-    report_lines: list[str] = []
-    report_lines.append("# SINGLE_CYCLE Optimization Report")
-    report_lines.append("")
-    report_lines.append("## Executive Summary")
-    report_lines.append("")
-    report_lines.append("| Item | Value |")
-    report_lines.append("| --- | --- |")
-    report_lines.append(f"| Timing verdict | {timing_verdict} |")
-    report_lines.append(f"| Worst endpoint | `{worst_path['end_pin']}` |")
-    report_lines.append(f"| Worst structural bucket | `{bucket_rows[0][0] if bucket_rows else 'NA'}` |")
-    report_lines.append(f"| Worst canonical family | `{worst_family_row['label'] if worst_family_row else 'NA'}` |")
-    report_lines.append(f"| Runtime winner | {runtime_winner} |")
-    report_lines.append(f"| First optimization target | {first_action} |")
-    report_lines.append("")
-    report_lines.append("## Key Metrics")
-    report_lines.append("")
-    report_lines.append("- `Delta` is `5-stage reference - single-cycle`.")
-    report_lines.append("- `Cycles`, `CPI`, and `Runtime` come from the selected timing-program trace model.")
-    report_lines.append("- `Pipeline Speedup` is runtime-based: `single-cycle runtime / 5-stage runtime`, so values above `1.000x` mean the pipeline is faster.")
-    if pipeline_reference is not None:
-        report_lines.append("- Companion pipeline timing and utilization are pulled from the matching 5-stage artifact set when available.")
-    else:
-        report_lines.append("- Companion pipeline artifacts were not found, so 5-stage timing and area cells may appear as `NA`.")
-    report_lines.append("")
-    report_lines.append("| Metric | Single-Cycle | 5-Stage Reference | Delta |")
-    report_lines.append("| --- | ---: | ---: | ---: |")
-    report_lines.append(f"| WNS (ns) | {fmt_float(wns_ns)} | {fmt_float(pipeline_ref_wns)} | {fmt_delta_float(wns_ns, pipeline_ref_wns)} |")
-    report_lines.append(
-        f"| Minimum Period (ns) | {fmt_float(min_period_ns)} | {fmt_float(pipeline_ref_min_period)} | {fmt_delta_float(min_period_ns, pipeline_ref_min_period)} |"
+    analysis_findings: list[dict[str, Any]] = []
+    if timing_verdict == "FAIL":
+        analysis_findings.append(
+            {
+                "severity": "FAIL",
+                "category": "Timing Closure",
+                "title": "Negative setup timing",
+                "evidence": f"WNS {fmt_float(wns_ns)} ns, failing endpoints {failing_endpoints}",
+                "impact": "The current single-cycle implementation does not meet the requested clock period.",
+                "recommended_action": "Start with the worst endpoint and reduce the longest combinational cone before changing constraints.",
+                "source_artifact": output_dir / "actual_timing_summary.rpt",
+            }
+        )
+    if avg_route_share is not None and (avg_route_share >= 70.0 or max(route_shares) >= 75.0):
+        analysis_findings.append(
+            {
+                "severity": "WARN",
+                "category": "Routing",
+                "title": "Route-dominant timing paths",
+                "evidence": f"Average route share {fmt_float(avg_route_share, 1)}%, max route share {fmt_float(max(route_shares), 1)}%",
+                "impact": "Physical distance or fanout is likely contributing more than logic depth on the critical paths.",
+                "recommended_action": "Prioritize placement locality, high-fanout cleanup, and register duplication before deep RTL rewrites.",
+                "source_artifact": output_dir / "actual_timing_paths.tsv",
+            }
+        )
+    if worst_family_row:
+        analysis_findings.append(
+            {
+                "severity": "WARN" if timing_verdict != "PASS" else "INFO",
+                "category": "Structural Bottleneck",
+                "title": str(worst_family_row["label"]),
+                "evidence": f"{worst_family_row['label']} reaches {fmt_float(float(worst_family_row['min_period_ns']))} ns",
+                "impact": "This retained timing family is the strongest current optimization target.",
+                "recommended_action": f"Inspect `{worst_family_row['label']}` fan-in and split or register the dominant data path.",
+                "source_artifact": worst_family_row.get("report_path"),
+            }
+        )
+    if signature_rows and repeated_path_ratio >= 0.20:
+        signature, count = signature_rows[0]
+        analysis_findings.append(
+            {
+                "severity": "WARN",
+                "category": "Repeated Archetype",
+                "title": "Repeated critical path signature",
+                "evidence": f"`{signature}` covers {repeated_path_ratio * 100.0:.1f}% of parsed top100 paths ({count} hits)",
+                "impact": "One structural pattern dominates timing, so a targeted RTL/placement fix should move many paths together.",
+                "recommended_action": "Optimize the repeated signature first, then regenerate the report to confirm the distribution changes.",
+                "source_artifact": output_dir / "actual_timing_top100.rpt",
+            }
+        )
+    if methodology_rules and timing_verdict != "PASS":
+        top_rule = max(methodology_rules, key=lambda row: int(row["violations"]))
+        analysis_findings.append(
+            {
+                "severity": "WARN",
+                "category": "Methodology / QoR",
+                "title": str(top_rule["rule"]),
+                "evidence": f"{top_rule['rule']} reports {top_rule['violations']} violations",
+                "impact": "The rule may explain part of the timing closure risk and should be checked with the critical path.",
+                "recommended_action": f"Review `{top_rule['rule']}` only if it touches the reported bottleneck path or high-fanout nets.",
+                "source_artifact": output_dir / "actual_methodology.rpt",
+            }
+        )
+    if not analysis_findings:
+        analysis_findings.append(
+            {
+                "severity": "PASS",
+                "category": "Timing",
+                "title": "No urgent timing risk detected",
+                "evidence": "Parsed timing, health, and structural checks did not produce a high-priority finding.",
+                "impact": "The current report can be used as a baseline for the next optimization run.",
+                "recommended_action": "Keep this artifact set as the reference and compare against the next timing run.",
+                "source_artifact": output_dir,
+            }
+        )
+
+    finding_category_order = {
+        "Timing Closure": 0,
+        "Routing": 1,
+        "Repeated Archetype": 2,
+        "Structural Bottleneck": 3,
+        "Methodology / QoR": 4,
+        "Timing": 5,
+    }
+    ordered_findings = sorted(
+        analysis_findings,
+        key=lambda finding: finding_category_order.get(str(finding.get("category", "")), 9),
     )
-    report_lines.append(f"| Fmax (MHz) | {fmt_float(fmax_mhz, 2)} | {fmt_float(pipeline_ref_fmax, 2)} | {fmt_delta_float(fmax_mhz, pipeline_ref_fmax, 2)} |")
-    report_lines.append(f"| LUTs | {fmt_int(single_lut_used)} | {fmt_int(pipeline_ref_lut)} | {fmt_delta_int(single_lut_used, pipeline_ref_lut)} |")
-    report_lines.append(f"| Registers | {fmt_int(single_ff_used)} | {fmt_int(pipeline_ref_ff)} | {fmt_delta_int(single_ff_used, pipeline_ref_ff)} |")
-    report_lines.append(
-        f"| Cycles | {fmt_int(int(single_execution['cycle_count']))} | {fmt_int(int(pipeline_execution['cycle_count']))} | {cycle_delta:+d} |"
+    overall_status = highest_status([timing_verdict] + [str(finding["severity"]) for finding in analysis_findings])
+    primary_bottleneck = (
+        f"{worst_family_row['label']} at {fmt_float(float(worst_family_row['min_period_ns']))} ns"
+        if worst_family_row
+        else str(analysis_findings[0]["title"])
     )
-    report_lines.append(
-        f"| CPI | {fmt_float(single_execution['cpi'])} | {fmt_float(pipeline_execution['cpi'])} | {fmt_delta_float(single_execution['cpi'], pipeline_execution['cpi'])} |"
-    )
-    report_lines.append(
-        f"| Runtime | {format_runtime_ns(single_execution['runtime_ns'])} | {format_runtime_ns(pipeline_execution['runtime_ns'])} | {format_runtime_ns(runtime_delta_ns)} |"
-    )
-    report_lines.append(
-        f"| Pipeline Speedup (x) | {format_ratio(1.0 if runtime_speedup is not None else None)} | {format_ratio(runtime_speedup)} | {fmt_delta_ratio(1.0 if runtime_speedup is not None else None, runtime_speedup)} |"
-    )
-    report_lines.append("")
-    report_lines.append("## Optimization Priority")
-    report_lines.append("")
-    for idx, (title, detail) in enumerate(priorities[:6], start=1):
-        report_lines.append(f"{idx}. `{title}`: {detail}")
-    if not priorities:
-        report_lines.append("1. No strong automatic priority was detected. Review canonical families and path buckets manually.")
-    report_lines.append("")
-    report_lines.append("## Critical Timing Structure")
-    report_lines.append("")
-    report_lines.append("### Canonical Timing Families")
-    report_lines.append("")
-    report_lines.append("| Family | Focus | Worst Endpoint | Minimum Period (ns) | Est. Fmax (MHz) | Top Paths |")
-    report_lines.append("| --- | --- | --- | ---: | ---: | ---: |")
-    for family_row in family_timing_rows:
-        worst_family_path = family_row["worst_path"]
-        if worst_family_path:
-            report_lines.append(
-                f"| {family_row['label']} | {family_row['description']} | `{worst_family_path['end_pin']}` | {fmt_float(float(family_row['min_period_ns']))} | {fmt_float(float(family_row['fmax_mhz']), 2)} | {family_row['path_count']} |"
-            )
-        else:
-            report_lines.append(
-                f"| {family_row['label']} | {family_row['description']} | No retained path data | NA | NA | 0 |"
-            )
-    report_lines.append("")
-    report_lines.append("### Program Coverage Context")
-    report_lines.append("")
-    report_lines.append("| Class | Instruction Count | Active Family Hints |")
-    report_lines.append("| --- | ---: | --- |")
+    root_causes = ordered_findings[:3]
+    recommended_actions = render_recommended_actions(ordered_findings, limit=3)
+
     family_active_classes = metadata.get("family_active_classes", {})
+    coverage_rows: list[str] = []
     for class_name in metadata.get("class_order", []):
         active_families = [
             family["label"]
             for family in metadata.get("known_probe_families", [])
             if class_name in family_active_classes.get(family["key"], [])
         ]
-        report_lines.append(
+        coverage_rows.append(
             f"| {class_name} | {metadata['class_instruction_counts'].get(class_name, 0)} | {', '.join(active_families) if active_families else 'NA'} |"
         )
-    report_lines.append("")
-    report_lines.append("### Top100 Timing Distribution")
-    report_lines.append("")
-    report_lines.append("| Metric | Worst | P90 | Median | Average |")
-    report_lines.append("| --- | ---: | ---: | ---: | ---: |")
-    report_lines.append(f"| Slack (ns) | {fmt_float(min(slacks))} | {fmt_float(percentile(slacks, 0.10))} | {fmt_float(percentile(slacks, 0.50))} | {fmt_float(safe_mean(slacks))} |")
-    report_lines.append(f"| Data path delay (ns) | {fmt_float(max(datapath_delays))} | {fmt_float(percentile(datapath_delays, 0.90))} | {fmt_float(percentile(datapath_delays, 0.50))} | {fmt_float(safe_mean(datapath_delays))} |")
-    report_lines.append(f"| Route delay (ns) | {fmt_float(max(net_delays))} | {fmt_float(percentile(net_delays, 0.90))} | {fmt_float(percentile(net_delays, 0.50))} | {fmt_float(safe_mean(net_delays))} |")
-    report_lines.append(f"| Route share (%) | {fmt_float(max(route_shares), 1)} | {fmt_float(percentile(route_shares, 0.90), 1)} | {fmt_float(percentile(route_shares, 0.50), 1)} | {fmt_float(avg_route_share, 1)} |")
-    report_lines.append(f"| Logic levels | {fmt_float(max(logic_levels), 1)} | {fmt_float(percentile(logic_levels, 0.90), 1)} | {fmt_float(percentile(logic_levels, 0.50), 1)} | {fmt_float(safe_mean(logic_levels), 1)} |")
-    report_lines.append(f"| Max fanout seen on path | {fmt_float(max(max_fanouts), 1)} | {fmt_float(percentile(max_fanouts, 0.90), 1)} | {fmt_float(percentile(max_fanouts, 0.50), 1)} | {fmt_float(safe_mean(max_fanouts), 1)} |")
-    report_lines.append("")
-    report_lines.append("### Path Family Buckets")
-    report_lines.append("")
-    report_lines.append("| Bucket | Count | Worst Slack (ns) |")
-    report_lines.append("| --- | ---: | ---: |")
-    for bucket, count in bucket_rows:
-        report_lines.append(f"| {bucket} | {count} | {fmt_float(bucket_worst_slack[bucket])} |")
-    report_lines.append("")
-    report_lines.append("### Repeated Exact Path Signatures")
-    report_lines.append("")
-    report_lines.append("| Signature | Count | Worst Slack (ns) |")
-    report_lines.append("| --- | ---: | ---: |")
-    for signature, count in signature_rows:
-        report_lines.append(f"| {signature} | {count} | {fmt_float(signature_worst_slack[signature])} |")
-    report_lines.append("")
-    report_lines.append("### Start/End Module Pairs")
-    report_lines.append("")
-    report_lines.append("| Start Module | End Module | Count |")
-    report_lines.append("| --- | --- | ---: |")
-    for (start_module, end_module), count in start_end_rows:
-        report_lines.append(f"| {start_module} | {end_module} | {count} |")
-    report_lines.append("")
-    report_lines.append("## Implementation Footprint")
-    report_lines.append("")
-    report_lines.append("### Auto-Discovered Module Metrics")
-    report_lines.append("")
-    report_lines.append("| Instance | Total Cells | FF | LUT | CARRY | RAM | MUXF | Other |")
-    report_lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
-    for row in largest_modules:
-        report_lines.append(
-            f"| `{row['instance']}` | {row['total_prim_cells']} | {row['ff_count']} | {row['lut_count']} | {row['carry_count']} | {row['ram_count']} | {row['muxf_count']} | {row['other_count']} |"
-        )
-    if not largest_modules:
-        report_lines.append("| - | - | - | - | - | - | - | No module metrics were collected |")
-    report_lines.append("")
-    report_lines.append("### High-Fanout Nets")
-    report_lines.append("")
-    report_lines.append("| Rank | Fanout | Driver | Net |")
-    report_lines.append("| --- | ---: | --- | --- |")
-    for row in top_non_clock_fanout:
-        report_lines.append(f"| {row['rank']} | {row['fanout_count']} | {row['driver_type']} | `{row['net_name']}` |")
-    if not top_non_clock_fanout:
-        report_lines.append("| - | - | - | No non-clock/non-reset nets remained after filtering |")
-    report_lines.append("")
-    report_lines.append("### Utilization Summary")
-    report_lines.append("")
-    report_lines.append("| Resource | Used |")
-    report_lines.append("| --- | ---: |")
-    for label, key in (
-        ("Slice LUTs", "slice_luts"),
-        ("Logic LUTs", "logic_luts"),
-        ("LUTRAM", "lutram"),
-        ("Distributed RAM", "distributed_ram"),
-        ("Slice Registers", "slice_regs"),
-        ("F7 Mux", "f7_mux"),
-        ("F8 Mux", "f8_mux"),
-        ("Block RAM Tile", "bram_tile"),
-        ("DSP", "dsp"),
-        ("Bonded IOB", "bonded_iob"),
-        ("BUFGCTRL", "bufgctrl"),
-    ):
-        if key in util_summary:
-            report_lines.append(f"| {label} | {util_summary[key]} |")
-    report_lines.append("")
-    report_lines.append("### Actual Synth Instance Area")
-    report_lines.append("")
-    report_lines.append("| Instance | Module | Cells |")
-    report_lines.append("| --- | --- | ---: |")
-    for row in instance_area_top:
-        report_lines.append(f"| `{row['instance']}` | {row['module']} | {row['cells']} |")
-    if not instance_area_top:
-        report_lines.append("| - | - | Instance area table was not parsed from Vivado log |")
-    report_lines.append("")
-    report_lines.append("## Appendix")
-    report_lines.append("")
-    report_lines.append("### Run Metadata")
-    report_lines.append("")
-    report_lines.append(f"- Project: `{metadata['project_name']}`")
-    report_lines.append(f"- Analysis mode: `{metadata['analysis_mode']}`")
-    report_lines.append(f"- ISA profile: `{metadata['isa_profile']}`")
-    report_lines.append(f"- Top: `{metadata['top_name']}`")
-    report_lines.append(f"- Part: `{metadata['part_name']}`")
-    report_lines.append(f"- Program image: `{metadata['program_image']}`")
-    report_lines.append(f"- Program memory: `{metadata['program_memory']}`")
-    report_lines.append(f"- Raw output directory: `{output_dir}`")
-    if pipeline_reference is not None:
-        report_lines.append(f"- Companion pipeline artifacts: `{pipeline_reference['output_dir']}`")
-    report_lines.append("")
-    report_lines.append("### Contract Resolution")
-    report_lines.append("")
-    report_lines.append("| Item | Resolved Value |")
-    report_lines.append("| --- | --- |")
-    report_lines.append(f"| Manifest | `{metadata['manifest_path']}` |")
-    report_lines.append(f"| Profile | `{metadata['profile_path']}` |")
-    report_lines.append(f"| Manifest top | `{metadata['manifest_top_name']}` |")
-    report_lines.append(f"| Resolved top | `{metadata['top_name']}` |")
-    report_lines.append(f"| Source file count | {len(metadata['resolved_source_files'])} |")
-    report_lines.append(f"| Probe family count | {len(metadata.get('probe_families', []))} |")
-    report_lines.append(f"| Program image | `{metadata['program_image']}` |")
-    report_lines.append(f"| Program memory | `{metadata['program_memory']}` |")
-    report_lines.append(f"| Instruction-class source | `{metadata['instruction_class_source']}` |")
-    report_lines.append("")
-    report_lines.append("### Analysis Health")
-    report_lines.append("")
-    report_lines.append("| Check | Status | Detail |")
-    report_lines.append("| --- | --- | --- |")
-    for row in health_rows:
-        report_lines.append(f"| {row['check']} | {row['status']} | {row['detail']} |")
-    report_lines.append("")
-    report_lines.append("### Methodology / QoR Details")
-    report_lines.append("")
-    if methodology_severity_counts:
-        report_lines.append("| Methodology Severity | Count |")
-        report_lines.append("| --- | ---: |")
-        for level in ("Critical Warning", "Error", "Warning", "Advisory"):
-            if level in methodology_severity_counts:
-                report_lines.append(f"| {level} | {methodology_severity_counts[level]} |")
-        report_lines.append("")
-        report_lines.append("| Rule | Severity | Description | Violations |")
-        report_lines.append("| --- | --- | --- | ---: |")
-        for row in methodology_rules[:8]:
-            report_lines.append(f"| {row['rule']} | {row['severity']} | {row['description']} | {row['violations']} |")
-        if methodology_examples:
-            report_lines.append("")
-            report_lines.append("Representative methodology findings:")
-            for example in methodology_examples[:3]:
-                detail = f" {example['detail']}" if example["detail"] else ""
-                report_lines.append(f"- `{example['instance']}` `{example['severity']}` `{example['description']}`.{detail}")
-    else:
-        report_lines.append("- `report_methodology` did not return a structured count table, or no issues were reported.")
-    if qor_suggestions:
-        report_lines.append("")
-        report_lines.append("Top visible QoR suggestion lines:")
-        for line in qor_suggestions[:8]:
-            report_lines.append(f"- {line}")
-    report_lines.append("")
-    report_lines.append("### Raw Files")
-    report_lines.append("")
-    raw_files = [
-        "actual_timing_summary.rpt",
-        "actual_timing_top100.rpt",
-        "actual_timing_paths.tsv",
-        "actual_high_fanout.rpt",
-        "actual_utilization.rpt",
-        "actual_methodology.rpt",
-        "actual_qor_suggestions.rpt",
-        "module_metrics.tsv",
-        "analysis_metadata.json",
-        "artifact_manifest.json",
-        "vivado_actual.log",
-        "vivado_hierarchical.log",
-        "vivado_run.log",
+
+    report_lines: list[str] = [
+        "# SINGLE_CYCLE Optimization Report",
+        "",
+        "## 🧭 Summary",
+        "",
+        "| Item | Value |",
+        "| --- | --- |",
+        f"| Overall verdict | {status_badge(overall_status)} |",
+        f"| Program image | `{metadata['program_image']}` |",
+        f"| Worst endpoint | `{worst_path['end_pin']}` |",
+        f"| Primary bottleneck | {primary_bottleneck} |",
+        f"| Runtime winner | {runtime_winner} |",
+        f"| First action | {recommended_actions[0].split('. ', 1)[1] if recommended_actions else first_action} |",
+        "",
+        "## 🧠 Analysis Result",
+        "",
+        "| Field | Result |",
+        "| --- | --- |",
+        f"| Overall Verdict | {status_badge(overall_status)} |",
+        f"| Primary Bottleneck | {primary_bottleneck} |",
+        f"| Root Cause Candidates | {min(3, len(root_causes))} candidate(s) promoted from parsed timing artifacts |",
+        f"| Recommended Next Actions | {min(3, len(recommended_actions))} action(s) |",
+        "",
+        "### Root Cause Candidates",
+        "",
+        *render_finding_table(root_causes, limit=3),
+        "",
+        "## 📊 Key Metrics",
+        "",
+        "- `Delta` is `5-stage reference - single-cycle`.",
+        "- Runtime and CPI are estimated from the selected timing-program trace.",
+        "",
+        "| Metric | Single-Cycle | 5-Stage Reference | Delta |",
+        "| --- | ---: | ---: | ---: |",
+        f"| WNS (ns) | {fmt_float(wns_ns)} | {fmt_float(pipeline_ref_wns)} | {fmt_delta_float(wns_ns, pipeline_ref_wns)} |",
+        f"| Minimum Period (ns) | {fmt_float(min_period_ns)} | {fmt_float(pipeline_ref_min_period)} | {fmt_delta_float(min_period_ns, pipeline_ref_min_period)} |",
+        f"| Fmax (MHz) | {fmt_float(fmax_mhz, 2)} | {fmt_float(pipeline_ref_fmax, 2)} | {fmt_delta_float(fmax_mhz, pipeline_ref_fmax, 2)} |",
+        f"| LUTs | {fmt_int(single_lut_used)} | {fmt_int(pipeline_ref_lut)} | {fmt_delta_int(single_lut_used, pipeline_ref_lut)} |",
+        f"| Registers | {fmt_int(single_ff_used)} | {fmt_int(pipeline_ref_ff)} | {fmt_delta_int(single_ff_used, pipeline_ref_ff)} |",
+        f"| Cycles | {fmt_int(int(single_execution['cycle_count']))} | {fmt_int(int(pipeline_execution['cycle_count']))} | {cycle_delta:+d} |",
+        f"| CPI | {fmt_float(single_execution['cpi'])} | {fmt_float(pipeline_execution['cpi'])} | {fmt_delta_float(single_execution['cpi'], pipeline_execution['cpi'])} |",
+        f"| Runtime | {format_runtime_ns(single_execution['runtime_ns'])} | {format_runtime_ns(pipeline_execution['runtime_ns'])} | {format_runtime_ns(runtime_delta_ns)} |",
+        f"| Pipeline Speedup (x) | {format_ratio(1.0 if runtime_speedup is not None else None)} | {format_ratio(runtime_speedup)} | {fmt_delta_ratio(1.0 if runtime_speedup is not None else None, runtime_speedup)} |",
+        "",
+        "## 🎯 Recommended Actions",
+        "",
+        *recommended_actions,
+        "",
+        "## 📁 Evidence",
+        "",
+        "| Evidence | Location |",
+        "| --- | --- |",
+        f"| Artifact directory | `{output_dir}` |",
+        f"| Timing summary | `{output_dir / 'actual_timing_summary.rpt'}` |",
+        f"| Parsed timing paths | `{output_dir / 'actual_timing_paths.tsv'}` |",
+        f"| Top timing report | `{output_dir / 'actual_timing_top100.rpt'}` |",
+        f"| Utilization summary | `{output_dir / 'actual_utilization.rpt'}` |",
+        f"| Standalone report | `{report_path}` |",
     ]
-    raw_files.extend(sorted({row["tsv_path"].name for row in family_timing_rows}))
-    raw_files.extend(sorted({row["report_path"].name for row in family_timing_rows}))
-    for file_name in unique_strings(raw_files):
-        file_path = output_dir / file_name
-        if file_path.exists():
-            report_lines.append(f"- `{file_path}`")
-    report_lines.append("")
+    if pipeline_reference is not None:
+        report_lines.append(f"| Companion pipeline artifacts | `{pipeline_reference['output_dir']}` |")
+    report_lines.extend(
+        [
+            "",
+            "<details>",
+            "<summary>Compact timing evidence</summary>",
+            "",
+            "### Canonical Timing Families",
+            "",
+            "| Family | Worst Endpoint | Minimum Period (ns) | Est. Fmax (MHz) | Top Paths |",
+            "| --- | --- | ---: | ---: | ---: |",
+        ]
+    )
+    for family_row in family_timing_rows:
+        worst_family_path = family_row["worst_path"]
+        if worst_family_path:
+            report_lines.append(
+                f"| {family_row['label']} | `{worst_family_path['end_pin']}` | {fmt_float(float(family_row['min_period_ns']))} | {fmt_float(float(family_row['fmax_mhz']), 2)} | {family_row['path_count']} |"
+            )
+        else:
+            report_lines.append(f"| {family_row['label']} | No retained path data | NA | NA | 0 |")
+    report_lines.extend(
+        [
+            "",
+            "### Top100 Timing Distribution",
+            "",
+            "| Metric | Worst | P90 | Median | Average |",
+            "| --- | ---: | ---: | ---: | ---: |",
+            f"| Slack (ns) | {fmt_float(min(slacks))} | {fmt_float(percentile(slacks, 0.10))} | {fmt_float(percentile(slacks, 0.50))} | {fmt_float(safe_mean(slacks))} |",
+            f"| Data path delay (ns) | {fmt_float(max(datapath_delays))} | {fmt_float(percentile(datapath_delays, 0.90))} | {fmt_float(percentile(datapath_delays, 0.50))} | {fmt_float(safe_mean(datapath_delays))} |",
+            f"| Route delay (ns) | {fmt_float(max(net_delays))} | {fmt_float(percentile(net_delays, 0.90))} | {fmt_float(percentile(net_delays, 0.50))} | {fmt_float(safe_mean(net_delays))} |",
+            f"| Route share (%) | {fmt_float(max(route_shares), 1)} | {fmt_float(percentile(route_shares, 0.90), 1)} | {fmt_float(percentile(route_shares, 0.50), 1)} | {fmt_float(avg_route_share, 1)} |",
+            f"| Logic levels | {fmt_float(max(logic_levels), 1)} | {fmt_float(percentile(logic_levels, 0.90), 1)} | {fmt_float(percentile(logic_levels, 0.50), 1)} | {fmt_float(safe_mean(logic_levels), 1)} |",
+            "",
+            "### Program Coverage Context",
+            "",
+            "| Class | Instruction Count | Active Family Hints |",
+            "| --- | ---: | --- |",
+            *coverage_rows,
+            "",
+            "</details>",
+            "",
+        ]
+    )
 
     report_text = "\n".join(report_lines) + "\n"
     report_path.write_text(report_text, encoding="utf-8")
+    write_html_report(report_path.with_suffix(".html"), report_text, title=report_path.stem)
     write_artifact_manifest(output_dir, family_timing_rows)
     return report_text
 
@@ -1721,6 +1693,7 @@ def run(project_root: pathlib.Path, argv: list[str] | None = None) -> int:
             resolve_program_selection=lambda key: resolve_selected_program(project_root, key),
         )
         integrated_report_path.write_text(integrated_report_text, encoding="utf-8")
+        write_html_report(integrated_report_path.with_suffix(".html"), integrated_report_text, title=integrated_report_path.stem)
 
     tracker.step(f"Report written to {report_path}")
     print(f"Report written to {report_path}")

@@ -23,7 +23,7 @@ if str(PYTHON_ADAPTER_ROOT) not in sys.path:
 from riscv_timing_analysis import single_cycle
 
 
-PIPELINE_REPORT_PATH = MANAGED_PROJECT_ROOT / "RISCV_32I_5STAGE" / "tools" / "generate_pipeline_perf_report.py"
+PIPELINE_REPORT_PATH = MANAGED_PROJECT_ROOT / "RISCV_RV32I_5STAGE" / "tools" / "generate_pipeline_perf_report.py"
 
 
 def load_pipeline_report_module():
@@ -38,7 +38,7 @@ def load_pipeline_report_module():
 
 
 class SingleCycleReportLayoutTests(unittest.TestCase):
-    def test_single_cycle_report_moves_logs_to_appendix_and_surfaces_key_metrics(self) -> None:
+    def test_single_cycle_report_compacts_logs_and_surfaces_analysis(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
             output_dir = temp_root / "output"
@@ -46,19 +46,19 @@ class SingleCycleReportLayoutTests(unittest.TestCase):
             report_path = temp_root / "SINGLE_CYCLE_OPTIMIZATION_REPORT.md"
 
             metadata = {
-                "project_name": "RISCV_32I_SINGLE",
+                "project_name": "RISCV_RV32I_SINGLE",
                 "analysis_mode": "single_cycle",
                 "isa_profile": "RV32I",
                 "top_name": "TOP",
                 "part_name": "xc7a35tcpg236-1",
                 "program_image": "Full Coverage.mem",
                 "program_memory": str(temp_root / "InstructionFORTIMING.mem"),
-                "project_root": str(MANAGED_PROJECT_ROOT / "RISCV_32I_SINGLE"),
+                "project_root": str(MANAGED_PROJECT_ROOT / "RISCV_RV32I_SINGLE"),
                 "program_key": "full_coverage",
-                "manifest_path": str(MANAGED_PROJECT_ROOT / "RISCV_32I_SINGLE" / "fpga_auto.yml"),
-                "profile_path": str(MANAGED_PROJECT_ROOT / "RISCV_32I_SINGLE" / "tools" / "timing_analysis_profile.json"),
+                "manifest_path": str(MANAGED_PROJECT_ROOT / "RISCV_RV32I_SINGLE" / "fpga_auto.yml"),
+                "profile_path": str(MANAGED_PROJECT_ROOT / "RISCV_RV32I_SINGLE" / "tools" / "timing_analysis_profile.json"),
                 "manifest_top_name": "Top",
-                "resolved_source_files": [str(MANAGED_PROJECT_ROOT / "RISCV_32I_SINGLE" / "src" / "TOP.sv")],
+                "resolved_source_files": [str(MANAGED_PROJECT_ROOT / "RISCV_RV32I_SINGLE" / "src" / "TOP.sv")],
                 "probe_families": [{"key": "timing_metric", "label": "Timing Metric"}],
                 "instruction_class_source": str(temp_root / "InstructionFORTIMING.s"),
                 "warnings": [],
@@ -188,7 +188,7 @@ class SingleCycleReportLayoutTests(unittest.TestCase):
                     single_cycle,
                     "resolve_pipeline_reference_metrics",
                     return_value={
-                        "project_name": "RISCV_32I_5STAGE",
+                        "project_name": "RISCV_RV32I_5STAGE",
                         "output_dir": temp_root / "pipeline",
                         "wns_ns": -0.5,
                         "min_period_ns": 9.5,
@@ -200,20 +200,26 @@ class SingleCycleReportLayoutTests(unittest.TestCase):
             ):
                 report_text = single_cycle.build_report(output_dir, report_path, metadata)
 
-            self.assertLess(report_text.index("## Executive Summary"), report_text.index("## Key Metrics"))
-            self.assertLess(report_text.index("## Key Metrics"), report_text.index("## Optimization Priority"))
-            self.assertLess(report_text.index("## Optimization Priority"), report_text.index("## Critical Timing Structure"))
-            self.assertLess(report_text.index("## Critical Timing Structure"), report_text.index("## Appendix"))
+            self.assertLess(report_text.index("## 🧭 Summary"), report_text.index("## 🧠 Analysis Result"))
+            self.assertLess(report_text.index("## 🧠 Analysis Result"), report_text.index("## 📊 Key Metrics"))
+            self.assertLess(report_text.index("## 📊 Key Metrics"), report_text.index("## 🎯 Recommended Actions"))
+            self.assertLess(report_text.index("## 🎯 Recommended Actions"), report_text.index("## 📁 Evidence"))
+            self.assertIn("❌ FAIL", report_text)
+            self.assertIn("Route-dominant timing paths", report_text)
+            self.assertIn("Repeated critical path signature", report_text)
             self.assertIn("| LUTs | 100 | 120 | +20 |", report_text)
             self.assertIn("| Registers | 64 | 90 | +26 |", report_text)
             self.assertIn("| CPI | 1.000 | 1.400 | +0.400 |", report_text)
             self.assertIn("| Pipeline Speedup (x) | 1.000x | 1.250x | +0.250x |", report_text)
-            self.assertIn("### Raw Files", report_text)
+            self.assertNotIn("### Raw Files", report_text)
+            self.assertNotIn("## Appendix", report_text)
+            self.assertNotIn("vivado_run.log", report_text)
             self.assertTrue(report_path.exists())
+            self.assertTrue(report_path.with_suffix(".html").exists())
 
 
 class PipelineReportLayoutTests(unittest.TestCase):
-    def test_pipeline_report_surfaces_area_and_execution_metrics_before_appendix(self) -> None:
+    def test_pipeline_report_compacts_logs_and_surfaces_analysis(self) -> None:
         pipeline_report = load_pipeline_report_module()
         with patch.object(pipeline_report, "analyze_project_pipeline_trace", return_value={"instruction_count": 12}), patch.object(
             pipeline_report,
@@ -238,7 +244,7 @@ class PipelineReportLayoutTests(unittest.TestCase):
             },
         ):
             report_text = pipeline_report.render_program_report_section(
-                {"project_name": "RISCV_32I_SINGLE", "top_name": "TOP"},
+                {"project_name": "RISCV_RV32I_SINGLE", "top_name": "TOP"},
                 {
                     "wns_ns": -1.2,
                     "min_period_ns": 11.2,
@@ -248,7 +254,7 @@ class PipelineReportLayoutTests(unittest.TestCase):
                     "ff_used": "64",
                 },
                 {
-                    "project_name": "RISCV_32I_5STAGE",
+                    "project_name": "RISCV_RV32I_5STAGE",
                     "top_name": "TOP",
                     "part_name": "xc7a35tcpg236-1",
                     "profile": {"stage_order": ["IF", "ID"]},
@@ -286,6 +292,7 @@ class PipelineReportLayoutTests(unittest.TestCase):
                 ],
                 [],
                 [],
+                [],
                 {"instruction_source": "/tmp/full_coverage.s", "warnings": []},
                 {
                     "focus_count": 1,
@@ -299,14 +306,18 @@ class PipelineReportLayoutTests(unittest.TestCase):
                 {"display_name": "Full Coverage.mem", "key": "full_coverage", "mem_path": Path("/tmp/full_coverage.mem")},
             )
 
-        self.assertLess(report_text.index("### Executive Summary"), report_text.index("### Key Metrics"))
-        self.assertLess(report_text.index("### Key Metrics"), report_text.index("### Optimization Priority"))
-        self.assertLess(report_text.index("### Optimization Priority"), report_text.index("### Appendix"))
+        self.assertLess(report_text.index("### 🧭 Summary"), report_text.index("### 🧠 Analysis Result"))
+        self.assertLess(report_text.index("### 🧠 Analysis Result"), report_text.index("### 📊 Key Metrics"))
+        self.assertLess(report_text.index("### 📊 Key Metrics"), report_text.index("### 🎯 Recommended Actions"))
+        self.assertLess(report_text.index("### 🎯 Recommended Actions"), report_text.index("### 📁 Evidence"))
+        self.assertIn("❌ FAIL", report_text)
+        self.assertIn("Negative post-route slack", report_text)
         self.assertIn("| LUTs | 100 | 140 | +40 |", report_text)
         self.assertIn("| Registers | 64 | 96 | +32 |", report_text)
         self.assertIn("| CPI | 1.000 | 1.333 | +0.333 |", report_text)
         self.assertIn("| Pipeline Speedup (x) | 1.000x | 1.250x | +0.250x |", report_text)
-        self.assertIn("#### Full Instruction-Focus Tables", report_text)
+        self.assertNotIn("#### Full Instruction-Focus Tables", report_text)
+        self.assertNotIn("### Appendix", report_text)
 
 
 if __name__ == "__main__":

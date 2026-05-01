@@ -1,0 +1,21 @@
+version: "1"
+project:
+  name: "fail_vitis_shape"
+hdl:
+  top: "TOP"
+  src_globs:
+    - "src/**/*.sv"
+  tb_globs:
+    - "tb/**/*.sv"
+vitis:
+  workspace: []
+  xsa:
+    include_bitstream: "yes"
+  platform:
+    cpu: []
+  applications:
+    - sources: "sw/**/*.c"
+      includes:
+        - "sw/include"
+      target: []
+  run: []

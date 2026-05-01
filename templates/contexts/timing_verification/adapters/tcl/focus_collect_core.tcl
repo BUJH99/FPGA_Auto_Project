@@ -34,6 +34,7 @@ riscv_timing_analysis::ensure_default phys_opt_directive "AggressiveExplore"
 riscv_timing_analysis::ensure_default route_directive "Explore"
 riscv_timing_analysis::ensure_default post_route_phys_opt_directive "AggressiveExplore"
 riscv_timing_analysis::ensure_default family_configs {}
+riscv_timing_analysis::ensure_default stage_boundary_configs {}
 riscv_timing_analysis::maybe_cd_repo_root
 riscv_timing_analysis::configure_max_threads
 
@@ -60,6 +61,28 @@ proc write_focus_family_timing_artifacts {output_dir family_config clk_period_ns
 
   report_timing -delay_type max -to $to_pins -max_paths 20 -file $report_file
   riscv_timing_analysis::write_timing_paths_tsv $tsv_file 20 $clk_period_ns $to_pins
+}
+
+proc write_focus_stage_boundary_timing_artifacts {output_dir boundary_config clk_period_ns} {
+  set boundary_key [dict get $boundary_config key]
+  set boundary_base [file join $output_dir "${boundary_key}_timing"]
+  set report_file "${boundary_base}_top20.rpt"
+  set tsv_file "${boundary_base}_paths.tsv"
+  set from_spec [riscv_timing_analysis::dict_get_default $boundary_config from {}]
+  set to_spec [riscv_timing_analysis::dict_get_default $boundary_config to {}]
+  set from_pins [riscv_timing_analysis::resolve_timing_pins_from_spec $from_spec [list C]]
+  set to_pins [riscv_timing_analysis::resolve_timing_pins_from_spec $to_spec [list D]]
+
+  if {[llength $from_pins] == 0 || [llength $to_pins] == 0} {
+    set fh [open $report_file w]
+    puts $fh "No true stage boundary timing path matched `${boundary_key}` for this focus build."
+    close $fh
+    riscv_timing_analysis::write_empty_timing_paths_tsv $tsv_file
+    return
+  }
+
+  report_timing -delay_type max -from $from_pins -to $to_pins -max_paths 20 -file $report_file
+  riscv_timing_analysis::write_timing_paths_tsv $tsv_file 20 $clk_period_ns $to_pins $from_pins
 }
 
 file mkdir $::output_dir
@@ -103,6 +126,9 @@ foreach focus_config $::focus_configs {
 
   foreach family_config $::family_configs {
     write_focus_family_timing_artifacts $focus_output_dir $family_config $::clk_period_ns
+  }
+  foreach boundary_config $::stage_boundary_configs {
+    write_focus_stage_boundary_timing_artifacts $focus_output_dir $boundary_config $::clk_period_ns
   }
   riscv_timing_analysis::emit_progress [expr {$focus_step_base + 4}] $total_progress_steps "Focus ${focus_index}/${total_focus_configs} ${focus_key}: completed routing and reports"
 

@@ -27,3 +27,39 @@ vivado:
 report:
   enable: true
   format: "html"
+vitis:
+  workspace: "output/vitis/workspace"
+  xsa:
+    path: "output/vitis/xsa/${project.name}.xsa"
+    bit_path: ""
+    bit_globs:
+      - "output/*.bit"
+      - "output/vivado/**/*.runs/impl_1/*.bit"
+      - "output/vivado/**/*.runs/*/*.bit"
+    vivado_project: ""
+    impl_run: "impl_1"
+    include_bitstream: true
+    fixed: true
+    validate: true
+  platform:
+    name: "${project.name}_platform"
+    xpfm: "output/vitis/workspace/${platform.name}/export/${platform.name}/${platform.name}.xpfm"
+    os: "standalone"
+    cpu: "auto"
+    domain_name: "standalone_domain"
+  applications:
+    - name: "hello_world"
+      template: "empty_application"
+      domain: "standalone_domain"
+      sources:
+        - "sw/apps/hello_world/src/**/*"
+        - "sw/common/src/**/*"
+      includes:
+        - "sw/apps/hello_world/include"
+        - "sw/common/include"
+      target: "hw"
+  run:
+    mode: "hardware"
+    hw_server: ""
+    device_index:
+    auto: false

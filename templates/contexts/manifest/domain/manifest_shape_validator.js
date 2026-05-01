@@ -11,6 +11,13 @@ function validateOptionalString(result, container, key, refPath) {
   }
 }
 
+function validateOptionalStringAllowEmpty(result, container, key, refPath) {
+  if (!Object.prototype.hasOwnProperty.call(container, key)) return;
+  if (typeof container[key] !== "string") {
+    addError(result, "manifest_type_error", `Field ${refPath} must be a string`, refPath);
+  }
+}
+
 function validateOptionalBoolean(result, container, key, refPath) {
   if (!Object.prototype.hasOwnProperty.call(container, key)) return;
   if (typeof container[key] !== "boolean") {
@@ -55,6 +62,76 @@ function validateScenarioRows(result, simConfig) {
   });
 }
 
+function validateOptionalObject(result, container, key, refPath) {
+  if (!Object.prototype.hasOwnProperty.call(container, key)) return null;
+  if (!isPlainObject(container[key])) {
+    addError(result, "manifest_type_error", `Field ${refPath} must be an object`, refPath);
+    return null;
+  }
+  return container[key];
+}
+
+function validateVitisApplications(result, vitisConfig) {
+  if (!Object.prototype.hasOwnProperty.call(vitisConfig, "applications")) return;
+  if (!Array.isArray(vitisConfig.applications)) {
+    addError(result, "manifest_type_error", "Field vitis.applications must be an array", "vitis.applications");
+    return;
+  }
+
+  vitisConfig.applications.forEach((application, index) => {
+    const base = `vitis.applications[${index}]`;
+    if (!isPlainObject(application)) {
+      addError(result, "manifest_type_error", `Field ${base} must be an object`, base);
+      return;
+    }
+
+    validateOptionalString(result, application, "name", `${base}.name`);
+    validateOptionalString(result, application, "template", `${base}.template`);
+    validateOptionalString(result, application, "domain", `${base}.domain`);
+    validateOptionalString(result, application, "linker_script", `${base}.linker_script`);
+    validateOptionalString(result, application, "target", `${base}.target`);
+    validateOptionalStringArray(result, application, "sources", `${base}.sources`);
+    validateOptionalStringArray(result, application, "includes", `${base}.includes`);
+  });
+}
+
+function validateVitisSection(result, config) {
+  if (!Object.prototype.hasOwnProperty.call(config, "vitis")) return;
+  const vitisConfig = config.vitis;
+  if (!isPlainObject(vitisConfig)) {
+    addError(result, "manifest_type_error", "Field vitis must be an object", "vitis");
+    return;
+  }
+
+  validateOptionalString(result, vitisConfig, "workspace", "vitis.workspace");
+
+  const xsaConfig = validateOptionalObject(result, vitisConfig, "xsa", "vitis.xsa");
+  if (xsaConfig) {
+    validateOptionalString(result, xsaConfig, "path", "vitis.xsa.path");
+    validateOptionalStringAllowEmpty(result, xsaConfig, "export_tcl", "vitis.xsa.export_tcl");
+    validateOptionalStringAllowEmpty(result, xsaConfig, "generated_path", "vitis.xsa.generated_path");
+    validateOptionalStringAllowEmpty(result, xsaConfig, "bit_path", "vitis.xsa.bit_path");
+    validateOptionalStringAllowEmpty(result, xsaConfig, "vivado_project", "vitis.xsa.vivado_project");
+    validateOptionalString(result, xsaConfig, "impl_run", "vitis.xsa.impl_run");
+    validateOptionalStringArray(result, xsaConfig, "bit_globs", "vitis.xsa.bit_globs");
+    validateOptionalBoolean(result, xsaConfig, "include_bitstream", "vitis.xsa.include_bitstream");
+    validateOptionalBoolean(result, xsaConfig, "fixed", "vitis.xsa.fixed");
+    validateOptionalBoolean(result, xsaConfig, "validate", "vitis.xsa.validate");
+  }
+
+  const platformConfig = validateOptionalObject(result, vitisConfig, "platform", "vitis.platform");
+  if (platformConfig) {
+    validateOptionalString(result, platformConfig, "name", "vitis.platform.name");
+    validateOptionalString(result, platformConfig, "xpfm", "vitis.platform.xpfm");
+    validateOptionalString(result, platformConfig, "os", "vitis.platform.os");
+    validateOptionalString(result, platformConfig, "cpu", "vitis.platform.cpu");
+    validateOptionalString(result, platformConfig, "domain_name", "vitis.platform.domain_name");
+  }
+
+  validateVitisApplications(result, vitisConfig);
+  validateOptionalObject(result, vitisConfig, "run", "vitis.run");
+}
+
 function validateOptionalSections(result, config) {
   const sections = [
     ["sim", ["tool", "timescale", "top_module", "tb_file", "vcd_file", "html_file"]],
@@ -85,6 +162,8 @@ function validateOptionalSections(result, config) {
     validateOptionalBoolean(result, config.report, "enable", "report.enable");
     validateOptionalStringArray(result, config.report, "modules", "report.modules");
   }
+
+  validateVitisSection(result, config);
 }
 
 function validateManifestShape(result, config) {

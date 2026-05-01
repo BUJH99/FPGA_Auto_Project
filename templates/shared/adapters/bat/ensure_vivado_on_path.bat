@@ -22,7 +22,7 @@ if not errorlevel 1 goto success
 endlocal & exit /b 1
 
 :success
-endlocal & set "RESOLVED_VIVADO_BIN=%FOUND_BIN%" & exit /b 0
+endlocal & set "PATH=%PATH%" & set "RESOLVED_VIVADO_BIN=%FOUND_BIN%" & exit /b 0
 
 :capture_existing_vivado
 where vivado >nul 2>nul

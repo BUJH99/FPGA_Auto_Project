@@ -12,6 +12,8 @@
 - Project creation auto-generates `<project>/fpga_auto.yml` from `templates/manifest/fpga_auto.template.yml`.
 - `MAIN.bat` discovers only sibling `../Project/*` projects with valid `fpga_auto.yml`.
 - Legacy root projects can be copied to sibling `../Project/*` with `templates/contexts/project_bootstrap/adapters/bat/project_migrate_legacy.bat`.
+- Existing sibling projects can be upgraded in place with `templates/contexts/project_bootstrap/adapters/bat/project_upgrade_existing.bat`.
+- In `MAIN.bat`, use `[U] Upgrade Existing Projects` from the project selection screen or `[U] Upgrade This Project` inside a selected project.
 
 ## v0 Required Fields
 All fields below are required in v0:
@@ -33,6 +35,21 @@ These sections are optional. They are shape-validated by the manifest stack and 
 - `sim.*`
 - `vivado.*`
 - `report.*`
+- `vitis.*`
+
+## Project Upgrade Contract
+`project_upgrade_existing.bat` updates old managed projects without moving HDL files:
+- creates missing scaffold folders such as `include/`, `inc/`, `constrs/`, `sw/common/*`, `sw/apps/hello_world/*`, `vitis/*`, `output/vitis/*`, and `log/vitis/`
+- creates `sw/apps/hello_world/src/main.c` only when missing
+- creates `vitis/launch/hardware.json` only when missing
+- adds or completes the optional `vitis:` manifest section while preserving existing HDL, sim, Vivado, and report settings
+- supports `--dry-run` for a no-write preview
+
+Example:
+```bat
+templates\contexts\project_bootstrap\adapters\bat\project_upgrade_existing.bat --dry-run
+templates\contexts\project_bootstrap\adapters\bat\project_upgrade_existing.bat MyProject
+```
 
 ## Example Schema
 ```yaml

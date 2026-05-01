@@ -84,13 +84,15 @@ echo [INFO] Build start confirmed.
 echo      - Step 2/15 complete.
 
 call :print_step "3/15" "Prepare Output Workspace"
-if exist output (
-    echo [CLEAN] Resetting previous output directory...
-    rmdir /s /q output
-)
-mkdir output
+if not exist output mkdir output
+echo [CLEAN] Resetting RTL build-local artifacts only...
+if exist output\checkpoints rmdir /s /q output\checkpoints
+if exist output\reports rmdir /s /q output\reports
+if exist output\FINALReport rmdir /s /q output\FINALReport
+if exist output\build_summary.json del /q output\build_summary.json >nul 2>&1
+del /q output\*.bit >nul 2>&1
 echo      - Output directory ready.
-echo      - Previous generated artifacts cleared.
+echo      - Preserved output\vivado and output\vitis workspaces.
 echo      - Step 3/15 complete.
 
 call :print_step "4/15" "Load Manifest Context"

@@ -41,7 +41,7 @@ if %errorlevel% neq 0 (
 call :prompt_run_or_cancel
 if errorlevel %USER_CANCEL_RC% exit /b %USER_CANCEL_RC%
 
-echo [INFO] Finalizing block design and exported artifacts...
+echo [INFO] Finalizing legacy/non-project block design export artifacts...
 vivado -mode batch -source "%TEMPLATES_ROOT%\contexts\vivado\adapters\tcl\vivado_finalize_block_design.tcl" -notrace -log "%FINALIZE_LOG%" -journal "%FINALIZE_JOU%"
 set "FINALIZE_RC=%errorlevel%"
 call :route_vivado_artifacts
@@ -51,7 +51,7 @@ if %FINALIZE_RC% neq 0 (
     exit /b %FINALIZE_RC%
 )
 
-echo [DONE] BD finalized. No wrapper generated.
+echo [DONE] Legacy BD export finalized. No wrapper generated.
 call "%CONSOLE_HELPER%" pause_then_clear
 endlocal
 exit /b 0

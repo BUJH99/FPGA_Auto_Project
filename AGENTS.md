@@ -55,7 +55,9 @@ This file defines the default working contract for Codex agents operating anywhe
 
 ## Useful skills if available
 
-- `fpga-auto-hdl-workspace` for repo navigation and bounded-context routing
+- `fpga-auto-framework` for automation framework changes
+- `fpga-auto-project` for managed project HDL/TB/manifest work under `../Project/*`
+- `fpga-auto-runner` for choosing or running existing menu/BAT automation
 - `verilog-rtl-style` for Verilog RTL edits and reviews
 - `systemverilog-rtl-style` for synthesizable SystemVerilog under `src/`
 - `systemverilog-tb-style` for verification code under `tb/`

@@ -67,12 +67,15 @@ proc riscv_timing_analysis::write_empty_timing_paths_tsv {outfile} {
   close $fh
 }
 
-proc riscv_timing_analysis::write_timing_paths_tsv {outfile max_paths clk_period_ns {to_pins {}}} {
-  if {[llength $to_pins] > 0} {
-    set path_objs [get_timing_paths -delay_type max -to $to_pins -max_paths $max_paths -nworst $max_paths]
-  } else {
-    set path_objs [get_timing_paths -delay_type max -max_paths $max_paths -nworst $max_paths]
+proc riscv_timing_analysis::write_timing_paths_tsv {outfile max_paths clk_period_ns {to_pins {}} {from_pins {}}} {
+  set timing_path_cmd [list get_timing_paths -delay_type max -max_paths $max_paths -nworst $max_paths]
+  if {[llength $from_pins] > 0} {
+    lappend timing_path_cmd -from $from_pins
   }
+  if {[llength $to_pins] > 0} {
+    lappend timing_path_cmd -to $to_pins
+  }
+  set path_objs [eval $timing_path_cmd]
 
   set fh [open $outfile w]
   puts $fh "index\tslack_ns\tmin_period_ns\tdatapath_delay_ns\tlogic_delay_ns\tnet_delay_ns\troute_share_pct\tlogic_share_pct\tlogic_levels\tmax_fanout\tstart_pin\tend_pin\tpath_name"
@@ -174,12 +177,12 @@ proc riscv_timing_analysis::leaf_data_pins_for_cells {cell_objs pin_name_pattern
   return $matched_pins
 }
 
-proc riscv_timing_analysis::resolve_family_to_pins {family_config} {
+proc riscv_timing_analysis::resolve_timing_pins_from_spec {pin_spec {default_pin_name_patterns {D}}} {
   set to_pins {}
-  set pin_name_patterns [riscv_timing_analysis::dict_get_default $family_config pin_name_patterns [list D]]
-  set instance_patterns [riscv_timing_analysis::dict_get_default $family_config instance_patterns {}]
-  set ref_name_patterns [riscv_timing_analysis::dict_get_default $family_config ref_name_patterns {}]
-  set endpoint_patterns [riscv_timing_analysis::dict_get_default $family_config endpoint_patterns {}]
+  set pin_name_patterns [riscv_timing_analysis::dict_get_default $pin_spec pin_name_patterns $default_pin_name_patterns]
+  set instance_patterns [riscv_timing_analysis::dict_get_default $pin_spec instance_patterns {}]
+  set ref_name_patterns [riscv_timing_analysis::dict_get_default $pin_spec ref_name_patterns {}]
+  set endpoint_patterns [riscv_timing_analysis::dict_get_default $pin_spec endpoint_patterns {}]
 
   foreach instance_pattern $instance_patterns {
     set matched_cells [get_cells -quiet -hier -filter "NAME =~ ${instance_pattern}"]
@@ -203,6 +206,10 @@ proc riscv_timing_analysis::resolve_family_to_pins {family_config} {
   }
 
   return $to_pins
+}
+
+proc riscv_timing_analysis::resolve_family_to_pins {family_config} {
+  return [riscv_timing_analysis::resolve_timing_pins_from_spec $family_config [list D]]
 }
 
 proc riscv_timing_analysis::string_matches_any {value patterns} {

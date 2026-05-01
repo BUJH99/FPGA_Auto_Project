@@ -164,6 +164,16 @@ MENU_USAGE: dict[int, str] = {
     18: "Usage: /task 18 <project>",
     19: "Usage: /task 19 <project> (--all | --dut <name>) [--force]",
     20: "Usage: /task 20 <project> <folder_idx> <tb_idx>",
+    21: "Usage: /task 21 <project>",
+    22: "Usage: /task 22 <project> [bit_name|--bit <name-or-path>]",
+    23: "Usage: /task 23 <project> [xsa_name|--xsa <name-or-path>]",
+    24: "Usage: /task 24 <project> [app_name|--app <name>|--apps a,b|--all-apps] [--platform <name-or-xpfm>]",
+    25: "Usage: /task 25 <project> [platform_name|--platform <name-or-xpfm>]",
+    26: "Usage: /task 26 <project> [app_name|--app <name>|--apps a,b|--all-apps] [--target hw]",
+    27: "Usage: /task 27 <project> [app_name|--app <name>] [--target hw]",
+    28: "Usage: /task 28 <project> [app_name|--app <name>|--apps a,b|--all-apps] [--run]",
+    29: "Usage: /task 29 <project>",
+    30: "Usage: /task 30 <project>",
 }
 
 HIERARCHY_SCOPE_ALIASES: dict[str, str] = {
@@ -433,7 +443,7 @@ def parse_main_menu_registry(main_bat_path: Path, templates_root: Path) -> dict[
         script_path = (templates_root / script_rel.replace("\\", "/")).resolve()
         registry[menu_no] = MenuEntry(menu_no=menu_no, script_rel=script_rel, script_path=script_path)
 
-    missing = sorted(set(range(1, 22)) - set(registry.keys()))
+    missing = sorted(set(range(1, 31)) - set(registry.keys()))
     if missing:
         raise RuntimeError(f"MAIN.bat menu map is incomplete. Missing CMD entries: {missing}")
 
@@ -899,7 +909,7 @@ def build_help(category: str = "core") -> tuple[str, dict[str, object]]:
             "🔸 /last - <i>show last job result</i>",
             "🔸 /history &lt;proj&gt; [tool] [limit] - <i>show recent project runs</i>",
             "🔸 /diff &lt;proj&gt; [tool] - <i>compare latest two runs</i>",
-            "🔸 /task &lt;menu_no&gt; &lt;proj&gt; [args] - <i>run MAIN menu (1~21)</i>",
+            "🔸 /task &lt;menu_no&gt; &lt;proj&gt; [args] - <i>run MAIN menu (1~30)</i>",
             "🔸 /doctor &lt;proj&gt; - <i>run toolkit health check</i>",
             "🔸 /setup_project &lt;name&gt; [v|sv] - <i>run setup</i>",
             "🔸 /help - <i>show this help</i>",
@@ -909,6 +919,8 @@ def build_help(category: str = "core") -> tuple[str, dict[str, object]]:
             "🛠 <b>Build & Generation:</b>",
             "🔹 /build | /build_program | /program",
             "🔹 /vivado_gui &lt;proj&gt; | /finalize_bd | /retarget_ip",
+            "🔹 IP Integrator menus: /task 29-30 &lt;proj&gt;",
+            "🔹 Vitis menus: /task 22-28 &lt;proj&gt; [app|--run]",
             "🔹 /tb_scaffold &lt;proj&gt; (--all | --dut &lt;name&gt;) [--force]",
         ])
     elif category == "sim":
@@ -2087,8 +2099,8 @@ def parse_task_command(config: Config, args_text: str) -> tuple[JobRequest | Non
         return None, "Usage: /task <menu_no> <project> [args...]"
 
     menu_no = int(tokens[0])
-    if menu_no < 1 or menu_no > 21:
-        return None, "menu_no must be between 1 and 21."
+    if menu_no < 1 or menu_no > 30:
+        return None, "menu_no must be between 1 and 30."
 
     project_path, error = resolve_project(config.project_root, tokens[1])
     if error:

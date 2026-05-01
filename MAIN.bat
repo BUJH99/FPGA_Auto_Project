@@ -3,6 +3,7 @@ setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 title FPGA Automation - MAIN
 set "SETUP_BAT=%CD%\templates\contexts\project_bootstrap\adapters\bat\project_create.bat"
+set "UPGRADE_BAT=%CD%\templates\contexts\project_bootstrap\adapters\bat\project_upgrade_existing.bat"
 set "CONSOLE_HELPER=%CD%\templates\shared\adapters\bat\console_ui.bat"
 set "PROJECT_ROOT_HELPER=%CD%\templates\shared\adapters\bat\resolve_managed_project_root.bat"
 
@@ -61,16 +62,21 @@ echo No valid project folder detected under:
 echo   %PROJECT_ROOT%
 echo.
 echo   %White%[S] Setup New Project%Reset%
+echo   %White%[U] Upgrade Existing Projects%Reset%
 echo   %Yellow%[C] CUSTOMBAT%Reset%
 echo   %Red%[Q] Quit%Reset%
 echo.
 
 set "NO_PROJ_INPUT="
-set /p "NO_PROJ_INPUT=%Cyan%No project found. Run setup now? (S/C/Q, default S): %Reset%"
+set /p "NO_PROJ_INPUT=%Cyan%No project found. Run setup or upgrade? (S/U/C/Q, default S): %Reset%"
 if "!NO_PROJ_INPUT!"=="" set "NO_PROJ_INPUT=S"
 
 if /i "!NO_PROJ_INPUT!"=="Q" goto :EXIT
 if /i "!NO_PROJ_INPUT!"=="C" goto :CUSTOMBAT_MENU
+if /i "!NO_PROJ_INPUT!"=="U" (
+    call :RUN_PROJECT_UPGRADE ""
+    goto :MASTER_MENU
+)
 if /i "!NO_PROJ_INPUT!"=="S" (
     if not exist "!SETUP_BAT!" (
         echo.
@@ -90,6 +96,7 @@ goto :NO_PROJECT_MENU
 
 echo.
 echo   %White%[S] Setup New Project%Reset%
+echo   %White%[U] Upgrade Existing Projects%Reset%
 echo   %Yellow%[C] CUSTOMBAT%Reset%
 echo   %Red%[Q] Quit%Reset%
 echo.
@@ -99,6 +106,10 @@ set /p "PROJ_INPUT=%Cyan%Select Project (Number) or Option: %Reset%"
 
 if /i "!PROJ_INPUT!"=="Q" goto :EXIT
 if /i "!PROJ_INPUT!"=="C" goto :CUSTOMBAT_MENU
+if /i "!PROJ_INPUT!"=="U" (
+    call :RUN_PROJECT_UPGRADE ""
+    goto :MASTER_MENU
+)
 if /i "!PROJ_INPUT!"=="S" (
     if not exist "!SETUP_BAT!" (
         echo.
@@ -160,6 +171,15 @@ set "CMD_14=contexts\vivado\adapters\bat\vivado_finalize_block_design.bat"
 set "CMD_15=contexts\vivado\adapters\bat\vivado_retarget_ip_part.bat"
 set "CMD_16=contexts\vivado\adapters\bat\vivado_program_fpga.bat"
 set "CMD_17=contexts\vivado\adapters\bat\vivado_run_build_and_program.bat"
+set "CMD_29=contexts\vivado\adapters\bat\vivado_open_ip_integrator_gui.bat"
+set "CMD_30=contexts\vivado\adapters\bat\vivado_build_ip_integrator_flow.bat"
+set "CMD_22=contexts\vitis\adapters\bat\vitis_export_xsa.bat"
+set "CMD_23=contexts\vitis\adapters\bat\vitis_create_platform.bat"
+set "CMD_24=contexts\vitis\adapters\bat\vitis_create_application.bat"
+set "CMD_25=contexts\vitis\adapters\bat\vitis_build_platform.bat"
+set "CMD_26=contexts\vitis\adapters\bat\vitis_build_application.bat"
+set "CMD_27=contexts\vitis\adapters\bat\vitis_run_application.bat"
+set "CMD_28=contexts\vitis\adapters\bat\vitis_run_full_flow.bat"
 
 echo %Yellow%[ Code ^& Schematic Generation ]%Reset%
 echo   1. Draw Schematic [!CMD_1!]
@@ -185,24 +205,39 @@ echo  18. Open Latest Presentation HTML [!CMD_18!]
 echo.
 
 echo %Yellow%[ Vivado Flow ^& FPGA ]%Reset%
-echo  12. Open Vivado Project GUI (Auto TOP) [!CMD_12!]
-echo  13. Run Vivado Build Flow [!CMD_13!]
-echo  14. Finalize Block Design [!CMD_14!]
+echo  12. Open Vivado Project GUI (RTL) [!CMD_12!]
+echo  13. Run Vivado RTL Build Flow [!CMD_13!]
+echo  14. Finalize Legacy Block Design [!CMD_14!]
 echo  15. Retarget IP to Part [!CMD_15!]
 echo  16. Program FPGA Device [!CMD_16!]
 echo  17. Auto Build + Program [!CMD_17!]
+echo  29. Open IP Integrator GUI from Current Sources [!CMD_29!]
+echo  30. Build IP Integrator Project + Bitstream [!CMD_30!]
 echo.
 echo %Yellow%[ Project Health ]%Reset%
 echo  21. Toolkit Doctor [!CMD_21!]
 echo.
-echo %Yellow%[C] CUSTOMBAT%Reset%   %Blue%[B] Back to Project Selection%Reset%   %Red%[Q] Quit%Reset%
+echo %Yellow%[ Vitis Software Flow ]%Reset%
+echo  22. Export XSA from Vivado [!CMD_22!]
+echo  23. Create Vitis Platform from XSA (Select XSA) [!CMD_23!]
+echo  24. Create Vitis Application Component (Select Platform/New App) [!CMD_24!]
+echo  25. Build Vitis Platform (Select Platform) [!CMD_25!]
+echo  26. Build Vitis Application (Multi Select) [!CMD_26!]
+echo  27. Run Vitis Application [!CMD_27!]
+echo  28. Full Vitis Flow [!CMD_28!]
+echo.
+echo %White%[U] Upgrade This Project%Reset%   %Yellow%[C] CUSTOMBAT%Reset%   %Blue%[B] Back to Project Selection%Reset%   %Red%[Q] Quit%Reset%
 
 set "USER_INPUT="
-set /p "USER_INPUT=%Cyan%Select number to run (or B/Q): %Reset%"
+set /p "USER_INPUT=%Cyan%Select number to run (or U/B/Q): %Reset%"
 
 if /i "!USER_INPUT!"=="Q" goto :EXIT
 if /i "!USER_INPUT!"=="C" goto :CUSTOMBAT_MENU
 if /i "!USER_INPUT!"=="B" goto :MASTER_MENU
+if /i "!USER_INPUT!"=="U" (
+    call :RUN_PROJECT_UPGRADE "!TARGET_PROJECT_ABS!"
+    goto :PROJECT_MENU
+)
 if "!USER_INPUT!"=="" goto :PROJECT_MENU
 
 :: Validate input is a number
@@ -255,6 +290,43 @@ echo %Green%[DONE] !TARGET_NAME!%Reset%
 echo.
 call "%CONSOLE_HELPER%" pause_then_clear
 goto :PROJECT_MENU
+
+:RUN_PROJECT_UPGRADE
+set "UPGRADE_TARGET="
+if not "%~1"=="" for %%I in ("%~1") do set "UPGRADE_TARGET=%%~fI"
+if not exist "!UPGRADE_BAT!" (
+    echo.
+    echo %Red%[ERROR] Upgrade script not found: !UPGRADE_BAT!%Reset%
+    echo.
+    call "%CONSOLE_HELPER%" pause_then_clear
+    exit /b 1
+)
+call "%CONSOLE_HELPER%" clear
+if defined UPGRADE_TARGET goto :RUN_PROJECT_UPGRADE_TARGET
+echo %Green%[RUN] Upgrade Existing Project Structures%Reset%
+echo %Cyan%===============================================================================%Reset%
+set "FPGA_AUTO_PARENT_MENU=1"
+cmd /c ""!UPGRADE_BAT!" --no-pause"
+goto :RUN_PROJECT_UPGRADE_DONE
+
+:RUN_PROJECT_UPGRADE_TARGET
+echo %Green%[RUN] Upgrade Project Structure - Target: !UPGRADE_TARGET!%Reset%
+echo %Cyan%===============================================================================%Reset%
+set "FPGA_AUTO_PARENT_MENU=1"
+cmd /c ""!UPGRADE_BAT!" --no-pause "!UPGRADE_TARGET!""
+
+:RUN_PROJECT_UPGRADE_DONE
+set "UPGRADE_RC=!errorlevel!"
+set "FPGA_AUTO_PARENT_MENU="
+echo %Cyan%===============================================================================%Reset%
+if not "!UPGRADE_RC!"=="0" (
+    echo %Red%[FAIL] Project upgrade exited with code !UPGRADE_RC!%Reset%
+) else (
+    echo %Green%[DONE] Project upgrade completed.%Reset%
+)
+echo.
+call "%CONSOLE_HELPER%" pause_then_clear
+exit /b !UPGRADE_RC!
 
 :CUSTOMBAT_MENU
 mode con: cols=120 lines=40 >nul 2>&1

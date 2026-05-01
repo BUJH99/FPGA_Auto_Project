@@ -29,11 +29,6 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if /i not "%BUILD_TOP_MODULE%"=="TOP" (
-    echo [INFO] Overriding GUI top module to TOP.
-    set "BUILD_TOP_MODULE=TOP"
-)
-
 cd /d "%TARGET_PROJECT%"
 set "LOG_DIR=%TARGET_PROJECT%\log"
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"

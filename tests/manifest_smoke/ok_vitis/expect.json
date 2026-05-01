@@ -1,0 +1,15 @@
+{
+  "exit_code": 0,
+  "error_codes": [],
+  "warning_codes": [],
+  "resolved": {
+    "src_files": [
+      "src/TOP.sv"
+    ],
+    "tb_files": [
+      "tb/tb_TOP.sv"
+    ],
+    "inc_dirs": [],
+    "xdc_files": []
+  }
+}

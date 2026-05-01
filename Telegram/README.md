@@ -57,9 +57,16 @@ Telegram\telegram_fpga_bot_run.bat
 - `/open_presentation <project>`
 - `/tb_scaffold <project> (--all | --dut <name>) [--force]`
 
+Vitis software flow is available through `/task 22` through `/task 28`:
+export XSA, create/build platform, create/build/run application, and full flow.
+Vitis selectors are also supported: `/task 22 <project> --bit latest`,
+`/task 23 <project> --xsa latest`, `/task 24 <project> --platform <name-or-xpfm> --apps app1,app2`,
+and `/task 26 <project> --all-apps`.
+
 ## Notes
 
 - The bot derives its executable menu map from `MAIN.bat`.
 - Menu 5 and menu 6 buttons are built from manifest-resolved TB files instead of hardcoded folder or index assumptions.
 - `/doctor` runs the existing Toolkit Doctor flow and summarizes `output/doctor_summary.json`.
+- Vitis tasks summarize `output/vitis/summaries/*.json` and are indexed in `output/run_index.json`.
 - Runtime execution is intended for Windows because the automation stack depends on `cmd.exe`, PowerShell, and Vivado tooling.
