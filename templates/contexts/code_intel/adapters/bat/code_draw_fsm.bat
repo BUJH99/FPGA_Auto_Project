@@ -287,8 +287,8 @@ if "!SOURCE_FILE!"=="" (
 set "SVG_FILE=output\fsm\svg\!MOD!_fsm.svg"
 set "DRAWIO_FILE=output\fsm\drawio\!MOD!_fsm.drawio"
 
-if exist "!SVG_FILE!" del /q "!SVG_FILE!" >nul 2>nul
-if exist "!DRAWIO_FILE!" del /q "!DRAWIO_FILE!" >nul 2>nul
+del /q "output\fsm\svg\!MOD!_fsm*.svg" >nul 2>nul
+del /q "output\fsm\drawio\!MOD!_fsm*.drawio" >nul 2>nul
 
 if "!HAS_NODE!"=="1" (
     if "!HAS_TOP!"=="1" if /i "!MOD!"=="!TOP_MODULE_NAME!" if "!TOP_HAS_LOCAL_FSM!"=="0" if defined RECOMMENDED_FSM_MODULE if /i not "!RECOMMENDED_FSM_MODULE!"=="!MOD!" (
@@ -314,6 +314,17 @@ if "!HAS_NODE!"=="1" (
 )
 
 :CONVERT_DRAWIO
+set "SVG_FOUND=0"
+for %%S in ("output\fsm\svg\!MOD!_fsm*.svg") do (
+    if exist "%%~fS" set "SVG_FOUND=1"
+)
+if "!SVG_FOUND!"=="0" (
+    echo [WARN] FSM parser reported success but no SVG files were generated for !MOD!.
+    set /a WARN_COUNT+=1
+    echo.
+    exit /b 0
+)
+
 if "!HAS_NODE!"=="0" (
     echo [INFO] Node.js missing. Skipping Draw.io conversion.
     set /a SUCCESS_COUNT+=1
@@ -329,12 +340,18 @@ if not exist "%DRAWIO_TOOL%" (
 )
 
 echo [2/2] Converting SVG to Draw.io...
-node "%DRAWIO_TOOL%" "!SVG_FILE!" "!DRAWIO_FILE!"
-if !errorlevel! equ 0 if exist "!DRAWIO_FILE!" (
-    echo [SUCCESS] Generated !DRAWIO_FILE!
-) else (
-    echo [WARN] Draw.io conversion failed for !MOD!
-    set /a WARN_COUNT+=1
+for %%S in ("output\fsm\svg\!MOD!_fsm*.svg") do (
+    if exist "%%~fS" (
+        set "SVG_ONE=%%~fS"
+        set "DRAWIO_ONE=output\fsm\drawio\%%~nS.drawio"
+        node "%DRAWIO_TOOL%" "!SVG_ONE!" "!DRAWIO_ONE!"
+        if !errorlevel! equ 0 if exist "!DRAWIO_ONE!" (
+            echo [SUCCESS] Generated !DRAWIO_ONE!
+        ) else (
+            echo [WARN] Draw.io conversion failed for %%~nxS
+            set /a WARN_COUNT+=1
+        )
+    )
 )
 
 set /a SUCCESS_COUNT+=1

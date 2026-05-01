@@ -304,9 +304,19 @@ function extractAlwaysBlocks(src) {
   return blocks;
 }
 
-function detectStateVars(cleanSrc, alwaysBlocks) {
+function pushStateVarCandidate(candidates, seen, curVar, nextVar) {
+  if (!curVar || !nextVar || curVar === nextVar) return;
+  const key = `${curVar}\0${nextVar}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  candidates.push({ curVar, nextVar });
+}
+
+function detectStateVarCandidates(cleanSrc, alwaysBlocks) {
+  const candidates = [];
+  const seen = new Set();
   const regNames = new Set();
-  const regDeclRe = /\breg\b\s*(?:\[[^\]]+\]\s*)?([^;]+);/g;
+  const regDeclRe = /\b(?:reg|logic)\b\s*(?:\[[^\]]+\]\s*)?([^;]+);/g;
   let m;
   while ((m = regDeclRe.exec(cleanSrc)) !== null) {
     const decl = m[1] || "";
@@ -330,7 +340,7 @@ function detectStateVars(cleanSrc, alwaysBlocks) {
       `nxt_${cur}`,
     ];
     for (const cand of preferred) {
-      if (regNames.has(cand)) return { curVar: cur, nextVar: cand };
+      if (regNames.has(cand)) pushStateVarCandidate(candidates, seen, cur, cand);
     }
   }
 
@@ -350,7 +360,7 @@ function detectStateVars(cleanSrc, alwaysBlocks) {
         rhsLow.endsWith("_d") ||
         rhsLow === `${lhsLow}_d` ||
         rhsLow === `${lhsLow}d`;
-      if (rhsLooksNext) return { curVar: lhs, nextVar: rhs };
+      if (rhsLooksNext) pushStateVarCandidate(candidates, seen, lhs, rhs);
     }
   }
 
@@ -361,11 +371,16 @@ function detectStateVars(cleanSrc, alwaysBlocks) {
     const assignRe = new RegExp(`\\b([A-Za-z_]\\w*)\\b\\s*(?:<=|=)\\s*\\b${curVar}\\b\\s*;`);
     const a = blk.text.match(assignRe);
     if (a) {
-      return { curVar, nextVar: a[1] };
+      pushStateVarCandidate(candidates, seen, curVar, a[1]);
     }
   }
 
-  return null;
+  return candidates;
+}
+
+function detectStateVars(cleanSrc, alwaysBlocks) {
+  const candidates = detectStateVarCandidates(cleanSrc, alwaysBlocks);
+  return candidates[0] || null;
 }
 
 function findNextStateBlock(alwaysBlocks, curVar, nextVar) {
@@ -613,6 +628,119 @@ function wrapLabel(text, limit = 34) {
   return lines;
 }
 
+function cleanExpr(expr) {
+  return (expr || "")
+    .replace(/\s+/g, " ")
+    .replace(/^\((.*)\)$/g, "$1")
+    .trim();
+}
+
+function formatOutputLine(lhs, rhs) {
+  let r = cleanExpr(rhs);
+  r = r.replace(/\b1'b1\b/g, "1");
+  r = r.replace(/\b1'b0\b/g, "0");
+  return `${lhs}=${r}`;
+}
+
+function outputLineSortKey(line) {
+  if (/=1$/.test(line)) return `0:${line}`;
+  if (/=0$/.test(line)) return `2:${line}`;
+  return `1:${line}`;
+}
+
+function addStateOutput(map, state, line) {
+  if (!state || !line) return;
+  if (!map.has(state)) map.set(state, []);
+  const arr = map.get(state);
+  if (!arr.includes(line)) arr.push(line);
+}
+
+function parseSimpleAssignments(blockText) {
+  const assigns = [];
+  const re = /\b([A-Za-z_]\w*)\b\s*=\s*([^;]+);/g;
+  let m;
+  while ((m = re.exec(blockText)) !== null) {
+    assigns.push({
+      lhs: m[1],
+      rhs: cleanExpr(m[2]),
+    });
+  }
+  return assigns;
+}
+
+function parseStatePredicate(rhs, curVar, validStates) {
+  const expr = trimOuterParens(cleanExpr(rhs));
+  const eq1 = new RegExp(`^\\b${curVar}\\b\\s*==\\s*([A-Za-z_]\\w*)\\b$`);
+  const eq2 = new RegExp(`^([A-Za-z_]\\w*)\\b\\s*==\\s*\\b${curVar}\\b$`);
+  const ne1 = new RegExp(`^\\b${curVar}\\b\\s*!=\\s*([A-Za-z_]\\w*)\\b$`);
+  const ne2 = new RegExp(`^([A-Za-z_]\\w*)\\b\\s*!=\\s*\\b${curVar}\\b$`);
+  let m = expr.match(eq1) || expr.match(eq2);
+  if (m && validStates.has(m[1])) return { op: "eq", state: m[1] };
+  m = expr.match(ne1) || expr.match(ne2);
+  if (m && validStates.has(m[1])) return { op: "ne", state: m[1] };
+  return null;
+}
+
+function extractStateOutputs(alwaysBlocks, curVar, nextVar, states) {
+  const validStates = new Set(states || []);
+  const outputs = new Map();
+
+  for (const blk of alwaysBlocks) {
+    if (!/\balways_comb\b|always\s*@\s*\*/i.test(blk.header || "")) continue;
+    if (!new RegExp(`\\b${curVar}\\b`).test(blk.text)) continue;
+
+    const assigns = parseSimpleAssignments(blk.text)
+      .filter((a) => a.lhs !== nextVar && !/NxtState$/i.test(a.lhs));
+    if (!assigns.length) continue;
+
+    const predicateAssigns = [];
+    const unconditionalAssigns = [];
+    for (const a of assigns) {
+      const pred = parseStatePredicate(a.rhs, curVar, validStates);
+      if (pred) {
+        predicateAssigns.push({ ...a, pred });
+      } else {
+        unconditionalAssigns.push(a);
+      }
+    }
+
+    const activeStates = new Set();
+    for (const a of predicateAssigns) {
+      if (a.pred.op === "eq") {
+        addStateOutput(outputs, a.pred.state, `${a.lhs}=1`);
+        activeStates.add(a.pred.state);
+      } else {
+        addStateOutput(outputs, a.pred.state, `${a.lhs}=0`);
+        for (const st of validStates) {
+          if (st !== a.pred.state) {
+            addStateOutput(outputs, st, `${a.lhs}=1`);
+            activeStates.add(st);
+          }
+        }
+      }
+    }
+
+    for (const a of unconditionalAssigns) {
+      const targets = activeStates.size ? activeStates : validStates;
+      for (const st of targets) {
+        addStateOutput(outputs, st, formatOutputLine(a.lhs, a.rhs));
+      }
+    }
+  }
+
+  const out = {};
+  for (const st of validStates) {
+    const lines = outputs.get(st) || [];
+    if (lines.length) {
+      out[st] = lines
+        .slice()
+        .sort((a, b) => outputLineSortKey(a).localeCompare(outputLineSortKey(b)))
+        .slice(0, 5);
+    }
+  }
+  return out;
+}
+
 function pickEdgeLabel(conds) {
   if (!conds || !conds.length) return "next cycle";
   const clean = conds.map((c) => prettifyCond(c));
@@ -810,7 +938,7 @@ function chooseLabelPlacement(baseX, baseY, nx, ny, tx, ty, lines, pathSamples, 
   return best || { score: 9999, cx: baseX, cy: baseY, rect: labelBox(baseX, baseY, lines, 10) };
 }
 
-function layoutStates(states, startState, edges) {
+function layoutStates(states, startState, edges, stateOutputs = {}) {
   const sorted = states.slice().sort();
   const outAdj = new Map();
   const inDeg = new Map();
@@ -862,12 +990,17 @@ function layoutStates(states, startState, edges) {
   }
 
   const n = Math.max(order.length, 1);
-  const nodeH = 48;
+  const baseNodeH = 48;
   const widths = new Map();
+  const heights = new Map();
   let maxW = 0;
   for (const s of order) {
-    const w = Math.max(96, Math.min(200, s.length * 10 + 40));
+    const outputLines = Array.isArray(stateOutputs[s]) ? stateOutputs[s] : [];
+    const outputMaxLen = outputLines.reduce((acc, line) => Math.max(acc, String(line).length), 0);
+    const w = Math.max(96, Math.min(260, Math.max(s.length * 10 + 40, outputMaxLen * 6.7 + 34)));
+    const h = baseNodeH + outputLines.length * 13;
     widths.set(s, w);
+    heights.set(s, h);
     maxW = Math.max(maxW, w);
   }
 
@@ -884,7 +1017,7 @@ function layoutStates(states, startState, edges) {
     const st = order[i];
     const angle = (-Math.PI / 2) + ((2 * Math.PI * i) / n);
     const w = widths.get(st);
-    const h = nodeH;
+    const h = heights.get(st) || baseNodeH;
     const cx = centerX + radiusX * Math.cos(angle);
     const cy = centerY + radiusY * Math.sin(angle);
     nodes.set(st, {
@@ -922,8 +1055,9 @@ function renderSvg({
   states,
   edgeList,
   outFile,
+  stateOutputs = {},
 }) {
-  const { nodes, width, height, orderMap, orderList, centerX, centerY, total } = layoutStates(states, startState, edgeList);
+  const { nodes, width, height, orderMap, orderList, centerX, centerY, total } = layoutStates(states, startState, edgeList, stateOutputs);
   const edgeKeySet = new Set(edgeList.map((e) => `${e.from}->${e.to}`));
   const pairCurveSign = new Map();
 
@@ -1154,6 +1288,7 @@ function renderSvg({
   .node{fill:#ffffff;stroke:#000;stroke-width:1.2}
   .node-start{fill:#ffffff;stroke:#000;stroke-width:2.2}
   .node-text{font-family:Helvetica,Arial,sans-serif;font-size:13px;font-weight:600;text-anchor:middle;dominant-baseline:middle;fill:#000}
+  .node-output{font-family:Helvetica,Arial,sans-serif;font-size:10px;font-weight:400;text-anchor:middle;dominant-baseline:middle;fill:#333}
   .edge{stroke:#000;stroke-width:1.2;fill:none}
   .label-bg{fill:#fff;fill-opacity:0.95;stroke:none}
   .label{font-family:Helvetica,Arial,sans-serif;font-size:11px;fill:#000;text-anchor:middle;dominant-baseline:middle}
@@ -1168,7 +1303,13 @@ function renderSvg({
     if (!n) continue;
     const cls = st === startState ? "node-start" : "node";
     lines.push(`<ellipse class="${cls}" cx="${n.cx.toFixed(2)}" cy="${n.cy.toFixed(2)}" rx="${n.rx.toFixed(2)}" ry="${n.ry.toFixed(2)}"/>`);
-    lines.push(`<text class="node-text" x="${n.cx.toFixed(2)}" y="${n.cy.toFixed(2)}">${escapeXml(st)}</text>`);
+    const outputLines = Array.isArray(stateOutputs[st]) ? stateOutputs[st] : [];
+    const titleY = outputLines.length ? n.cy - ((outputLines.length + 1) * 6.5) : n.cy;
+    lines.push(`<text class="node-text" x="${n.cx.toFixed(2)}" y="${titleY.toFixed(2)}">${escapeXml(st)}</text>`);
+    outputLines.forEach((line, idx) => {
+      const y = titleY + 16 + idx * 13;
+      lines.push(`<text class="node-output" x="${n.cx.toFixed(2)}" y="${y.toFixed(2)}">${escapeXml(line)}</text>`);
+    });
   }
 
   for (const lb of labelItems) {
@@ -1205,6 +1346,7 @@ function renderSvgGraphviz({
   states,
   edgeList,
   outFile,
+  stateOutputs = {},
 }) {
   const stateList = states.slice().sort();
   const dot = [];
@@ -1217,6 +1359,10 @@ function renderSvgGraphviz({
   for (const st of stateList) {
     const attrs = [];
     if (st === startState) attrs.push("penwidth=2.2");
+    const outputLines = Array.isArray(stateOutputs[st]) ? stateOutputs[st] : [];
+    if (outputLines.length) {
+      attrs.push(`label="${escapeDotLabel([st, ...outputLines].join("\n"))}"`);
+    }
     dot.push(`"${escapeDotLabel(st)}" [${attrs.join(", ")}];`);
   }
 
@@ -1242,22 +1388,10 @@ function renderSvgGraphviz({
   }
 }
 
-function parseFsmFromVerilog(filePath) {
-  const srcRaw = fs.readFileSync(filePath, "utf8");
-  const src = stripComments(srcRaw);
-  const alwaysBlocks = extractAlwaysBlocks(src);
-  if (!alwaysBlocks.length) {
-    return { ok: false, reason: "No always @(*) begin ... end block found." };
-  }
-
-  const vars = detectStateVars(src, alwaysBlocks);
-  if (!vars) {
-    return { ok: false, reason: "State vars not detected." };
-  }
-
+function parseFsmFromStateVars(alwaysBlocks, vars, index = 0) {
   const block = findNextStateBlock(alwaysBlocks, vars.curVar, vars.nextVar);
   if (!block) {
-    return { ok: false, reason: "Next-state combinational block not found." };
+    return { ok: false, reason: `Next-state combinational block not found for ${vars.curVar}/${vars.nextVar}.` };
   }
 
   const caseBody = extractCaseBody(block.text, vars.curVar);
@@ -1309,14 +1443,68 @@ function parseFsmFromVerilog(filePath) {
 
   const states = [...stateSet];
   const edges = [...edgeMap.values()];
+  const stateOutputs = extractStateOutputs(alwaysBlocks, vars.curVar, vars.nextVar, states);
   return {
     ok: true,
+    index,
+    id: `fsm_${index}`,
     curVar: vars.curVar,
     nextVar: vars.nextVar,
     states,
     edges,
     startState,
+    stateOutputs,
   };
+}
+
+function parseFsmsFromVerilog(filePath) {
+  const srcRaw = fs.readFileSync(filePath, "utf8");
+  const src = stripComments(srcRaw);
+  const alwaysBlocks = extractAlwaysBlocks(src);
+  if (!alwaysBlocks.length) {
+    return { ok: false, reason: "No always @(*) begin ... end block found.", fsms: [] };
+  }
+
+  const candidates = detectStateVarCandidates(src, alwaysBlocks);
+  if (!candidates.length) {
+    return { ok: false, reason: "State vars not detected.", fsms: [] };
+  }
+
+  const fsms = [];
+  const skipped = [];
+  for (const vars of candidates) {
+    const parsed = parseFsmFromStateVars(alwaysBlocks, vars, fsms.length);
+    if (parsed.ok) {
+      fsms.push({
+        ...parsed,
+        index: fsms.length,
+        id: `fsm_${fsms.length}`,
+      });
+    } else {
+      skipped.push({
+        curVar: vars.curVar,
+        nextVar: vars.nextVar,
+        reason: parsed.reason || "FSM parse failed.",
+      });
+    }
+  }
+
+  if (!fsms.length) {
+    return {
+      ok: false,
+      reason: skipped[0]?.reason || "No transitions parsed from detected state variables.",
+      fsms: [],
+      skipped,
+    };
+  }
+
+  return { ok: true, fsms, skipped };
+}
+
+function parseFsmFromVerilog(filePath) {
+  const result = parseFsmsFromVerilog(filePath);
+  if (!result.ok) return { ok: false, reason: result.reason };
+  return result.fsms[0];
 }
 
 function main() {
@@ -1374,6 +1562,7 @@ function main() {
       nextVar: info.nextVar || "",
       startState: info.startState || null,
       states: info.states || [],
+      stateOutputs: info.stateOutputs || {},
       edges: Array.isArray(info.edges) ? info.edges.length : 0,
     });
     process.exit(0);
@@ -1408,6 +1597,7 @@ function main() {
       startState: info.startState,
       states: info.states,
       edgeList: renderEdges,
+      stateOutputs: info.stateOutputs || {},
       outFile: outSvg,
     });
   } else {
@@ -1417,6 +1607,7 @@ function main() {
       startState: info.startState,
       states: info.states,
       edgeList: renderEdges,
+      stateOutputs: info.stateOutputs || {},
       outFile: outSvg,
     });
   }
@@ -1436,6 +1627,7 @@ if (require.main === module) {
 
 module.exports = {
   parseFsmFromVerilog,
+  parseFsmsFromVerilog,
   renderSvg,
   renderSvgGraphviz,
   collapseBidirectionalEdges,
