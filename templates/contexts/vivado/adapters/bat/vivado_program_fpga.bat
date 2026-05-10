@@ -35,6 +35,7 @@ set "DISCOVERY_JOU=%LOG_DIR%\vivado_hw_discovery.jou"
 set "HW_TARGETS_FILE=%LOG_DIR%\vivado_hw_targets.txt"
 set "SELECTED_TARGET_INDEX=%FPGA_TARGET_INDEX%"
 set "SELECTED_DEVICE_INDEX=%FPGA_DEVICE_INDEX%"
+set "SELECTED_BITSTREAM_PATH=%FPGA_BITSTREAM_PATH%"
 call :route_vivado_artifacts
 
 set "NO_PAUSE=0"
@@ -59,6 +60,15 @@ set "PROMPT_RC=%errorlevel%"
 if "%PROMPT_RC%"=="%USER_CANCEL_RC%" exit /b %USER_CANCEL_RC%
 
 if not exist output mkdir output
+call :select_bitstream
+set "SELECT_BITSTREAM_RC=%errorlevel%"
+if "%SELECT_BITSTREAM_RC%"=="%USER_CANCEL_RC%" exit /b %USER_CANCEL_RC%
+if %SELECT_BITSTREAM_RC% neq 0 (
+    echo [ERROR] Bitstream selection failed.
+    call :maybe_pause
+    exit /b %SELECT_BITSTREAM_RC%
+)
+
 call :select_hw_target
 set "SELECT_TARGET_RC=%errorlevel%"
 if "%SELECT_TARGET_RC%"=="%USER_CANCEL_RC%" exit /b %USER_CANCEL_RC%
@@ -69,6 +79,8 @@ if %SELECT_TARGET_RC% neq 0 (
 )
 
 echo [INFO] Programming target index !SELECTED_TARGET_INDEX!, device index !SELECTED_DEVICE_INDEX!.
+echo [INFO] Bitstream: !SELECTED_BITSTREAM_PATH!
+set "FPGA_BITSTREAM_PATH=!SELECTED_BITSTREAM_PATH!"
 set "FPGA_TARGET_INDEX=!SELECTED_TARGET_INDEX!"
 set "FPGA_DEVICE_INDEX=!SELECTED_DEVICE_INDEX!"
 
@@ -100,6 +112,84 @@ echo.
 set "RUN_INPUT="
 set /p "RUN_INPUT=Press Enter to continue, or Q to return to menu: "
 if /i "%RUN_INPUT%"=="Q" exit /b %USER_CANCEL_RC%
+exit /b 0
+
+:select_bitstream
+if defined SELECTED_BITSTREAM_PATH (
+    for %%I in ("%SELECTED_BITSTREAM_PATH%") do set "SELECTED_BITSTREAM_PATH=%%~fI"
+    if exist "!SELECTED_BITSTREAM_PATH!" (
+        echo [INFO] Using preselected bitstream from FPGA_BITSTREAM_PATH.
+        exit /b 0
+    )
+    echo [ERROR] FPGA_BITSTREAM_PATH does not exist: !SELECTED_BITSTREAM_PATH!
+    exit /b 1
+)
+
+set "BITSTREAM_CANDIDATE_COUNT=0"
+set "BITSTREAM_OUTPUT_ROOT=%TARGET_PROJECT%\output"
+if exist "!BITSTREAM_OUTPUT_ROOT!" call :collect_bitstreams "!BITSTREAM_OUTPUT_ROOT!"
+
+if !BITSTREAM_CANDIDATE_COUNT! leq 0 (
+    echo [ERROR] No .bit files were found under !BITSTREAM_OUTPUT_ROOT!.
+    echo         Run a Vivado build first, or set FPGA_BITSTREAM_PATH to a .bit file.
+    exit /b 1
+)
+set /a LAST_BITSTREAM_INDEX=BITSTREAM_CANDIDATE_COUNT-1 >nul
+
+if !BITSTREAM_CANDIDATE_COUNT! equ 1 (
+    call :load_bitstream_candidate "0"
+    echo [INFO] One bitstream found. Auto-selecting index 0.
+    exit /b 0
+)
+
+if "%NO_PAUSE%"=="1" (
+    echo [ERROR] Multiple bitstreams were found, but --no-pause mode cannot prompt for one.
+    echo         Set FPGA_BITSTREAM_PATH to the bitstream you want to program.
+    call :print_bitstream_candidates
+    exit /b 1
+)
+
+call :print_bitstream_candidates
+
+:prompt_bitstream_index
+echo.
+set "SELECTED_BITSTREAM_INDEX="
+set /p "SELECTED_BITSTREAM_INDEX=Select bitstream index (or Q to cancel): "
+if /i "!SELECTED_BITSTREAM_INDEX!"=="Q" exit /b %USER_CANCEL_RC%
+call :validate_bitstream_index "!SELECTED_BITSTREAM_INDEX!"
+if errorlevel 1 (
+    echo [WARN] Invalid bitstream index. Enter a number from 0 to !LAST_BITSTREAM_INDEX!.
+    goto prompt_bitstream_index
+)
+call :load_bitstream_candidate "!SELECTED_BITSTREAM_INDEX!"
+exit /b 0
+
+:print_bitstream_candidates
+echo [INFO] Multiple bitstreams found:
+for /l %%I in (0,1,!LAST_BITSTREAM_INDEX!) do (
+    echo   [%%I] !BITSTREAM_SELECTION_%%I!
+)
+exit /b 0
+
+:validate_bitstream_index
+set "BITSTREAM_INDEX_CANDIDATE=%~1"
+if not defined BITSTREAM_INDEX_CANDIDATE exit /b 1
+echo(!BITSTREAM_INDEX_CANDIDATE!| findstr /r "^[0-9][0-9]*$" >nul
+if errorlevel 1 exit /b 1
+if !BITSTREAM_INDEX_CANDIDATE! geq !BITSTREAM_CANDIDATE_COUNT! exit /b 1
+exit /b 0
+
+:load_bitstream_candidate
+set "BITSTREAM_INDEX=%~1"
+call set "SELECTED_BITSTREAM_PATH=%%BITSTREAM_SELECTION_%BITSTREAM_INDEX%%%"
+exit /b 0
+
+:collect_bitstreams
+set "BITSTREAM_SCAN_ROOT=%~1"
+for /r "%BITSTREAM_SCAN_ROOT%" %%F in (*.bit) do (
+    set "BITSTREAM_SELECTION_!BITSTREAM_CANDIDATE_COUNT!=%%~fF"
+    set /a BITSTREAM_CANDIDATE_COUNT+=1 >nul
+)
 exit /b 0
 
 :route_vivado_artifacts

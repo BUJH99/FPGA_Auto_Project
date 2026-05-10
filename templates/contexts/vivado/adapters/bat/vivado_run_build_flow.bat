@@ -225,8 +225,11 @@ echo [PROMPT] Run FPGA device programming?
 if exist "%TEMPLATES_ROOT%\contexts\vivado\adapters\bat\vivado_program_fpga.bat" (
     if "%AUTO_PROGRAM%"=="1" (
         echo [INFO] Auto program mode enabled. Running vivado_fpga_program.bat...
+        set "FPGA_BITSTREAM_PATH=%BITSTREAM_PATH%"
         call "%TEMPLATES_ROOT%\contexts\vivado\adapters\bat\vivado_program_fpga.bat" "%TARGET_PROJECT%" --no-pause
-        if !errorlevel! neq 0 (
+        set "PROGRAM_RC=!errorlevel!"
+        set "FPGA_BITSTREAM_PATH="
+        if !PROGRAM_RC! neq 0 (
             echo [WARNING] vivado_fpga_program.bat failed.
             set "PROGRAM_STATUS=FAILED"
         ) else (
@@ -239,8 +242,11 @@ if exist "%TEMPLATES_ROOT%\contexts\vivado\adapters\bat\vivado_program_fpga.bat"
             echo [INFO] Device programming skipped by user.
             set "PROGRAM_STATUS=SKIPPED_BY_USER"
         ) else (
+            set "FPGA_BITSTREAM_PATH=%BITSTREAM_PATH%"
             call "%TEMPLATES_ROOT%\contexts\vivado\adapters\bat\vivado_program_fpga.bat" "%TARGET_PROJECT%" --no-pause
-            if !errorlevel! neq 0 (
+            set "PROGRAM_RC=!errorlevel!"
+            set "FPGA_BITSTREAM_PATH="
+            if !PROGRAM_RC! neq 0 (
                 echo [WARNING] vivado_fpga_program.bat failed.
                 set "PROGRAM_STATUS=FAILED"
             ) else (

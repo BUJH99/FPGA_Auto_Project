@@ -11,7 +11,11 @@ if {[file exists $config_file]} {
     puts "\[INFO\] Loading build config: $config_file"
     source $config_file
 }
-set bitstream_file "./output/${top_module}.bit"
+if {[info exists ::env(FPGA_BITSTREAM_PATH)] && [string trim $::env(FPGA_BITSTREAM_PATH)] ne ""} {
+    set bitstream_file [file normalize $::env(FPGA_BITSTREAM_PATH)]
+} else {
+    set bitstream_file [file normalize [file join "." "output" "${top_module}.bit"]]
+}
 set target_idx 0
 if {[info exists ::env(FPGA_TARGET_INDEX)] && $::env(FPGA_TARGET_INDEX) ne ""} {
     if {![string is integer -strict $::env(FPGA_TARGET_INDEX)] || $::env(FPGA_TARGET_INDEX) < 0} {

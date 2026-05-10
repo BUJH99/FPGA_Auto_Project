@@ -84,9 +84,31 @@ class VivadoBatchTemplateTests(unittest.TestCase):
         script_text = script_path.read_text(encoding="utf-8")
 
         self.assertIn('set "SELECTED_DEVICE_INDEX=%FPGA_DEVICE_INDEX%"', script_text)
+        self.assertIn('set "SELECTED_BITSTREAM_PATH=%FPGA_BITSTREAM_PATH%"', script_text)
+        self.assertIn('Select bitstream index', script_text)
+        self.assertIn('set "BITSTREAM_OUTPUT_ROOT=%TARGET_PROJECT%\\output"', script_text)
+        self.assertIn('call :collect_bitstreams "!BITSTREAM_OUTPUT_ROOT!"', script_text)
+        self.assertNotIn(r"HW\bitstreams", script_text)
+        self.assertIn('set "FPGA_BITSTREAM_PATH=!SELECTED_BITSTREAM_PATH!"', script_text)
         self.assertIn('set "FPGA_DEVICE_INDEX=!SELECTED_DEVICE_INDEX!"', script_text)
         self.assertIn('tokens=1,2,3* delims=|', script_text)
         self.assertIn('Select programmable hardware index', script_text)
+
+    def test_program_fpga_tcl_accepts_selected_bitstream_path(self) -> None:
+        script_path = (
+            REPO_ROOT
+            / "templates"
+            / "contexts"
+            / "vivado"
+            / "adapters"
+            / "tcl"
+            / "vivado_program_device.tcl"
+        )
+        script_text = script_path.read_text(encoding="utf-8")
+
+        self.assertIn("::env(FPGA_BITSTREAM_PATH)", script_text)
+        self.assertIn('file join "." "output" "${top_module}.bit"', script_text)
+        self.assertIn("set_property PROGRAM.FILE $bitstream_file $device", script_text)
 
     def test_hw_discovery_template_lists_programmable_devices(self) -> None:
         script_path = (
