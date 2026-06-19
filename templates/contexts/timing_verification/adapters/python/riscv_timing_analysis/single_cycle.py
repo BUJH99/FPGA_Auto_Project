@@ -755,8 +755,8 @@ def build_integrated_single_cycle_detail_text(
     generated_at = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
     lines = [
         f"- Source project: `{project_name}`",
-        f"- Source artifacts: `{artifact_dir}`",
-        f"- Standalone report path: `{report_path}`",
+        f"- Source artifacts: `{artifact_dir.as_posix()}`",
+        f"- Standalone report path: `{report_path.as_posix()}`",
         f"- Detail updated: `{generated_at}`",
         "",
     ]

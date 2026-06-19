@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
-title FPGA Automation - MAIN
+title FPGAClaw
 set "SETUP_BAT=%CD%\templates\contexts\project_bootstrap\adapters\bat\project_create.bat"
 set "UPGRADE_BAT=%CD%\templates\contexts\project_bootstrap\adapters\bat\project_upgrade_existing.bat"
 set "CONSOLE_HELPER=%CD%\templates\shared\adapters\bat\console_ui.bat"
@@ -26,19 +26,77 @@ set "Cyan=%ESC%[96m"
 set "White=%ESC%[97m"
 set "Reset=%ESC%[0m"
 set "Gray=%ESC%[90m"
+set "Lime=%ESC%[38;5;118m"
+set "NeonBlue=%ESC%[38;5;81m"
+set "Border=%ESC%[38;5;245m"
+set "Amber=%ESC%[38;5;227m"
 set "USER_CANCEL_RC=99"
 
 :MASTER_MENU
+mode con: cols=122 lines=46 >nul 2>&1
 call "%CONSOLE_HELPER%" clear
-echo.
-echo %Cyan%===============================================================================%Reset%
-echo  %Green%FPGA Automation MASTER Menu%Reset%
-echo %Cyan%===============================================================================%Reset%
-echo.
+call :SCAN_MANAGED_PROJECTS
+call :DETECT_VIVADO_VERSION
+if !PROJ_COUNT! equ 0 (
+    set "DASH_TARGET_DISPLAY=unknown"
+    call :DRAW_CLAW_DASHBOARD
+    goto :NO_PROJECT_MENU
+)
 
-:: Scan only sibling ../Project/* directories (manifest-only policy)
+if not defined TARGET_PROJECT_ABS (
+    set "TARGET_PROJECT_ABS=!PROJ_PATH_1!"
+    set "TARGET_PROJECT=!PROJ_LABEL_1!"
+)
+call :LOAD_PROJECT_CARD "!TARGET_PROJECT_ABS!"
+call :DRAW_CLAW_DASHBOARD
+
+set "DASH_INPUT="
+echo.
+set /p "DASH_INPUT=fpga_auto > "
+
+if "!DASH_INPUT!"=="" goto :PROJECT_MENU
+if /i "!DASH_INPUT!"=="H" goto :DASH_HELP_PAGE
+if /i "!DASH_INPUT!"=="HELP" goto :DASH_HELP_PAGE
+if /i "!DASH_INPUT!"=="?" goto :DASH_HELP_PAGE
+if /i "!DASH_INPUT!"=="S" (
+    if not exist "!SETUP_BAT!" (
+        echo.
+        echo %Red%[ERROR] Setup script not found: !SETUP_BAT!%Reset%
+        echo.
+        call "%CONSOLE_HELPER%" pause_then_clear
+        goto :MASTER_MENU
+    )
+    set "FPGA_AUTO_PARENT_MENU=1"
+    call "!SETUP_BAT!"
+    set "FPGA_AUTO_PARENT_MENU="
+    goto :MASTER_MENU
+)
+if /i "!DASH_INPUT!"=="U" (
+    call :RUN_PROJECT_UPGRADE ""
+    goto :MASTER_MENU
+)
+if /i "!DASH_INPUT!"=="C" goto :CUSTOMBAT_MENU
+if /i "!DASH_INPUT!"=="B" goto :MASTER_MENU
+if /i "!DASH_INPUT!"=="Q" goto :EXIT
+if /i "!DASH_INPUT!"=="QUIT" goto :EXIT
+if /i "!DASH_INPUT!"=="EXIT" goto :EXIT
+if /i "!DASH_INPUT!"=="MENU" goto :PROJECT_MENU
+if /i "!DASH_INPUT!"=="PROJECTS" goto :PROJECT_SELECT_MENU
+if /i "!DASH_INPUT!"=="LS" goto :PROJECT_SELECT_MENU
+
+echo(!DASH_INPUT!| findstr /r "^[0-9][0-9]*$" >nul
+if not errorlevel 1 (
+    if !DASH_INPUT! geq 1 if !DASH_INPUT! leq !PROJ_COUNT! (
+        set "TARGET_PROJECT_ABS=!PROJ_PATH_%DASH_INPUT%!"
+        set "TARGET_PROJECT=!PROJ_LABEL_%DASH_INPUT%!"
+        goto :MASTER_MENU
+    )
+)
+
+goto :DASH_HELP_PAGE
+
+:SCAN_MANAGED_PROJECTS
 set "PROJ_COUNT=0"
-echo Available Projects:
 if exist "%PROJECT_ROOT%\" (
     for /d %%D in ("%PROJECT_ROOT%\*") do (
         if exist "%%~fD\src" (
@@ -46,14 +104,162 @@ if exist "%PROJECT_ROOT%\" (
                 set /a PROJ_COUNT+=1
                 set "PROJ_PATH_!PROJ_COUNT!=%%~fD"
                 set "PROJ_LABEL_!PROJ_COUNT!=..\Project\%%~nxD"
-                echo   %White%[!PROJ_COUNT!] ..\Project\%%~nxD%Reset%
+                set "PROJ_NAME_!PROJ_COUNT!=%%~nxD"
             )
         )
     )
 )
+exit /b 0
 
-if !PROJ_COUNT! equ 0 goto :NO_PROJECT_MENU
-goto :PROJECT_SELECT_MENU
+:DETECT_VIVADO_VERSION
+set "DASH_VIVADO_DISPLAY=Vivado unknown"
+if defined XILINX_VIVADO call :SET_VIVADO_DISPLAY_FROM_ROOT "%XILINX_VIVADO%"
+if /i not "!DASH_VIVADO_DISPLAY!"=="Vivado unknown" exit /b 0
+for /d %%D in ("C:\AMDDesignTools\*\Vivado") do if /i "!DASH_VIVADO_DISPLAY!"=="Vivado unknown" call :SET_VIVADO_DISPLAY_FROM_ROOT "%%~fD"
+for /d %%D in ("C:\Xilinx\Vivado\*") do if /i "!DASH_VIVADO_DISPLAY!"=="Vivado unknown" call :SET_VIVADO_DISPLAY_FROM_ROOT "%%~fD"
+exit /b 0
+
+:SET_VIVADO_DISPLAY_FROM_ROOT
+set "DASH_VIVADO_ROOT=%~f1"
+set "DASH_VIVADO_VERSION="
+for %%I in ("%DASH_VIVADO_ROOT%") do set "DASH_VIVADO_VERSION=%%~nxI"
+if /i "!DASH_VIVADO_VERSION!"=="Vivado" (
+    for %%I in ("%DASH_VIVADO_ROOT%\..") do set "DASH_VIVADO_VERSION=%%~nxI"
+)
+if not "!DASH_VIVADO_VERSION!"=="" set "DASH_VIVADO_DISPLAY=Vivado !DASH_VIVADO_VERSION!"
+exit /b 0
+
+:LOAD_PROJECT_CARD
+for %%I in ("%~1") do set "DASH_PROJECT_NAME=%%~nxI"
+set "DASH_PROJECT_NAME_LOCK="
+set "DASH_TARGET_PART=xc7a35tcpg236-1"
+if exist "%~1\fpga_auto.yml" (
+    for /f "usebackq tokens=1,* delims=:" %%A in ("%~1\fpga_auto.yml") do (
+        set "DASH_YAML_KEY=%%~A"
+        set "DASH_YAML_VAL=%%~B"
+        set "DASH_YAML_KEY=!DASH_YAML_KEY: =!"
+        set "DASH_YAML_KEY=!DASH_YAML_KEY:"=!"
+        for /f "tokens=* delims= " %%V in ("!DASH_YAML_VAL!") do set "DASH_YAML_VAL=%%~V"
+        set "DASH_YAML_VAL=!DASH_YAML_VAL:"=!"
+        if /i "!DASH_YAML_KEY!"=="name" if not defined DASH_PROJECT_NAME_LOCK if not "!DASH_YAML_VAL!"=="" (
+            set "DASH_PROJECT_NAME=!DASH_YAML_VAL!"
+            set "DASH_PROJECT_NAME_LOCK=1"
+        )
+        if /i "!DASH_YAML_KEY!"=="part" if not "!DASH_YAML_VAL!"=="" set "DASH_TARGET_PART=!DASH_YAML_VAL!"
+    )
+)
+set "DASH_TARGET_DISPLAY=!DASH_TARGET_PART!"
+if /i "!DASH_TARGET_DISPLAY:~0,2!"=="xc" if not "!DASH_TARGET_DISPLAY:~7!"=="" set "DASH_TARGET_DISPLAY=!DASH_TARGET_DISPLAY:~0,7!"
+exit /b 0
+
+:DRAW_CLAW_DASHBOARD
+if not defined DASH_TARGET_DISPLAY set "DASH_TARGET_DISPLAY=xc7a35t"
+echo.
+echo %Lime%      ______  ______  ______   ______   ______  __        ______  __       __            %White%     //   //   //%Reset%
+echo %Lime%     / ____/ / __  / / ____/  / ____/  / ____/ / /       / __  / / /  _   / /           %White%    //   //   //%Reset%
+echo %Lime%    / /_    / /_/ / / / __   / /_     / /     / /       / /_/ / / /  / /  / /            %White%   //   //   //%Reset%
+echo %Lime%   / __/   / ____/ / /_/ /  / __/    / /     / /       / __  / / /  / /  / /             %White%  //   //   //%Reset%
+echo %Lime%  / /     / /      / ___/  / /____  / /____ / /____   / / / / / /__/ /__/ /              %White% //   //   //%Reset%
+echo %Lime% /_/     /_/      /_/     /_____/  /_____/ /_____/  /_/ /_/  \____/\____/               %White%//   //   //%Reset%
+echo.
+echo %Border%  ------------------%Reset%    %White%T C L   A U T O M A T I O N%Reset%    %Border%------------------------------%Reset%
+echo.
+echo %Border%        +----------------------------------------------------------------+%Reset%
+echo %Border%        ^|%Reset% %White%^>_%Reset%  %NeonBlue%v1.0.0%Reset%    %Border%^|%Reset%    %NeonBlue%Tcl 8.6%Reset%    %Border%^|%Reset%    %NeonBlue%%DASH_VIVADO_DISPLAY%%Reset%                 %Border%^|%Reset%
+echo %Border%        +----------------------------------------------------------------+%Reset%
+echo.
+echo %Border%  +-------------------------------------------------------------------------+%Reset%
+echo %Border%  ^|%Reset% %Lime%[ ] Project INFO%Reset%                                                        %Border%^|%Reset%
+echo %Border%  ^|                                                                         ^|%Reset%
+echo %Border%  ^|%Reset%      %NeonBlue%[chip]%Reset%   %NeonBlue%project%Reset%      %White%:%Reset%   %White%%DASH_PROJECT_NAME%%Reset%                              %Border%^|%Reset%
+echo %Border%  ^|%Reset%      %NeonBlue%[aim ]%Reset%   %NeonBlue%target%Reset%       %White%:%Reset%   %White%%DASH_TARGET_DISPLAY%%Reset%                                %Border%^|%Reset%
+echo %Border%  +-------------------------------------------------------------------------+%Reset%
+echo.
+echo %Border%  +----------------------------------------------------------------------------------------+%Reset%
+echo %Border%  ^|%Reset% %Amber%PROJECT FOLDERS%Reset%  %Gray%(type number to select, Enter for selected project)%Reset%                 %Border%^|%Reset%
+call :DRAW_PROJECT_PICKER
+echo %Border%  +----------------------------------------------------------------------------------------+%Reset%
+echo.
+echo %Border%  +----------------------------------------------------------------------------------------+%Reset%
+echo %Border%  ^|%Reset% %Amber%SHORTCUTS%Reset%                                                                           %Border%^|%Reset%
+echo %Border%  ^|%Reset%  %Lime%[H]%Reset% Help        %Lime%[S]%Reset% Setup New Project      %Lime%[U]%Reset% Upgrade Projects      %Lime%[Q]%Reset% Quit       %Border%^|%Reset%
+echo %Border%  ^|%Reset%  %Lime%[C]%Reset% CUSTOMBAT   %Lime%[1..N]%Reset% Select Project      %Lime%[Enter]%Reset% Open Command Menu              %Border%^|%Reset%
+echo %Border%  +----------------------------------------------------------------------------------------+%Reset%
+echo.
+exit /b 0
+
+:DASH_HELP_PAGE
+mode con: cols=122 lines=42 >nul 2>&1
+call "%CONSOLE_HELPER%" clear
+echo.
+echo %Cyan%===============================================================================%Reset%
+echo  %Green%FPGAClaw Help%Reset%   %White%Selected Project:%Reset% %Lime%!DASH_PROJECT_NAME!%Reset%   %White%Target:%Reset% %NeonBlue%!DASH_TARGET_DISPLAY!%Reset%
+echo %Cyan%===============================================================================%Reset%
+echo.
+echo %Amber%[ First Screen Shortcuts ]%Reset%
+echo   %Lime%1..N%Reset%    Select a project folder on the first screen.
+echo   %Lime%Enter%Reset%   Open the full command menu for the selected project.
+echo   %Lime%H%Reset%       Show this help page.
+echo   %Lime%S%Reset%       Setup a new managed project.
+echo   %Lime%U%Reset%       Upgrade existing project structures.
+echo   %Lime%C%Reset%       Open CUSTOMBAT menu.
+echo   %Lime%Q%Reset%       Quit MAIN.bat.
+echo.
+echo %Amber%[ Full Command Menu Overview ]%Reset%
+echo   %NeonBlue%Code / Visual%Reset%    1 Schematic   2 Hierarchy   3 FSM   4 Presentation
+echo   %NeonBlue%Simulation%Reset%       5 Vivado Sim  6 Auto Report 7 Iverilog 8 VCD SVG 9 WaveDrom
+echo                    19 TB Scaffold 20 Vivado Sim NO GUI
+echo   %NeonBlue%Reports%Reset%          10 HTML Report 11 Docs 18 Open Latest Presentation
+echo   %NeonBlue%Vivado / FPGA%Reset%    12 Open GUI 13 Build 14 Finalize BD 15 Retarget IP
+echo                    16 Program FPGA 17 Build+Program 29 IP Integrator GUI 30 IPI Build
+echo   %NeonBlue%Health / Sync%Reset%    21 Toolkit Doctor 31 Remote Sync
+echo   %NeonBlue%Vitis%Reset%            22 Export XSA 23 Platform 24 App 25 Build Platform
+echo                    26 Build App 27 Run App 28 Full Vitis Flow
+echo.
+echo %Amber%[ Typical Flow ]%Reset%
+echo   1. Pick a project number on the first screen.
+echo   2. Press Enter to open its command menu.
+echo   3. Run a numbered command, or use B inside that menu to return.
+echo.
+echo %Gray%Press Enter to open the selected project menu, B to return, Q to quit.%Reset%
+set "HELP_INPUT="
+echo.
+set /p "HELP_INPUT=help > "
+if /i "!HELP_INPUT!"=="Q" goto :EXIT
+if /i "!HELP_INPUT!"=="QUIT" goto :EXIT
+if /i "!HELP_INPUT!"=="B" goto :MASTER_MENU
+if "!HELP_INPUT!"=="" goto :PROJECT_MENU
+goto :MASTER_MENU
+
+:DRAW_PROJECT_PICKER
+if !PROJ_COUNT! equ 0 (
+    echo %Border%  ^|%Reset%   No valid project folders found under %PROJECT_ROOT%
+    exit /b 0
+)
+for /L %%N in (1,2,!PROJ_COUNT!) do (
+    call :MAKE_PROJECT_CELL %%N DASH_LEFT_CELL
+    set /a DASH_RIGHT_INDEX=%%N+1
+    if !DASH_RIGHT_INDEX! leq !PROJ_COUNT! (
+        call :MAKE_PROJECT_CELL !DASH_RIGHT_INDEX! DASH_RIGHT_CELL
+    ) else (
+        set "DASH_RIGHT_CELL=                                      "
+    )
+    echo %Border%  ^|%Reset%  !DASH_LEFT_CELL!  !DASH_RIGHT_CELL!  %Border%^|%Reset%
+)
+exit /b 0
+
+:MAKE_PROJECT_CELL
+set "DASH_CELL_INDEX=%~1"
+set "DASH_CELL_OUT=%~2"
+call set "DASH_CELL_PATH=%%PROJ_PATH_%DASH_CELL_INDEX%%%"
+call set "DASH_CELL_NAME=%%PROJ_NAME_%DASH_CELL_INDEX%%%"
+set "DASH_CELL_MARK= "
+if /i "!DASH_CELL_PATH!"=="!TARGET_PROJECT_ABS!" set "DASH_CELL_MARK=>"
+set "DASH_CELL_TEXT=!DASH_CELL_MARK! [!DASH_CELL_INDEX!] !DASH_CELL_NAME!"
+set "DASH_CELL_TEXT=!DASH_CELL_TEXT!                                      "
+set "DASH_CELL_TEXT=!DASH_CELL_TEXT:~0,38!"
+set "%DASH_CELL_OUT%=!DASH_CELL_TEXT!"
+exit /b 0
 
 :NO_PROJECT_MENU
 echo.
@@ -93,7 +299,16 @@ if /i "!NO_PROJ_INPUT!"=="S" (
 goto :NO_PROJECT_MENU
 
 :PROJECT_SELECT_MENU
-
+call "%CONSOLE_HELPER%" clear
+echo.
+echo %Cyan%===============================================================================%Reset%
+echo  %Green%FPGA Automation Project Selection%Reset%
+echo %Cyan%===============================================================================%Reset%
+echo.
+echo Available Projects:
+for /L %%N in (1,1,!PROJ_COUNT!) do (
+    echo   %White%[%%N] !PROJ_LABEL_%%N!%Reset%
+)
 echo.
 echo   %White%[S] Setup New Project%Reset%
 echo   %White%[U] Upgrade Existing Projects%Reset%
@@ -180,6 +395,13 @@ set "CMD_25=contexts\vitis\adapters\bat\vitis_build_platform.bat"
 set "CMD_26=contexts\vitis\adapters\bat\vitis_build_application.bat"
 set "CMD_27=contexts\vitis\adapters\bat\vitis_run_application.bat"
 set "CMD_28=contexts\vitis\adapters\bat\vitis_run_full_flow.bat"
+set "CMD_31=contexts\remote_sync\adapters\bat\remote_sync_project_to_t_drive.bat"
+
+if defined PROJECT_MENU_AUTO_RUN (
+    set "USER_INPUT=!PROJECT_MENU_AUTO_RUN!"
+    set "PROJECT_MENU_AUTO_RUN="
+    goto :PROJECT_MENU_DISPATCH
+)
 
 echo %Yellow%[ Code ^& Schematic Generation ]%Reset%
 echo   1. Draw Schematic [!CMD_1!]
@@ -217,6 +439,9 @@ echo.
 echo %Yellow%[ Project Health ]%Reset%
 echo  21. Toolkit Doctor [!CMD_21!]
 echo.
+echo %Yellow%[ Remote Sync ]%Reset%
+echo  31. Sync This Project to T Drive [!CMD_31!]
+echo.
 echo %Yellow%[ Vitis Software Flow ]%Reset%
 echo  22. Export XSA from Vivado [!CMD_22!]
 echo  23. Create Vitis Platform from XSA (Select XSA) [!CMD_23!]
@@ -231,6 +456,7 @@ echo %White%[U] Upgrade This Project%Reset%   %Yellow%[C] CUSTOMBAT%Reset%   %Bl
 set "USER_INPUT="
 set /p "USER_INPUT=%Cyan%Select number to run (or U/B/Q): %Reset%"
 
+:PROJECT_MENU_DISPATCH
 if /i "!USER_INPUT!"=="Q" goto :EXIT
 if /i "!USER_INPUT!"=="C" goto :CUSTOMBAT_MENU
 if /i "!USER_INPUT!"=="B" goto :MASTER_MENU

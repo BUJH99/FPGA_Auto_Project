@@ -44,6 +44,7 @@ MENU_USAGE: dict[int, str] = {
     28: "Usage: /task 28 <project> [app_name|--app <name>|--apps a,b|--all-apps] [--run]",
     29: "Usage: /task 29 <project>",
     30: "Usage: /task 30 <project>",
+    31: "Usage: /task 31 <project> [--dest <path>] [--dry-run]",
 }
 
 HIERARCHY_SCOPE_ALIASES: dict[str, str] = {
@@ -594,6 +595,9 @@ class CommandResolver:
                 return None, usage
             script_args.append("--no-pause")
 
+        elif menu_no == 31:
+            script_args.extend(tokens)
+
         else:
             return None, f"Menu {menu_no} is not supported."
 
@@ -695,6 +699,8 @@ class CommandResolver:
             return "report"
         if command_id in {"build", "build_program", "program", "vivado_gui", "finalize_bd", "retarget_ip"} or menu_no in {29, 30}:
             return "build"
+        if menu_no == 31:
+            return "remote_sync"
         if menu_no == 6:
             return "simulation_report"
         return "default"
@@ -714,7 +720,7 @@ class CommandResolver:
             "setup_project",
             "doctor",
             "vitis",
-        } or menu_no in {29, 30}:
+        } or menu_no in {29, 30, 31}:
             return InteractionContract(
                 input_mode="direct_execute",
                 selection_source="project",

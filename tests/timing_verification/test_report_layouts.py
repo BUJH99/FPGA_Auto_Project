@@ -23,7 +23,13 @@ if str(PYTHON_ADAPTER_ROOT) not in sys.path:
 from riscv_timing_analysis import single_cycle
 
 
-PIPELINE_REPORT_PATH = MANAGED_PROJECT_ROOT / "RISCV_RV32I_5STAGE" / "tools" / "generate_pipeline_perf_report.py"
+PIPELINE_REPORT_PATH = (
+    MANAGED_PROJECT_ROOT
+    / "RISCV_RV32I_5STAGE"
+    / "tools"
+    / "timing"
+    / "generate_pipeline_perf_report.py"
+)
 
 
 def load_pipeline_report_module():
@@ -56,7 +62,7 @@ class SingleCycleReportLayoutTests(unittest.TestCase):
                 "project_root": str(MANAGED_PROJECT_ROOT / "RISCV_RV32I_SINGLE"),
                 "program_key": "full_coverage",
                 "manifest_path": str(MANAGED_PROJECT_ROOT / "RISCV_RV32I_SINGLE" / "fpga_auto.yml"),
-                "profile_path": str(MANAGED_PROJECT_ROOT / "RISCV_RV32I_SINGLE" / "tools" / "timing_analysis_profile.json"),
+                "profile_path": str(MANAGED_PROJECT_ROOT / "RISCV_RV32I_SINGLE" / "tools" / "timing" / "timing_analysis_profile.json"),
                 "manifest_top_name": "Top",
                 "resolved_source_files": [str(MANAGED_PROJECT_ROOT / "RISCV_RV32I_SINGLE" / "src" / "TOP.sv")],
                 "probe_families": [{"key": "timing_metric", "label": "Timing Metric"}],
@@ -318,6 +324,54 @@ class PipelineReportLayoutTests(unittest.TestCase):
         self.assertIn("| Pipeline Speedup (x) | 1.000x | 1.250x | +0.250x |", report_text)
         self.assertNotIn("#### Full Instruction-Focus Tables", report_text)
         self.assertNotIn("### Appendix", report_text)
+
+    def test_pipeline_report_renders_soc_perf_runtime_section(self) -> None:
+        pipeline_report = load_pipeline_report_module()
+        record = {
+            "scenario": "soc_perf",
+            "profile": "demo_fast_io",
+            "run": {"scenario": "soc_perf", "profile": "demo_fast_io"},
+            "execution": {
+                "run": {
+                    "cycles": 1000,
+                    "retired": 400,
+                    "cpi_x1000": 2500,
+                    "if_stall": 10,
+                    "apb_stall": 40,
+                    "load_use": 2,
+                    "soc_blocked": 50,
+                }
+            },
+            "fetch": {"req": 500, "wait": 10},
+            "bus": {"data_req": 20, "ram_r": 8, "ram_w": 4, "mmio_r": 3, "mmio_w": 5, "mmio_ratio_x1000": 400, "decode_err": 0, "rsp_err": 0},
+            "axi": {"rd": 3, "wr": 5, "rd_lat_avg_x1000": 5000, "rd_lat_max": 7, "wr_lat_avg_x1000": 4000, "wr_lat_max": 6, "resp_err": 0},
+            "apb": {"UART": {"rd": 1, "wr": 2, "lat_avg_x1000": 3000, "lat_max": 5, "pslverr": 0}},
+            "interrupts": {"GPIO": {"assert_count": 1, "assert_to_vector": 2, "assert_to_trap": 5, "trap_to_claim": 4, "claim_to_complete": 3, "service": 10}},
+            "peripherals": {"UART": {"rx_line": 5, "rx_apb": 5, "tx_apb": 3, "tx_line": 3}},
+            "e2e": {"reset_to_ready": 100, "input_line_cycles": 640, "input_to_service": 12, "sort_start_to_done": 200, "done_to_uart_report": 32, "input_to_visible_done": 900},
+            "status": {"status": "PASS", "warnings": 0, "errors": 0},
+            "summary": {"verdict": "PASS", "primary_soc_bottleneck": "APB/MMIO stall cycles (40)", "worst_latency_metric": "input_to_visible_done=900"},
+            "missing_required_sections": [],
+            "_artifact_json": Path("/tmp/soc_perf.json"),
+            "_artifact_log": Path("/tmp/soc_perf.xsim.log"),
+            "_artifact_config": Path("/tmp/soc_perf_config.svh"),
+        }
+
+        section = pipeline_report.render_soc_perf_pipeline_section(
+            [record],
+            pipeline_metrics={"fmax_mhz": 100.0},
+            report_path=Path("/tmp/PIPELINE_PERF_REPORT.md"),
+            cache_root=Path("/tmp/soc_perf"),
+            baseline_path=Path("/tmp/baseline.json"),
+            latest_path=Path("/tmp/latest.json"),
+            threshold_rows=[{"status": "PASS", "scenario": "all", "metric": "thresholds", "current": "within policy", "baseline": "/tmp/baseline.json", "detail": "No configured threshold was exceeded."}],
+        )
+
+        self.assertIn("## SoC Runtime Metrics", section)
+        self.assertIn("SoCPerf cache root", section)
+        self.assertIn("External Input Line", section)
+        self.assertIn("APB/MMIO stall cycles (40)", section)
+        self.assertIn("| soc_perf / demo_fast_io | ✅ PASS | 1000 | 400 | 2500 | 50 | input_to_visible_done=900 |", section)
 
 
 if __name__ == "__main__":

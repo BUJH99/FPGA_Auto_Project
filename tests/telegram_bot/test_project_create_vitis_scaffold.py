@@ -41,6 +41,20 @@ class ProjectCreateVitisScaffoldTests(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, script_text)
 
+    def test_project_create_does_not_auto_sync_to_legacy_source_project(self) -> None:
+        script_text = (
+            REPO_ROOT
+            / "templates"
+            / "contexts"
+            / "project_bootstrap"
+            / "adapters"
+            / "bat"
+            / "project_create.bat"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("SyncProjectsToSourceProject.bat", script_text)
+        self.assertNotIn("SOURCE_PROJECT", script_text)
+
     def test_manifest_template_includes_vitis_defaults(self) -> None:
         template_text = (REPO_ROOT / "templates" / "manifest" / "fpga_auto.template.yml").read_text(encoding="utf-8")
 

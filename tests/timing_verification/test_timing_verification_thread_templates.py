@@ -50,7 +50,13 @@ class TimingVerificationThreadTemplateTests(unittest.TestCase):
                 self.assertIn("riscv_timing_analysis::configure_max_threads", script_text)
 
     def test_external_pipeline_collector_calls_shared_thread_helper(self) -> None:
-        script_path = MANAGED_PROJECT_ROOT / "RISCV_RV32I_5STAGE" / "tools" / "pipeline_perf_collect.tcl"
+        script_path = (
+            MANAGED_PROJECT_ROOT
+            / "RISCV_RV32I_5STAGE"
+            / "tools"
+            / "timing"
+            / "pipeline_perf_collect.tcl"
+        )
         if not script_path.exists():
             self.skipTest(f"Managed workspace sample not available: {script_path}")
 
@@ -71,6 +77,24 @@ class TimingVerificationThreadTemplateTests(unittest.TestCase):
 
         self.assertIn("set_param general.maxThreads 20", script_text)
         self.assertIn("Defaulting to 20 threads.", script_text)
+
+    def test_timing_bat_exposes_soc_perf_inside_existing_custom_entry(self) -> None:
+        main_text = (REPO_ROOT / "MAIN.bat").read_text(encoding="utf-8")
+        timing_bat = (
+            REPO_ROOT
+            / "templates"
+            / "contexts"
+            / "timing_verification"
+            / "adapters"
+            / "bat"
+            / "timing_run_riscv_verification.bat"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('set "CUSTOMBAT_COUNT=1"', main_text)
+        self.assertIn("RISC-V Timing Verification", main_text)
+        self.assertIn("SoCPerf + Pipeline Report", timing_bat)
+        self.assertIn("--include-soc-perf", timing_bat)
+        self.assertIn("--soc-scenario=soc_perf", timing_bat)
 
 
 if __name__ == "__main__":

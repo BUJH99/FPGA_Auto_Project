@@ -174,6 +174,7 @@ MENU_USAGE: dict[int, str] = {
     28: "Usage: /task 28 <project> [app_name|--app <name>|--apps a,b|--all-apps] [--run]",
     29: "Usage: /task 29 <project>",
     30: "Usage: /task 30 <project>",
+    31: "Usage: /task 31 <project> [--dest <path>] [--dry-run]",
 }
 
 HIERARCHY_SCOPE_ALIASES: dict[str, str] = {
@@ -443,7 +444,7 @@ def parse_main_menu_registry(main_bat_path: Path, templates_root: Path) -> dict[
         script_path = (templates_root / script_rel.replace("\\", "/")).resolve()
         registry[menu_no] = MenuEntry(menu_no=menu_no, script_rel=script_rel, script_path=script_path)
 
-    missing = sorted(set(range(1, 31)) - set(registry.keys()))
+    missing = sorted(set(range(1, 32)) - set(registry.keys()))
     if missing:
         raise RuntimeError(f"MAIN.bat menu map is incomplete. Missing CMD entries: {missing}")
 
@@ -909,7 +910,7 @@ def build_help(category: str = "core") -> tuple[str, dict[str, object]]:
             "🔸 /last - <i>show last job result</i>",
             "🔸 /history &lt;proj&gt; [tool] [limit] - <i>show recent project runs</i>",
             "🔸 /diff &lt;proj&gt; [tool] - <i>compare latest two runs</i>",
-            "🔸 /task &lt;menu_no&gt; &lt;proj&gt; [args] - <i>run MAIN menu (1~30)</i>",
+            "🔸 /task &lt;menu_no&gt; &lt;proj&gt; [args] - <i>run MAIN menu (1~31)</i>",
             "🔸 /doctor &lt;proj&gt; - <i>run toolkit health check</i>",
             "🔸 /setup_project &lt;name&gt; [v|sv] - <i>run setup</i>",
             "🔸 /help - <i>show this help</i>",
@@ -2099,8 +2100,8 @@ def parse_task_command(config: Config, args_text: str) -> tuple[JobRequest | Non
         return None, "Usage: /task <menu_no> <project> [args...]"
 
     menu_no = int(tokens[0])
-    if menu_no < 1 or menu_no > 30:
-        return None, "menu_no must be between 1 and 30."
+    if menu_no < 1 or menu_no > 31:
+        return None, "menu_no must be between 1 and 31."
 
     project_path, error = resolve_project(config.project_root, tokens[1])
     if error:
@@ -3518,7 +3519,10 @@ def process_callback_query(config: Config, callback: dict) -> None:
             ]
         elif category == "health":
             keyboard["inline_keyboard"] = [
-                [{"text": "21. Toolkit Doctor", "callback_data": "wiz_act_21"}],
+                [
+                    {"text": "21. Toolkit Doctor", "callback_data": "wiz_act_21"},
+                    {"text": "31. Remote Sync", "callback_data": "wiz_act_31"},
+                ],
                 [{"text": "🗂 Run History", "callback_data": "wiz_act_hist"}, {"text": "🧾 Run Diff", "callback_data": "wiz_act_diff"}],
             ]
 
@@ -3640,6 +3644,8 @@ def process_callback_query(config: Config, callback: dict) -> None:
             synthetic_cmd = f"/report_docs {proj_name}"
         elif act_num == "21":
             synthetic_cmd = f"/doctor {proj_name}"
+        elif act_num == "31":
+            synthetic_cmd = f"/task 31 {proj_name}"
         elif act_num == "hist":
             synthetic_cmd = f"/history {proj_name}"
         elif act_num == "diff":

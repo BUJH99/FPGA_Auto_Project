@@ -12,16 +12,7 @@ from typing import Any
 import yaml
 
 
-DEFAULT_PROFILE_NAME = "timing_analysis_profile.json"
-DEFAULT_VIVADO_CANDIDATES = [
-    r"C:\AMDDesignTools\2025.2\Vivado\bin\vivado.bat",
-    r"C:\AMDDesignTools\2025.1\Vivado\bin\vivado.bat",
-    r"C:\Xilinx\Vivado\2025.2\bin\vivado.bat",
-    r"C:\Xilinx\Vivado\2025.1\bin\vivado.bat",
-    r"C:\Xilinx\Vivado\2024.2\bin\vivado.bat",
-    r"C:\Xilinx\Vivado\2024.1\bin\vivado.bat",
-]
-
+DEFAULT_PROFILE_NAME = "timing/timing_analysis_profile.json"
 
 def wsl_to_windows(path: pathlib.Path) -> str:
     path_str = str(path.resolve())
@@ -87,10 +78,6 @@ def detect_vivado_bat() -> str:
     if env_path:
         return env_path
 
-    for candidate in DEFAULT_VIVADO_CANDIDATES:
-        if host_path_exists(candidate):
-            return candidate
-
     try:
         result = subprocess.run(
             ["cmd.exe", "/c", "where", "vivado.bat"],
@@ -107,7 +94,7 @@ def detect_vivado_bat() -> str:
             if candidate:
                 return candidate
 
-    return DEFAULT_VIVADO_CANDIDATES[0]
+    return "vivado.bat"
 
 
 DEFAULT_VIVADO_BAT = detect_vivado_bat()
@@ -288,7 +275,8 @@ def load_project_contract(
 ) -> dict[str, Any]:
     manifest_path = project_root / "fpga_auto.yml"
     manifest = load_yaml(manifest_path)
-    profile = load_json(project_root / "tools" / profile_name)
+    profile_path = project_root / "tools" / profile_name
+    profile = load_json(profile_path)
     project_name = str(manifest.get("project", {}).get("name") or project_root.name)
     manifest_top_name = str(manifest.get("hdl", {}).get("top") or "TOP")
     part_name = str(manifest.get("vivado", {}).get("part") or "")
@@ -300,7 +288,7 @@ def load_project_contract(
         "repo_root": resolve_automation_repo_root(project_root),
         "manifest_path": manifest_path.resolve(),
         "manifest": manifest,
-        "profile_path": (project_root / "tools" / profile_name).resolve(),
+        "profile_path": profile_path.resolve(),
         "profile": profile,
         "project_name": project_name,
         "manifest_top_name": manifest_top_name,
@@ -362,7 +350,7 @@ def run_vivado_batch(
     if (":" in DEFAULT_VIVADO_BAT or "\\" in DEFAULT_VIVADO_BAT or "/" in DEFAULT_VIVADO_BAT) and not host_path_exists(DEFAULT_VIVADO_BAT):
         raise FileNotFoundError(
             f"Vivado launcher not found: {DEFAULT_VIVADO_BAT}. "
-            "Set VIVADO_BAT or install Vivado 2025.2/2025.1/2024.2/2024.1."
+            "Set VIVADO_BAT or add vivado.bat to PATH."
         )
     cmd = [
         "cmd.exe",

@@ -92,7 +92,11 @@ proc riscv_timing_analysis::write_timing_paths_tsv {outfile max_paths clk_period
     set start_pin [get_property STARTPOINT_PIN $path_obj]
     set end_pin [get_property ENDPOINT_PIN $path_obj]
     set path_name [get_property NAME $path_obj]
-    set min_period_ns [expr {$clk_period_ns - $slack_ns}]
+    set requirement_ns [get_property REQUIREMENT $path_obj]
+    if {![string is double -strict $requirement_ns]} {
+      set requirement_ns $clk_period_ns
+    }
+    set min_period_ns [expr {$requirement_ns - $slack_ns}]
 
     if {$datapath_delay_ns > 0.0} {
       set route_share_pct [expr {100.0 * $net_delay_ns / $datapath_delay_ns}]

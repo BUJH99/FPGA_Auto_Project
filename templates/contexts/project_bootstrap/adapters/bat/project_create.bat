@@ -5,7 +5,6 @@ for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
 set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "PROJECT_ROOT_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\resolve_managed_project_root.bat"
 
-set "SYNC_BAT=%TEMPLATES_ROOT%\..\SyncProjectsToSourceProject.bat"
 set "MANIFEST_TEMPLATE=%TEMPLATES_ROOT%\manifest\fpga_auto.template.yml"
 set "NO_PAUSE=0"
 set "SETUP_RC=0"
@@ -193,14 +192,6 @@ echo - vitis\bsp_overrides
 echo - fpga_auto.yml
 echo ------------------------------------------------
 echo.
-
-if exist "%SYNC_BAT%" (
-    echo [INFO] Running auto sync to SOURCE_PROJECT...
-    call "%SYNC_BAT%"
-    if errorlevel 1 (
-        echo [WARN] Auto sync reported errors. Please check output above.
-    )
-)
 
 :END
 if "%NO_PAUSE%"=="1" (

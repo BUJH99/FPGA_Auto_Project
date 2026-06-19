@@ -273,6 +273,12 @@ S. **Setup New Project** (`templates\contexts\project_bootstrap\adapters\bat\pro
     - Runs a project health check over the manifest, resolved file catalog, output/log paths, testbench naming, and tool availability (`node`, `python`, `vivado`, `yosys`).
     - **Usage**: Use this before long simulations or builds to quickly detect missing tools, broken manifests, or layout issues. The summary is written to `output/doctor_summary.json`.
 
+#### 🔁 [ Remote Sync ]
+
+31. **Sync This Project to T Drive** (`templates\contexts\remote_sync\adapters\bat\remote_sync_project_to_t_drive.bat`)
+    - Mirrors only the selected project's `src` and `tb` folders into `T:\Project\<ProjectName>\src` and `T:\Project\<ProjectName>\tb` with `robocopy`.
+    - **Usage**: Use this when the automation framework stays local but the selected project's HDL sources and testbenches need to be refreshed on the SSH-mounted remote drive. Override the destination project root with `FPGA_AUTO_REMOTE_PROJECT_ROOT` or the script's `--dest` argument.
+
 ### 🧩 SystemVerilog Capabilities
 The toolkit provides extensive capabilities around the SystemVerilog (SV) standard, offering both heuristic parsing and rigorous AST tracking using `tree-sitter`.
 *For the latest exact status, see `templates/docs/architecture/systemverilog_support_matrix.md`.*
@@ -573,6 +579,12 @@ S. **Setup New Project** (`templates\contexts\project_bootstrap\adapters\bat\pro
 21. **Toolkit Doctor** (`templates\shared\adapters\bat\toolkit_doctor.bat`)
     - 매니페스트, 해석된 파일 목록, output/log 경로, 테스트벤치 이름 규칙, 필수 도구(`node`, `python`, `vivado`, `yosys`) 상태를 한 번에 점검합니다.
     - **사용 방법**: 장시간 시뮬레이션이나 빌드 전에 실행하여 누락 도구, 손상된 manifest, 프로젝트 레이아웃 문제를 빠르게 확인할 수 있습니다. 결과는 `output/doctor_summary.json`에 저장됩니다.
+
+#### 🔁 [ Remote Sync (원격 동기화) ]
+
+31. **Sync This Project to T Drive** (`templates\contexts\remote_sync\adapters\bat\remote_sync_project_to_t_drive.bat`)
+    - 현재 선택한 프로젝트의 `src`와 `tb` 폴더만 `robocopy`로 `T:\Project\<ProjectName>\src`, `T:\Project\<ProjectName>\tb`에 미러링합니다.
+    - **사용 방법**: 자동화 프레임워크는 로컬에 두고, SSH로 마운트된 원격 드라이브에는 HDL 소스와 테스트벤치만 최신 상태로 갱신할 때 사용합니다. 대상 프로젝트 루트는 `FPGA_AUTO_REMOTE_PROJECT_ROOT` 환경변수나 스크립트의 `--dest` 인자로 바꿀 수 있습니다.
 
 ### 🧩 SystemVerilog 호환성
 본 자동화 툴킷은 SystemVerilog(SV) 표준에 대한 광범위한 기능을 지원하며, 복원력이 높은 휴리스틱 정규식 스크립트와 `tree-sitter`를 이용한 정교한 AST 추적 환경을 동시 제공합니다.

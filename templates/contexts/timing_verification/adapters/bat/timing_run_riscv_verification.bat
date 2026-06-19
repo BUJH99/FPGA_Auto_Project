@@ -12,7 +12,6 @@ if defined FPGA_AUTO_PROJECT_ROOT (
 ) else (
     for %%I in ("%REPO_ROOT%\..") do set "PROJECT_ROOT=%%~fI\Project"
 )
-set "DEFAULT_VIVADO_BAT=C:\AMDDesignTools\2025.2\Vivado\bin\vivado.bat"
 set "USER_CANCEL_RC=99"
 
 call :resolve_python
@@ -45,7 +44,7 @@ echo [ERROR] Invalid project folder: "%TARGET_INPUT%"
 echo         Select a folder under "%PROJECT_ROOT%\*" that contains:
 echo         - fpga_auto.yml
 echo         - src\
-echo         - tools\timing_analysis_profile.json
+echo         - tools\timing\timing_analysis_profile.json
 echo.
 if not "%~1"=="" goto :FAIL
 set "TARGET_INPUT="
@@ -53,7 +52,8 @@ goto :SELECT_PROJECT
 
 :PROJECT_READY
 call :clear_screen
-set "PROFILE_JSON=%TARGET_PROJECT%\tools\timing_analysis_profile.json"
+call :resolve_profile_path "%TARGET_PROJECT%" PROFILE_JSON
+if errorlevel 1 goto :FAIL
 call :status "Selected project: %TARGET_PROJECT%"
 
 call :json_value "%PROFILE_JSON%" "analysis_mode" ANALYSIS_MODE
@@ -81,8 +81,8 @@ if /I "%ANALYSIS_MODE%"=="single_cycle" (
     call :json_value "%PROFILE_JSON%" "default_output_dir" OUTPUT_RELATIVE
     if errorlevel 1 set "OUTPUT_RELATIVE=.analysis\single_cycle_perf"
 ) else if /I "%ANALYSIS_MODE%"=="pipeline_perf" (
-    set "RUN_SCRIPT=%TARGET_PROJECT%\tools\generate_pipeline_perf_report.py"
-    set "COLLECTOR_TCL=%TARGET_PROJECT%\tools\pipeline_perf_collect.tcl"
+    set "RUN_SCRIPT=%TARGET_PROJECT%\tools\timing\generate_pipeline_perf_report.py"
+    set "COLLECTOR_TCL=%TARGET_PROJECT%\tools\timing\pipeline_perf_collect.tcl"
     set "REUSE_FLAG=--skip-vivado"
     set "FLOW_NAME=Pipeline timing verification"
     set "REPORT_ARG_NAME=--report"
@@ -150,12 +150,12 @@ if errorlevel 1 (
     echo [ERROR] Invalid run mode "%RUN_MODE%"
     if /I "%RUN_MODE_SOURCE%"=="prompt" (
         if /I "%ANALYSIS_MODE%"=="pipeline_perf" (
-            echo         Use 1, 2, 3, 4, or 5 from the menu.
+            echo         Use 1, 2, 3, 4, 5, or 6 from the menu.
         ) else (
             echo         Use 1, 2, or 3 from the menu.
         )
     ) else if /I "%ANALYSIS_MODE%"=="pipeline_perf" (
-        echo         Use 1/full, 2/reuse, 3/base, 4/focus, 5/focus-partial, 6/pipeline-only, or 7/program.
+        echo         Use 1/full, 2/reuse, 3/base, 4/focus, 5/focus-partial, 6/pipeline-only, 7/program, or 8/soc_perf.
     ) else (
         echo         Use 1/full, 2/reuse, or 3/program.
     )
@@ -234,11 +234,20 @@ if /I "%RUN_MODE_NORMALIZED%"=="pipeline_only" (
     set "RUN_ARGS=--pipeline-only --skip-instruction-focus"
     set "RUN_LABEL=5-stage only ^(pipeline build only, no single-cycle rebuild, no instruction-focus rerun^)"
 )
+if /I "%RUN_MODE_NORMALIZED%"=="soc_perf" (
+    set "PROGRAM_NORMALIZED=full_coverage"
+    set "PROGRAM_LABEL=Full Coverage.mem"
+    set "RUN_ARGS=--pipeline-only --skip-instruction-focus --include-soc-perf --soc-scenario=soc_perf --soc-profile=demo_fast_io"
+    set "RUN_LABEL=SoCPerf + Pipeline Report"
+)
 set "ARTIFACT_ROOT_DISPLAY=%TARGET_PROJECT%\%OUTPUT_RELATIVE%"
 if /I "%RUN_REFRESH_ALL%"=="1" (
     set "ARTIFACT_ROOT_DISPLAY=%TARGET_PROJECT%\%OUTPUT_RELATIVE%\programs"
 ) else if defined PROGRAM_NORMALIZED (
     set "ARTIFACT_ROOT_DISPLAY=%TARGET_PROJECT%\%OUTPUT_RELATIVE%\programs\%PROGRAM_NORMALIZED%"
+)
+if /I "%RUN_MODE_NORMALIZED%"=="soc_perf" (
+    set "ARTIFACT_ROOT_DISPLAY=%TARGET_PROJECT%\%OUTPUT_RELATIVE%\soc_perf"
 )
 if /I not "%RUN_REFRESH_ALL%"=="1" if defined PROGRAM_NORMALIZED (
     set "RUN_ARGS=%RUN_ARGS% --program=""%PROGRAM_NORMALIZED%"""
@@ -266,11 +275,12 @@ if /I "%RUN_REFRESH_ALL%"=="1" (
 if defined FOCUS_FILTER_INPUT (
     echo Focus Filter   : %FOCUS_FILTER_INPUT%
 )
+if /I "%RUN_MODE_NORMALIZED%"=="soc_perf" (
+    echo SoCPerf Scope  : soc_perf / demo_fast_io
+)
 if /I not "%RUN_MODE_NORMALIZED%"=="reuse" if /I not "%RUN_REFRESH_ALL%"=="1" (
     if defined VIVADO_BAT (
         echo Vivado Bat    : "%VIVADO_BAT%"
-    ) else (
-        echo Vivado Bat    : "%DEFAULT_VIVADO_BAT%"
     )
 )
 echo ===============================================================
@@ -316,10 +326,10 @@ exit /b 1
 
 :resolve_vivado_bat
 set "RESOLVED_VIVADO_BAT="
-for /f "usebackq delims=" %%I in (`powershell.exe -NoProfile -Command "$candidates = @('C:\AMDDesignTools\2025.2\Vivado\bin\vivado.bat', 'C:\AMDDesignTools\2025.1\Vivado\bin\vivado.bat', 'C:\Xilinx\Vivado\2025.2\bin\vivado.bat', 'C:\Xilinx\Vivado\2025.1\bin\vivado.bat', 'C:\Xilinx\Vivado\2024.2\bin\vivado.bat', 'C:\Xilinx\Vivado\2024.1\bin\vivado.bat'); if ($env:VIVADO_BAT -and (Test-Path -LiteralPath $env:VIVADO_BAT)) { [Console]::Write($env:VIVADO_BAT); exit 0 }; foreach ($candidate in $candidates) { if (Test-Path -LiteralPath $candidate) { [Console]::Write($candidate); exit 0 } }; $cmd = Get-Command vivado.bat -ErrorAction SilentlyContinue; if (-not $cmd) { $cmd = Get-Command vivado -ErrorAction SilentlyContinue }; if ($cmd) { [Console]::Write($cmd.Source); exit 0 }; [Console]::Write('C:\AMDDesignTools\2025.2\Vivado\bin\vivado.bat')"` ) do set "RESOLVED_VIVADO_BAT=%%I"
+for /f "usebackq delims=" %%I in (`powershell.exe -NoProfile -Command "if ($env:VIVADO_BAT -and (Test-Path -LiteralPath $env:VIVADO_BAT)) { [Console]::Write($env:VIVADO_BAT); exit 0 }; $cmd = Get-Command vivado.bat -ErrorAction SilentlyContinue; if (-not $cmd) { $cmd = Get-Command vivado -ErrorAction SilentlyContinue }; if ($cmd) { [Console]::Write($cmd.Source); exit 0 }; exit 1"` ) do set "RESOLVED_VIVADO_BAT=%%I"
 if not defined RESOLVED_VIVADO_BAT (
     echo.
-    echo [ERROR] Failed to resolve Vivado launcher path.
+    echo [ERROR] Failed to resolve Vivado launcher. Set VIVADO_BAT or add vivado.bat to PATH.
     exit /b 1
 )
 set "VIVADO_BAT=%RESOLVED_VIVADO_BAT%"
@@ -364,7 +374,7 @@ if %TIMING_PROJECT_COUNT% gtr 0 (
     echo        Requirements:
     echo        - fpga_auto.yml
     echo        - src\
-    echo        - tools\timing_analysis_profile.json
+    echo        - tools\timing\timing_analysis_profile.json
     echo.
     echo   [B] Browse for a project folder
     echo   [Q] Cancel
@@ -426,7 +436,8 @@ if not exist "%PROJECT_ROOT%\" exit /b 0
 for /d %%D in ("%PROJECT_ROOT%\*") do (
     if exist "%%~fD\fpga_auto.yml" (
         if exist "%%~fD\src" (
-            if exist "%%~fD\tools\timing_analysis_profile.json" (
+            call :has_timing_profile "%%~fD"
+            if not errorlevel 1 (
                 call set /a TIMING_PROJECT_COUNT+=1
                 call set "TIMING_PROJECT_PATH_%%TIMING_PROJECT_COUNT%%=%%~fD"
                 call set "TIMING_PROJECT_LABEL_%%TIMING_PROJECT_COUNT%%=..\Project\%%~nxD"
@@ -435,6 +446,10 @@ for /d %%D in ("%PROJECT_ROOT%\*") do (
     )
 )
 exit /b 0
+
+:has_timing_profile
+if exist "%~1\tools\timing\timing_analysis_profile.json" exit /b 0
+exit /b 1
 
 :coerce_project_input
 set "%~2=%~1"
@@ -459,8 +474,18 @@ exit /b 1
 :resolve_project_root
 set "%~2="
 set "RAW_TARGET_PATH=%~1"
-for /f "usebackq delims=" %%I in (`powershell.exe -NoProfile -Command "$item = $null; try { $item = Get-Item -LiteralPath $env:RAW_TARGET_PATH -ErrorAction Stop } catch { exit 2 }; if (-not $item.PSIsContainer) { $item = $item.Directory }; while ($item) { $manifest = Join-Path $item.FullName 'fpga_auto.yml'; $src = Join-Path $item.FullName 'src'; $analysisProfile = Join-Path $item.FullName 'tools\\timing_analysis_profile.json'; if ((Test-Path -LiteralPath $manifest) -and (Test-Path -LiteralPath $src) -and (Test-Path -LiteralPath $analysisProfile)) { [Console]::Write($item.FullName); exit 0 }; $item = $item.Parent }; exit 3"`) do set "%~2=%%I"
+for /f "usebackq delims=" %%I in (`powershell.exe -NoProfile -Command "$item = $null; try { $item = Get-Item -LiteralPath $env:RAW_TARGET_PATH -ErrorAction Stop } catch { exit 2 }; if (-not $item.PSIsContainer) { $item = $item.Directory }; while ($item) { $manifest = Join-Path $item.FullName 'fpga_auto.yml'; $src = Join-Path $item.FullName 'src'; $analysisProfile = Join-Path $item.FullName 'tools\\timing\\timing_analysis_profile.json'; if ((Test-Path -LiteralPath $manifest) -and (Test-Path -LiteralPath $src) -and (Test-Path -LiteralPath $analysisProfile)) { [Console]::Write($item.FullName); exit 0 }; $item = $item.Parent }; exit 3"`) do set "%~2=%%I"
 if defined %~2 exit /b 0
+exit /b 1
+
+:resolve_profile_path
+set "%~2="
+if exist "%~1\tools\timing\timing_analysis_profile.json" (
+    set "%~2=%~1\tools\timing\timing_analysis_profile.json"
+    exit /b 0
+)
+echo.
+echo [ERROR] Missing timing profile under "%~1\tools\timing".
 exit /b 1
 
 :json_value
@@ -480,6 +505,7 @@ if /I "%ANALYSIS_MODE%"=="pipeline_perf" (
     echo [3] Pipeline - BubbleSort
     echo [4] Instruction - BubbleSort
     echo [5] Report refresh only ^(use when 1-4 failed and you only need report regeneration^)
+    echo [6] SoCPerf + Pipeline Report
 ) else (
     echo [1] FullCoverage
     echo [2] BubbleSort
@@ -500,6 +526,7 @@ if /I "%RUN_MODE_SOURCE%"=="prompt" (
         if /I "%~1"=="3" set "%~3=pipeline_bubble_sort"
         if /I "%~1"=="4" set "%~3=focus_bubble_sort"
         if /I "%~1"=="5" set "%~3=report_refresh_all"
+        if /I "%~1"=="6" set "%~3=soc_perf"
     )
     if /I "%~2"=="single_cycle" (
         if /I "%~1"=="1" set "%~3=single_full_coverage"
@@ -553,6 +580,12 @@ if /I "%~2"=="pipeline_perf" (
     if /I "%~1"=="pipeline-only" set "%~3=pipeline_only"
     if /I "%~1"=="po" set "%~3=pipeline_only"
     if /I not "%RUN_MODE_SOURCE%"=="prompt" if /I "%~1"=="7" set "%~3=program_select"
+    if /I not "%RUN_MODE_SOURCE%"=="prompt" if /I "%~1"=="8" set "%~3=soc_perf"
+    if /I "%~1"=="soc_perf" set "%~3=soc_perf"
+    if /I "%~1"=="soc-perf" set "%~3=soc_perf"
+    if /I "%~1"=="pipeline_soc_perf" set "%~3=soc_perf"
+    if /I "%~1"=="pipeline-soc-perf" set "%~3=soc_perf"
+    if /I "%~1"=="sp" set "%~3=soc_perf"
 )
 if /I "%~2"=="single_cycle" (
     if /I not "%RUN_MODE_SOURCE%"=="prompt" if /I "%~1"=="3" set "%~3=program_select"

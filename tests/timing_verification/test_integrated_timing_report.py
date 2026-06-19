@@ -19,7 +19,10 @@ if str(PYTHON_ADAPTER_ROOT) not in sys.path:
 
 from riscv_timing_analysis.integrated_report import (
     merge_program_detail_section,
+    render_fmax_benchmark_svg,
     render_physical_delay_stack_svg,
+    render_pipeline_breakdown_svg,
+    render_resource_utilization_svg,
     shift_markdown_headings,
     status_badge,
     strip_first_markdown_heading,
@@ -171,14 +174,224 @@ class IntegratedTimingReportTests(unittest.TestCase):
         self.assertIn("Physical Delay Stack", html_text)
         self.assertIn("Hardware Resource Utilization", html_text)
         self.assertIn("dashboard-stack", html_text)
+        self.assertIn("side-dashboard", html_text)
+        self.assertIn("max-width: 1760px", html_text)
+        self.assertIn("minmax(620px, 1fr)", html_text)
+        self.assertIn("overflow-x: hidden", html_text)
+        self.assertIn('href="#overview"', html_text)
         self.assertIn("kpi-grid", html_text)
         self.assertIn("Automated Root Cause Findings", html_text)
         self.assertIn("Root Cause Severity Mix", html_text)
         self.assertIn("Stage Boundary Timing", html_text)
+        self.assertNotIn("Detailed Benchmark Breakdowns", html_text)
         self.assertIn("chart-panel", html_text)
         self.assertIn("data-chart-engine=\"python-svg\"", html_text)
         self.assertIn("<svg", html_text)
         self.assertIn("Self-contained HTML", html_text)
+
+    def test_html_report_promotes_soc_perf_metrics_to_dashboard(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            html_path = Path(temp_dir) / "report.html"
+            markdown_text = """# PIPELINE_PERF_REPORT
+
+<!-- SOC_PERF_SECTION:START -->
+## SoC Runtime Metrics
+
+### 🚦 Overall Verdict
+
+| Item | Value |
+| --- | --- |
+| Overall verdict | ✅ PASS |
+| Primary SoC bottleneck | soc_perf / demo_fast_io: APB/MMIO stall cycles (50) |
+| Scenario count | 1 |
+| Latest cache | `.analysis/soc_perf/latest.json` |
+
+### 📊 Scenario Summary
+
+| Scenario/Profile | Verdict | Cycles | Retired | CPI x1000 | SoC Blocked | Worst Latency |
+| --- | --- | --- | --- | --- | --- | --- |
+| soc_perf / demo_fast_io | ✅ PASS | 1000 | 400 | 2500 | 50 | input_to_visible_done=900 |
+
+### 🧠 Execution And Stall Breakdown
+
+| Scenario/Profile | Window | Cycles | Retired | CPI x1000 | IF Stall | APB Stall | LoadUse | SoC Blocked |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| soc_perf / demo_fast_io | program_runtime | 1000 | 400 | 2500 | 0 | 40 | 2 | 50 |
+| soc_perf / demo_fast_io | input_to_visible_done | 900 | 360 | 2500 | 0 | 35 | 2 | 45 |
+
+### 🚌 Bus And Memory Traffic Mix
+
+| Scenario/Profile | Fetch Req | Fetch Wait | Data Req | RAM R | RAM W | MMIO R | MMIO W | MMIO Ratio x1000 | Decode Err | Rsp Err |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| soc_perf / demo_fast_io | 500 | 10 | 200 | 80 | 40 | 30 | 50 | 400 | 0 | 0 |
+
+### ⚡ Interrupt Latency
+
+| Scenario/Profile | Source | Asserts | Assert->Vector | Assert->Trap | Trap->Claim | Claim->Complete | Service |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| soc_perf / demo_fast_io | UART_RX | 1 | 0 | 10 | 4 | 3 | 25 |
+
+### 🧪 E2E Latency
+
+| Scenario/Profile | Reset->Ready | External Input Line | Input->Service | Sort->Done | Done->UART Report | Input->Visible Done |
+| --- | --- | --- | --- | --- | --- | --- |
+| soc_perf / demo_fast_io | 100 | 640 | 12 | 200 | 32 | 900 |
+
+### 🧮 Derived Efficiency
+
+| Scenario/Profile | Pipeline Fmax MHz | Runtime CPI | MIPS |
+| --- | --- | --- | --- |
+| soc_perf / demo_fast_io | 100.000 | 2.500 | 40.000 |
+
+### Regression Thresholds
+
+| Status | Scenario | Metric | Current | Baseline | Detail |
+| --- | --- | --- | --- | --- | --- |
+| ✅ PASS | all | thresholds | within policy | baseline.json | No configured threshold was exceeded. |
+
+### 🧾 Pipeline RAW Events
+
+| Scenario/Profile | Branch Taken | Branch Flush | JAL | JALR | Pipe Flush | Pipe Stall | CSR | Load | Store | ALU | Branch | Illegal | MRET | IF Valid | ID Valid | EX Valid | MEM Valid | WB Valid |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| soc_perf / demo_fast_io | 3 | 1 | 2 | 1 | 4 | 50 | 8 | 20 | 12 | 120 | 10 | 0 | 12 | 900 | 880 | 870 | 860 | 850 |
+
+### 🧾 Data Bus RAW Wait
+
+| Scenario/Profile | Wait | Read Wait | Write Wait | RAM Wait | MMIO Wait | Busy | Idle | Rsp Err | Decode Err Addr | Rsp Err Addr | Last Addr | Last WData | Last RData |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| soc_perf / demo_fast_io | 60 | 40 | 20 | 8 | 52 | 210 | 790 | 0 | 0 | 0 | 0x10000000 | 0x1 | 0x2 |
+
+### 🧾 APB Target RAW Wait
+
+| Scenario/Profile | Target | Wait | Setup | Enable | PSEL | PENABLE | PREADY Wait |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| soc_perf / demo_fast_io | UART | 30 | 20 | 20 | 20 | 20 | 10 |
+| soc_perf / demo_fast_io | INTC | 25 | 18 | 18 | 18 | 18 | 7 |
+
+### 🧾 APB Register Access RAW
+
+| Scenario/Profile | Target | Register | Reads | Writes | Wait | PSLVERR | Last WData | Last RData |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| soc_perf / demo_fast_io | INTC | INTC_CLAIM | 12 | 0 | 18 | 0 | 0 | 1 |
+| soc_perf / demo_fast_io | UART | UART_STATUS | 20 | 0 | 16 | 0 | 0 | 2 |
+
+### 🧾 Interrupt RAW Timeline
+
+| Scenario/Profile | Source | Assert | Deassert | Pending Set | Pending Clear | Claim | Complete | Masked | Pending Cycles | Line High | In Service | Global Enable | Trap Entry | Trap Exit | MIE Disabled |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| soc_perf / demo_fast_io | UART_RX | 2 | 2 | 2 | 2 | 2 | 2 | 0 | 44 | 30 | 15 |  |  |  |  |
+| soc_perf / demo_fast_io | GLOBAL |  |  |  |  |  |  |  |  |  |  | 900 | 12 | 12 | 20 |
+
+### 🧾 Peripheral RAW Status
+
+| Scenario/Profile | Peripheral | RAW Metrics |
+| --- | --- | --- |
+| soc_perf / demo_fast_io | UART | uart_rx_fifo_max_level=4, uart_tx_fifo_max_level=3, uart_tx_busy_cycles=20 |
+| soc_perf / demo_fast_io | SPI | spi_busy_cycles=10, spi_cs_active_cycles=8 |
+<!-- SOC_PERF_SECTION:END -->
+"""
+
+            write_html_report(html_path, markdown_text, title="PIPELINE_PERF_REPORT")
+            html_text = html_path.read_text(encoding="utf-8")
+
+        self.assertIn("SoC Runtime Dashboard", html_text)
+        self.assertIn("SoC Execution Windows", html_text)
+        self.assertIn("Bus And Memory Traffic", html_text)
+        self.assertIn("Interrupt Service Latency", html_text)
+        self.assertIn("E2E Scenario Latency", html_text)
+        self.assertIn("SoC RAW Metrics Dashboard", html_text)
+        self.assertIn("Pipeline RAW Events", html_text)
+        self.assertIn("Data Bus RAW Wait", html_text)
+        self.assertIn("APB Target RAW Wait", html_text)
+        self.assertIn("APB Register Access RAW", html_text)
+        self.assertIn("Interrupt RAW Timeline", html_text)
+        self.assertIn("Peripheral RAW Status", html_text)
+        self.assertIn('href="#soc-raw-dashboard"', html_text)
+        self.assertIn("IRQ global enable cycles", html_text)
+        self.assertIn('href="#soc-runtime-dashboard"', html_text)
+        self.assertIn("SoC MIPS: 40.000", html_text)
+        self.assertNotIn("Worst Negative Slack", html_text)
+
+    def test_resource_chart_keeps_program_labels_inside_viewbox(self) -> None:
+        svg = render_resource_utilization_svg(
+            {
+                "resource_points": [
+                    {"label": "Full Coverage.mem", "luts": 2525, "registers": 1850},
+                    {"label": "Bubble Sort.mem", "luts": 2863, "registers": 2177},
+                ]
+            }
+        )
+
+        self.assertIn('viewBox="0 0 760 250"', svg)
+        self.assertIn('x="160"', svg)
+        self.assertIn("Full Coverage.mem", svg)
+        self.assertIn("Bubble Sort.mem", svg)
+
+    def test_fmax_chart_renders_target_label_as_top_badge(self) -> None:
+        svg = render_fmax_benchmark_svg(
+            {
+                "target_fmax_mhz": 100.0,
+                "fmax_points": [
+                    {"label": "Full Coverage.mem", "value": 100.09},
+                    {"label": "Bubble Sort.mem", "value": 100.02},
+                ],
+            }
+        )
+
+        self.assertIn('y="4"', svg)
+        self.assertIn('y="22"', svg)
+        self.assertNotIn('<text x="462" y=', svg)
+        self.assertIn("Target 100.0 MHz", svg)
+
+    def test_html_report_adds_program_nav_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            html_path = Path(temp_dir) / "report.html"
+            markdown_text = """# Demo Report
+
+<!-- PROGRAM_SECTION:full_coverage:START -->
+## Full Coverage.mem
+
+### Summary
+
+| Item | Value |
+| --- | --- |
+| Overall verdict | ⚠️ WARN |
+<!-- PROGRAM_SECTION:full_coverage:END -->
+
+<!-- PROGRAM_SECTION:bubble_sort:START -->
+## Bubble Sort.mem
+
+### Summary
+
+| Item | Value |
+| --- | --- |
+| Overall verdict | ⚠️ WARN |
+<!-- PROGRAM_SECTION:bubble_sort:END -->
+"""
+
+            write_html_report(html_path, markdown_text, title="Demo Report")
+            html_text = html_path.read_text(encoding="utf-8")
+
+        self.assertIn('href="#full-coverage"', html_text)
+        self.assertIn('href="#bubble-sort"', html_text)
+        self.assertIn('id="full-coverage"', html_text)
+        self.assertIn('id="bubble-sort"', html_text)
+
+    def test_pipeline_breakdown_renders_every_program_image(self) -> None:
+        svg = render_pipeline_breakdown_svg(
+            {
+                "cycle_points": [
+                    {"label": "Full Coverage.mem", "single": 92, "pipeline": 118},
+                    {"label": "Bubble Sort.mem", "single": 93, "pipeline": 126},
+                ]
+            }
+        )
+
+        self.assertIn("Full Coverage.mem", svg)
+        self.assertIn("Bubble Sort.mem", svg)
+        self.assertIn(">118</text>", svg)
+        self.assertIn(">126</text>", svg)
+        self.assertEqual(svg.count("Total Cycles"), 2)
 
     def test_physical_delay_chart_uses_one_row_per_pipeline_stage(self) -> None:
         svg = render_physical_delay_stack_svg(
@@ -202,6 +415,23 @@ class IntegratedTimingReportTests(unittest.TestCase):
         self.assertEqual(svg.count(">WB</text>"), 1)
         self.assertLess(svg.index(">IF</text>"), svg.index(">ID</text>"))
         self.assertLess(svg.index(">ID</text>"), svg.index(">EX</text>"))
+
+    def test_physical_delay_chart_renders_every_program_image(self) -> None:
+        svg = render_physical_delay_stack_svg(
+            {
+                "stage_rows": [
+                    {"program_title": "Full Coverage.mem", "stage": "IF", "period_ns": 5.8, "datapath_ns": 5.4, "route_share_pct": 80.0},
+                    {"program_title": "Full Coverage.mem", "stage": "EX", "period_ns": 9.7, "datapath_ns": 9.5, "route_share_pct": 65.0},
+                    {"program_title": "Bubble Sort.mem", "stage": "IF", "period_ns": 6.5, "datapath_ns": 6.1, "route_share_pct": 85.0},
+                    {"program_title": "Bubble Sort.mem", "stage": "EX", "period_ns": 10.0, "datapath_ns": 9.8, "route_share_pct": 83.0},
+                ]
+            }
+        )
+
+        self.assertIn("Full Coverage.mem", svg)
+        self.assertIn("Bubble Sort.mem", svg)
+        self.assertEqual(svg.count(">IF</text>"), 2)
+        self.assertEqual(svg.count(">EX</text>"), 2)
 
 
 if __name__ == "__main__":
