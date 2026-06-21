@@ -361,9 +361,9 @@ set "TARGET_PROJECT_ABS=!PROJ_PATH_%PROJ_INPUT%!"
 set "TARGET_PROJECT=!PROJ_LABEL_%PROJ_INPUT%!"
 
 :PROJECT_MENU
-mode con: cols=120 lines=40 >nul 2>&1
+mode con: cols=120 lines=36 >nul 2>&1
 call "%CONSOLE_HELPER%" clear
-echo %Green%Project: !TARGET_PROJECT!%Reset%
+echo %Green%Project:%Reset% !TARGET_PROJECT!
 
 set "CMD_1=contexts\code_intel\adapters\bat\code_draw_schematic.bat"
 set "CMD_2=contexts\code_intel\adapters\bat\code_browse_hierarchy.bat"
@@ -403,63 +403,46 @@ if defined PROJECT_MENU_AUTO_RUN (
     goto :PROJECT_MENU_DISPATCH
 )
 
-echo %Yellow%[ Code ^& Schematic Generation ]%Reset%
-echo   1. Draw Schematic [!CMD_1!]
-echo   2. Browse HDL Hierarchy [!CMD_2!]
-echo   3. Draw FSM [!CMD_3!]
-echo   4. Generate Presentation [!CMD_4!]
+echo %Cyan%===============================================================================%Reset%
+echo %Yellow%[ Code / Visual ]%Reset%
+echo   1  Draw Schematic              2  Browse HDL Hierarchy
+echo   3  Draw FSM                    4  Generate Presentation
 echo.
-
 echo %Yellow%[ Simulation ]%Reset%
-echo   5. Run Vivado Simulation [!CMD_5!]
-echo   6. Auto Sim + Report [!CMD_6!]
-echo   7. Run Iverilog VCD (Select TB) [!CMD_7!]
-echo   8. Generate SVG from VCD (Select) [!CMD_8!]
-echo   9. Generate WaveDrom from VCD (Select) [!CMD_9!]
-echo  19. Create DUT TB Scaffold [!CMD_19!]
-echo  20. NO GUI Run Vivado Simulation [!CMD_20!]
+echo   5  Vivado Simulation           6  Auto Sim + Report
+echo   7  Iverilog VCD                8  VCD to SVG
+echo   9  VCD to WaveDrom            19  Create DUT TB Scaffold
+echo  20  NO GUI Vivado Simulation
 echo.
-
-echo %Yellow%[Report ^(Vivado HTML / Docs^) ]%Reset%
-echo  10. Report Generator [!CMD_10!]
-echo  11. Docs Generator [!CMD_11!]
-echo  18. Open Latest Presentation HTML [!CMD_18!]
+echo %Yellow%[ Reports ]%Reset%
+echo  10  Report Generator           11  Docs Generator
+echo  18  Open Latest Presentation HTML
 echo.
-
-echo %Yellow%[ Vivado Flow ^& FPGA ]%Reset%
-echo  12. Open Vivado Project GUI (RTL) [!CMD_12!]
-echo  13. Run Vivado RTL Build Flow [!CMD_13!]
-echo  14. Finalize Legacy Block Design [!CMD_14!]
-echo  15. Retarget IP to Part [!CMD_15!]
-echo  16. Program FPGA Device [!CMD_16!]
-echo  17. Auto Build + Program [!CMD_17!]
-echo  29. Open IP Integrator GUI from Current Sources [!CMD_29!]
-echo  30. Build IP Integrator Project + Bitstream [!CMD_30!]
+echo %Yellow%[ Vivado / FPGA ]%Reset%
+echo  12  Open Vivado GUI            13  Run RTL Build Flow
+echo  14  Finalize Block Design      15  Retarget IP to Part
+echo  16  Program FPGA Device        17  Auto Build + Program
+echo  29  Open IP Integrator GUI     30  Build IP Integrator Bitstream
 echo.
-echo %Yellow%[ Project Health ]%Reset%
-echo  21. Toolkit Doctor [!CMD_21!]
+echo %Yellow%[ Health / Sync / Vitis ]%Reset%
+echo  21  Toolkit Doctor             31  Sync This Project to T Drive
+echo  22  Export XSA                 23  Create Vitis Platform
+echo  24  Create Vitis App           25  Build Vitis Platform
+echo  26  Build Vitis App            27  Run Vitis App
+echo  28  Full Vitis Flow
+echo %Cyan%===============================================================================%Reset%
+echo [U] Upgrade This Project   [C] CUSTOMBAT   [B] Back to Project Selection   [H] Help   [Q] Quit
 echo.
-echo %Yellow%[ Remote Sync ]%Reset%
-echo  31. Sync This Project to T Drive [!CMD_31!]
-echo.
-echo %Yellow%[ Vitis Software Flow ]%Reset%
-echo  22. Export XSA from Vivado [!CMD_22!]
-echo  23. Create Vitis Platform from XSA (Select XSA) [!CMD_23!]
-echo  24. Create Vitis Application Component (Select Platform/New App) [!CMD_24!]
-echo  25. Build Vitis Platform (Select Platform) [!CMD_25!]
-echo  26. Build Vitis Application (Multi Select) [!CMD_26!]
-echo  27. Run Vitis Application [!CMD_27!]
-echo  28. Full Vitis Flow [!CMD_28!]
-echo.
-echo %White%[U] Upgrade This Project%Reset%   %Yellow%[C] CUSTOMBAT%Reset%   %Blue%[B] Back to Project Selection%Reset%   %Red%[Q] Quit%Reset%
 
 set "USER_INPUT="
-set /p "USER_INPUT=%Cyan%Select number to run (or U/B/Q): %Reset%"
+set /p "USER_INPUT=Command > "
 
 :PROJECT_MENU_DISPATCH
 if /i "!USER_INPUT!"=="Q" goto :EXIT
 if /i "!USER_INPUT!"=="C" goto :CUSTOMBAT_MENU
 if /i "!USER_INPUT!"=="B" goto :MASTER_MENU
+if /i "!USER_INPUT!"=="H" goto :DASH_HELP_PAGE
+if /i "!USER_INPUT!"=="HELP" goto :DASH_HELP_PAGE
 if /i "!USER_INPUT!"=="U" (
     call :RUN_PROJECT_UPGRADE "!TARGET_PROJECT_ABS!"
     goto :PROJECT_MENU
