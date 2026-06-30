@@ -83,7 +83,8 @@ if {[info exists env(NUMBER_OF_PROCESSORS)]} {
 # 1. Project and Hardware Settings
 # -----------------------------------------------------------------
 set project_name "auto_build_proj"
-set part_number   "xc7a35tcpg236-1" ;# Targeted FPGA part
+set part_number   "xczu3eg-sbva484-1-i" ;# Targeted FPGA part
+set board_part    ""
 set top_module    "Top"             ;# Name of the Top Module
 set project_root [pwd]
 set src_list_file ""
@@ -96,6 +97,7 @@ set requested_project_name ""
 set requested_build_strategy ""
 set requested_power_limit ""
 set stage_status_file ""
+set requested_board_part ""
 if {[llength $argv] >= 1} {
     set a0 [string trim [lindex $argv 0]]
     if {$a0 ne ""} { set project_root [file normalize $a0] }
@@ -136,8 +138,22 @@ if {[llength $argv] >= 10} {
     set a9 [string trim [lindex $argv 9]]
     if {$a9 ne ""} { set stage_status_file [file normalize $a9] }
 }
+if {[llength $argv] >= 11} {
+    set a10 [string trim [lindex $argv 10]]
+    if {$a10 ne ""} { set requested_board_part $a10 }
+}
 
-set base_output   [file join $project_root "output"]
+set configured_output_dir ""
+if {[info exists ::env(FPGA_CLAW_OUTPUT_DIR)] && [string trim $::env(FPGA_CLAW_OUTPUT_DIR)] ne ""} {
+    set configured_output_dir [string trim $::env(FPGA_CLAW_OUTPUT_DIR)]
+}
+if {$configured_output_dir ne "" && [file pathtype $configured_output_dir] eq "absolute"} {
+    set base_output [file normalize $configured_output_dir]
+} elseif {$configured_output_dir ne ""} {
+    set base_output [file normalize [file join $project_root $configured_output_dir]]
+} else {
+    set base_output [file join $project_root "output"]
+}
 set dcp_dir       "$base_output/checkpoints"
 set rpt_dir       "$base_output/reports"
 set power_limit   2.5               ;# Power consumption limit (Watts)
@@ -166,8 +182,25 @@ if {$requested_build_strategy ne ""} {
 if {$requested_power_limit ne ""} {
     set power_limit $requested_power_limit
 }
+if {$requested_board_part ne ""} {
+    set board_part $requested_board_part
+}
 
 print_info "Build request: top=$top_module part=$part_number strategy=$build_strategy power_limit=${power_limit}W"
+
+proc apply_board_part {board_part} {
+    set board_part [string trim $board_part]
+    if {$board_part eq ""} { return }
+    if {[catch {set matches [get_board_parts -quiet $board_part]} err] || [llength $matches] == 0} {
+        print_info "WARNING: Board part '$board_part' is not installed in Vivado. Continuing with part only."
+        return
+    }
+    if {[catch {set_property board_part $board_part [current_project]} err]} {
+        print_info "WARNING: Failed to set board_part '$board_part': $err"
+    } else {
+        print_info "Board part set to $board_part"
+    }
+}
 
 # Ensure an in-memory project exists so IP generation uses the correct part
 if {[llength [get_projects -quiet]] == 0} {
@@ -175,6 +208,7 @@ if {[llength [get_projects -quiet]] == 0} {
 } else {
     set_property part $part_number [current_project]
 }
+apply_board_part $board_part
 
 # Create output directories
 file mkdir $base_output
@@ -371,8 +405,16 @@ if {$power_status == "FAIL"} {
 print_header 7 "Checking Timing Slack"
 report_timing_summary -file $rpt_dir/timing_summary.rpt
 
-set wns [get_property SLACK [get_timing_paths -max_paths 1 -setup]]
+set setup_paths [get_timing_paths -max_paths 1 -setup]
 set timing_status "PASS"
+
+if {[llength $setup_paths] == 0} {
+    set wns -999.0
+    set timing_status "FAIL"
+    print_info "CRITICAL WARNING: No setup timing paths found for timing validation."
+} else {
+    set wns [get_property SLACK [lindex $setup_paths 0]]
+}
 
 if { $wns < 0 } {
     set timing_status "FAIL"
@@ -416,8 +458,13 @@ if { $power_status == "PASS" && $timing_status == "PASS" } {
     update_stage_status $stage_status_file "BITSTREAM" "power/timing validation passed -> write_bitstream"
     puts " \[SUCCESS\] All design requirements met."
     puts " \[ACTION\] Generating Bitstream..."
-    
-    write_bitstream -force $base_output/${top_module}.bit
+
+    set bitstream_file [file join $base_output "${top_module}.bit"]
+
+    if {[catch {write_bitstream -force $bitstream_file} bitstream_msg]} {
+        print_error "Bitstream generation failed: $bitstream_msg"
+        exit 1
+    }
     
     puts "\n"
     puts "*****************************************************************"
@@ -425,7 +472,7 @@ if { $power_status == "PASS" && $timing_status == "PASS" } {
     puts "* BITSTREAM GENERATION SUCCESSFUL                              *"
     puts "* *"
     puts "*****************************************************************"
-    puts " File: $base_output/${top_module}.bit"
+    puts " File: $bitstream_file"
     
 } else {
     print_error "Design failed validation (Power or Timing). No bitstream generated."

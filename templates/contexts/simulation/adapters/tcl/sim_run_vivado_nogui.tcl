@@ -114,11 +114,26 @@ if {$sim_top eq ""} {
     fail_and_exit "Empty simulation top."
 }
 
-set part_number "xc7a35tcpg236-1"
+set part_number "xczu3eg-sbva484-1-i"
 set config_file [file join $templates_root "contexts" "vivado" "domain" "project_build_config.tcl"]
 if {[file exists $config_file]} {
     puts "\[INFO\] Loading build config: $config_file"
     source $config_file
+}
+
+proc create_sim_project_with_optional_part {project_name project_dir part_number} {
+    set part_number [string trim $part_number]
+    if {$part_number ne ""} {
+        set part_matches {}
+        if {![catch {set part_matches [get_parts -quiet $part_number]}] && [llength $part_matches] > 0} {
+            create_project -force $project_name $project_dir -part $part_number
+            puts "\[INFO\] Created Vivado simulation project with part: $part_number"
+            return
+        }
+        puts "\[WARNING\] Target part '$part_number' is not installed in this Vivado. Creating simulation project without explicit part."
+    }
+    create_project -force $project_name $project_dir
+    puts "\[INFO\] Created Vivado simulation project with Vivado default part: [get_property PART [current_project]]"
 }
 
 set src_files [read_manifest_list $src_list_file $project_root]
@@ -186,7 +201,7 @@ catch {close_project}
 
 puts "\[INFO\] Creating Vivado project: $project_name"
 puts "\[INFO\] Project directory: $project_dir"
-create_project -force $project_name $project_dir -part $part_number
+create_sim_project_with_optional_part $project_name $project_dir $part_number
 
 puts "\[INFO\] Adding source files: [llength $src_files]"
 add_files -norecurse $src_files

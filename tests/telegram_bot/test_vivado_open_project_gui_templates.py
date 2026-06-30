@@ -58,7 +58,8 @@ class VivadoOpenProjectGuiTemplateTests(unittest.TestCase):
         )
         script_text = script_path.read_text(encoding="utf-8")
 
-        self.assertIn('"output" "vivado" $project_name', script_text)
+        self.assertIn('set output_dir "output"', script_text)
+        self.assertIn('[file join $output_root "vivado" $project_name]', script_text)
         self.assertIn('set project_name "${base_project_name}_ipi"', script_text)
         self.assertIn("create_bd_design $bd_name", script_text)
         self.assertIn("open_bd_design $bd_file", script_text)

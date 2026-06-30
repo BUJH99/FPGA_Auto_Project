@@ -39,6 +39,10 @@ exit /b 1
 set "CAND=%~1"
 if not defined CAND exit /b 1
 if "%CAND:~-1%"=="\" set "CAND=%CAND:~0,-1%"
+if exist "%CAND%" if not exist "%CAND%\NUL" (
+    for %%I in ("%CAND%") do set "CAND=%%~dpI"
+    if "!CAND:~-1!"=="\" set "CAND=!CAND:~0,-1!"
+)
 if not exist "%CAND%\vivado.bat" if not exist "%CAND%\vivado.exe" exit /b 1
 call :prepend_path "%CAND%"
 where vivado >nul 2>nul

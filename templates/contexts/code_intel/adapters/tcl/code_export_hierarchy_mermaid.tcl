@@ -6,6 +6,7 @@
 
 set project_root [pwd]
 set src_list_file ""
+set inc_list_file ""
 if {[llength $argv] >= 1} {
     set a0 [string trim [lindex $argv 0]]
     if {$a0 ne ""} { set project_root [file normalize $a0] }
@@ -13,6 +14,10 @@ if {[llength $argv] >= 1} {
 if {[llength $argv] >= 2} {
     set a1 [string trim [lindex $argv 1]]
     if {$a1 ne ""} { set src_list_file [file normalize $a1] }
+}
+if {[llength $argv] >= 3} {
+    set a2 [string trim [lindex $argv 2]]
+    if {$a2 ne ""} { set inc_list_file [file normalize $a2] }
 }
 
 proc read_manifest_list {list_file project_root} {
@@ -45,7 +50,7 @@ set fh [open $output_file w]
 puts "\[INFO\] Starting RTL Hierarchy Extraction..."
 
 # Optional config override
-set part_number "xc7a35tcpg236-1"
+set part_number "xczu3eg-sbva484-1-i"
 set top_module "Top"
 set script_dir [file dirname [info script]]
 set templates_root [file normalize [file join $script_dir ".." ".." ".." ".."]]
@@ -66,6 +71,19 @@ if {[llength [get_projects -quiet]] == 0} {
 set v_files {}
 set sv_files {}
 set manifest_src_files [read_manifest_list $src_list_file $project_root]
+set manifest_inc_entries [read_manifest_list $inc_list_file $project_root]
+set inc_dirs {}
+foreach inc_entry $manifest_inc_entries {
+    if {[file isdirectory $inc_entry]} {
+        lappend inc_dirs $inc_entry
+    } elseif {[file exists $inc_entry]} {
+        lappend inc_dirs [file dirname $inc_entry]
+    }
+}
+set inc_dirs [lsort -unique $inc_dirs]
+if {[llength $inc_dirs] > 0} {
+    catch { set_property include_dirs $inc_dirs [get_filesets sources_1] }
+}
 foreach f $manifest_src_files {
     set ext [string tolower [file extension $f]]
     if {$ext eq ".v"} {

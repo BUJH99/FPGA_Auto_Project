@@ -26,6 +26,7 @@ function programStepStatus(programStatus) {
       return "ok";
     case "SKIPPED":
     case "SKIPPED_BY_USER":
+    case "SKIPPED_BY_NO_PAUSE":
       return "skipped";
     case "NOT_RUN":
     case "NOT_AVAILABLE":
@@ -84,8 +85,15 @@ function buildStepResults({ buildRc = -1, rtlRc = -1, reportRc = -1, programStat
   ];
 }
 
+function resolveConfiguredOutputDir(projectRoot) {
+  const configured = String(process.env.FPGA_CLAW_OUTPUT_DIR || "").trim();
+  if (!configured) return path.join(projectRoot, "output");
+  if (path.isAbsolute(configured) || /^[A-Za-z]:[\\/]/.test(configured)) return path.normalize(configured);
+  return path.resolve(projectRoot, configured);
+}
+
 function readFinalReportData(projectRoot) {
-  const reportDataPath = path.join(projectRoot, "output", "FINALReport", "report_data.json");
+  const reportDataPath = path.join(resolveConfiguredOutputDir(projectRoot), "FINALReport", "report_data.json");
   let reportData = null;
   try {
     reportData = readJsonFile(reportDataPath, null);
@@ -152,6 +160,12 @@ function writeBuildSummary({
   const partNumber = buildPlan && buildPlan.partNumber
     ? buildPlan.partNumber
     : String(vivadoConfig.part || "");
+  const boardPart = buildPlan && buildPlan.boardPart
+    ? buildPlan.boardPart
+    : String(vivadoConfig.board_part || "");
+  const clockMhz = buildPlan && Number.isFinite(Number(buildPlan.clockMhz))
+    ? Number(buildPlan.clockMhz)
+    : (Number.isFinite(Number(process.env.FPGA_CLAW_CLOCK_MHZ)) ? Number(process.env.FPGA_CLAW_CLOCK_MHZ) : 0);
   const strategy = buildPlan && buildPlan.strategy
     ? buildPlan.strategy
     : String(vivadoConfig.strategy || "Default");
@@ -167,6 +181,8 @@ function writeBuildSummary({
     projectName,
     topModule,
     partNumber,
+    boardPart,
+    clockMhz,
     strategy,
     powerLimitW,
     programStatus: normalizedProgramStatus,
@@ -201,6 +217,8 @@ function writeBuildSummary({
       projectName,
       topModule,
       partNumber,
+      boardPart,
+      clockMhz,
       strategy,
       powerLimitW,
       programStatus: normalizedProgramStatus,
@@ -231,6 +249,8 @@ function writeBuildSummary({
       projectName,
       topModule,
       partNumber,
+      boardPart,
+      clockMhz,
       strategy,
       programStatus: normalizedProgramStatus,
     },

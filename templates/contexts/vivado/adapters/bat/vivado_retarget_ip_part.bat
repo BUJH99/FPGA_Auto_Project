@@ -2,6 +2,8 @@
 setlocal
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "SETTINGS_LOADER=%TEMPLATES_ROOT%\shared\adapters\bat\load_fpga_claw_settings.bat"
+if exist "%SETTINGS_LOADER%" call "%SETTINGS_LOADER%"
 set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
 
@@ -23,7 +25,7 @@ if exist "%MANIFEST_CTX%" (
     )
 )
 cd /d "%TARGET_PROJECT%"
-set "LOG_DIR=%TARGET_PROJECT%\log"
+call :resolve_project_dir "LOG_DIR" "%FPGA_CLAW_LOG_DIR%" "log"
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 set "RETARGET_LOG=%LOG_DIR%\retarget_ip_to_part.log"
 set "RETARGET_JOU=%LOG_DIR%\retarget_ip_to_part.jou"
@@ -54,6 +56,21 @@ if %RETARGET_RC% neq 0 (
 echo [DONE] IP retarget complete.
 call "%CONSOLE_HELPER%" pause_then_clear
 endlocal
+exit /b 0
+
+:resolve_project_dir
+set "RESOLVE_OUT=%~1"
+set "RESOLVE_VALUE=%~2"
+set "RESOLVE_FALLBACK=%~3"
+if not defined RESOLVE_FALLBACK set "RESOLVE_FALLBACK=output"
+if not defined RESOLVE_VALUE set "RESOLVE_VALUE=%RESOLVE_FALLBACK%"
+if "%RESOLVE_VALUE:~1,1%"==":" (
+    set "%RESOLVE_OUT%=%RESOLVE_VALUE%"
+) else if "%RESOLVE_VALUE:~0,1%"=="\" (
+    set "%RESOLVE_OUT%=%RESOLVE_VALUE%"
+) else (
+    set "%RESOLVE_OUT%=%TARGET_PROJECT%\%RESOLVE_VALUE%"
+)
 exit /b 0
 
 :route_vivado_artifacts

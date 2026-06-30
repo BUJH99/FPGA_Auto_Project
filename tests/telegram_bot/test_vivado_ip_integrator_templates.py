@@ -11,8 +11,8 @@ class VivadoIpIntegratorTemplateTests(unittest.TestCase):
 
         self.assertIn("CMD_29=contexts\\vivado\\adapters\\bat\\vivado_open_ip_integrator_gui.bat", main_text)
         self.assertIn("CMD_30=contexts\\vivado\\adapters\\bat\\vivado_build_ip_integrator_flow.bat", main_text)
-        self.assertIn("29. Open IP Integrator GUI from Current Sources", main_text)
-        self.assertIn("30. Build IP Integrator Project + Bitstream", main_text)
+        self.assertIn("29  Open IP Integrator GUI", main_text)
+        self.assertIn("30  Build IP Integrator Bitstream", main_text)
 
     def test_gui_tcl_uses_output_vivado_ipi_project_location(self) -> None:
         script_text = (
@@ -26,7 +26,8 @@ class VivadoIpIntegratorTemplateTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn('set project_name "${base_project_name}_ipi"', script_text)
-        self.assertIn('"output" "vivado" $project_name', script_text)
+        self.assertIn('set output_dir "output"', script_text)
+        self.assertIn('[file join $output_root "vivado" $project_name]', script_text)
         self.assertIn('set xpr_path [file join $proj_path "${project_name}.xpr"]', script_text)
         self.assertIn("Edit the BD manually, then save from Vivado.", script_text)
         self.assertNotIn("save_bd_design", script_text)

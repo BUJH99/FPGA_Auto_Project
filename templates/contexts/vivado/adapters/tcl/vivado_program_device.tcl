@@ -14,7 +14,17 @@ if {[file exists $config_file]} {
 if {[info exists ::env(FPGA_BITSTREAM_PATH)] && [string trim $::env(FPGA_BITSTREAM_PATH)] ne ""} {
     set bitstream_file [file normalize $::env(FPGA_BITSTREAM_PATH)]
 } else {
-    set bitstream_file [file normalize [file join "." "output" "${top_module}.bit"]]
+    set configured_output_dir ""
+    if {[info exists ::env(FPGA_CLAW_OUTPUT_DIR)] && [string trim $::env(FPGA_CLAW_OUTPUT_DIR)] ne ""} {
+        set configured_output_dir [string trim $::env(FPGA_CLAW_OUTPUT_DIR)]
+    }
+    if {$configured_output_dir ne "" && [file pathtype $configured_output_dir] eq "absolute"} {
+        set bitstream_file [file normalize [file join $configured_output_dir "${top_module}.bit"]]
+    } elseif {$configured_output_dir ne ""} {
+        set bitstream_file [file normalize [file join "." $configured_output_dir "${top_module}.bit"]]
+    } else {
+        set bitstream_file [file normalize [file join "." "output" "${top_module}.bit"]]
+    }
 }
 set target_idx 0
 if {[info exists ::env(FPGA_TARGET_INDEX)] && $::env(FPGA_TARGET_INDEX) ne ""} {

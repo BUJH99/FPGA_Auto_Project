@@ -2,6 +2,8 @@
 setlocal EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "SETTINGS_LOADER=%TEMPLATES_ROOT%\shared\adapters\bat\load_fpga_claw_settings.bat"
+if exist "%SETTINGS_LOADER%" call "%SETTINGS_LOADER%"
 set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
 
@@ -13,6 +15,8 @@ if "%~1"=="" (
 )
 
 set "TARGET_PROJECT=%~f1"
+call :resolve_project_dir "LOG_DIR" "%FPGA_CLAW_LOG_DIR%" "log"
+call :resolve_project_dir "OUTPUT_DIR" "%FPGA_CLAW_OUTPUT_DIR%" "output"
 set "NO_PAUSE=0"
 set "MANIFEST_CTX=%TEMPLATES_ROOT%\shared\adapters\bat\bootstrap_manifest_context.bat"
 set "BUILD_SUMMARY_TOOL=%TEMPLATES_ROOT%\contexts\vivado\adapters\cli\vivado_capture_build_summary_cli.js"
@@ -52,12 +56,11 @@ if errorlevel 1 (
 )
 
 cd /d "%TARGET_PROJECT%"
-set "LOG_DIR=%TARGET_PROJECT%\log"
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 set "BUILD_LOG=%LOG_DIR%\vivado_ip_integrator_build.log"
 set "BUILD_JOU=%LOG_DIR%\vivado_ip_integrator_build.jou"
 set "IPI_PROJECT_NAME=%BUILD_PROJECT_NAME%_ipi"
-set "IPI_XPR=%TARGET_PROJECT%\output\vivado\%IPI_PROJECT_NAME%\%IPI_PROJECT_NAME%.xpr"
+set "IPI_XPR=%OUTPUT_DIR%\vivado\%IPI_PROJECT_NAME%\%IPI_PROJECT_NAME%.xpr"
 call :route_vivado_artifacts
 
 if not exist "%IPI_XPR%" (
@@ -82,10 +85,11 @@ if %errorlevel% neq 0 (
 
 echo [RUN] Building saved IP Integrator project...
 echo       Project : %IPI_XPR%
+if defined BUILD_BOARD_PART echo       Board   : %BUILD_BOARD_PART%
 echo       Log     : %BUILD_LOG%
 echo       XSA     : Not exported here. Use menu 22 after bitstream generation.
 echo.
-vivado -mode batch -source "%TEMPLATES_ROOT%\contexts\vivado\adapters\tcl\vivado_build_ip_integrator_flow.tcl" -notrace -log "%BUILD_LOG%" -journal "%BUILD_JOU%" -tclargs "%TARGET_PROJECT%" "%IPI_XPR%" "%BUILD_TOP_MODULE%" "%BUILD_PART_NUMBER%"
+vivado -mode batch -source "%TEMPLATES_ROOT%\contexts\vivado\adapters\tcl\vivado_build_ip_integrator_flow.tcl" -notrace -log "%BUILD_LOG%" -journal "%BUILD_JOU%" -tclargs "%TARGET_PROJECT%" "%IPI_XPR%" "%BUILD_TOP_MODULE%" "%BUILD_PART_NUMBER%" "%BUILD_BOARD_PART%"
 set "BUILD_RC=%errorlevel%"
 call :route_vivado_artifacts
 
@@ -98,7 +102,7 @@ if not "%BUILD_RC%"=="0" (
 
 echo [DONE] IP Integrator bitstream build completed.
 echo        Bitstream remains under:
-echo        %TARGET_PROJECT%\output\vivado\%IPI_PROJECT_NAME%\%IPI_PROJECT_NAME%.runs\impl_1
+echo        %OUTPUT_DIR%\vivado\%IPI_PROJECT_NAME%\%IPI_PROJECT_NAME%.runs\impl_1
 echo.
 echo [NEXT] Use menu 22. Export XSA from Vivado when you are ready for Vitis.
 call :maybe_pause
@@ -107,6 +111,21 @@ exit /b 0
 :maybe_pause
 if "%NO_PAUSE%"=="1" exit /b 0
 call "%CONSOLE_HELPER%" pause_then_clear
+exit /b 0
+
+:resolve_project_dir
+set "RESOLVE_OUT=%~1"
+set "RESOLVE_VALUE=%~2"
+set "RESOLVE_FALLBACK=%~3"
+if not defined RESOLVE_FALLBACK set "RESOLVE_FALLBACK=output"
+if not defined RESOLVE_VALUE set "RESOLVE_VALUE=%RESOLVE_FALLBACK%"
+if "!RESOLVE_VALUE:~1,1!"==":" (
+    set "%RESOLVE_OUT%=!RESOLVE_VALUE!"
+) else if "!RESOLVE_VALUE:~0,1!"=="\" (
+    set "%RESOLVE_OUT%=!RESOLVE_VALUE!"
+) else (
+    set "%RESOLVE_OUT%=%TARGET_PROJECT%\!RESOLVE_VALUE!"
+)
 exit /b 0
 
 :route_vivado_artifacts
@@ -129,7 +148,7 @@ if not exist "%MANIFEST_JSON%" (
 )
 call node "%BUILD_SUMMARY_TOOL%" --stage prepare --project "%TARGET_PROJECT%" --manifest-json "%MANIFEST_JSON%" --src-list "%MANIFEST_SRC_LIST%" --xdc-list "%MANIFEST_XDC_LIST%" --inc-list "%MANIFEST_INC_LIST%" --no-pause >nul
 if errorlevel 1 exit /b 1
-set "BUILD_PLAN_CMD=%TARGET_PROJECT%\output\vivado\build_plan.cmd"
+set "BUILD_PLAN_CMD=%OUTPUT_DIR%\vivado\build_plan.cmd"
 if not exist "%BUILD_PLAN_CMD%" (
     echo [ERROR] IP Integrator build plan command file not found: %BUILD_PLAN_CMD%
     exit /b 1

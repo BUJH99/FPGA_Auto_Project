@@ -552,7 +552,7 @@ function renderOneSourceMarkdown(model) {
   lines.push("| OS | Windows 10/11 |");
   lines.push("| 언어 | Verilog-2001 / SystemVerilog |");
   lines.push("| 합성 도구 | Xilinx Vivado |");
-  lines.push("| 타깃 디바이스 | Basys3 (XC7A35T) / 프로젝트별 상이 |");
+  lines.push("| 타깃 디바이스 | Ultra96v2 (XCZU3EG) / 프로젝트별 상이 |");
   lines.push("| 시뮬레이터 | Vivado Simulator / ModelSim |");
   lines.push("| 문서 생성 | Node.js + Pandoc + PowerShell |");
   lines.push("");

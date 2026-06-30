@@ -34,6 +34,8 @@ class Config:
     sim_vivado_send_log_file: bool
     sim_vivado_auto_complete_on_replay: bool
     sim_vivado_replay_check_sec: int
+    allowed_command_groups: set[str] = field(default_factory=lambda: {"status", "run", "report"})
+    notify_events: set[str] = field(default_factory=lambda: {"success", "fail", "program_done"})
 
 
 @dataclass(frozen=True)

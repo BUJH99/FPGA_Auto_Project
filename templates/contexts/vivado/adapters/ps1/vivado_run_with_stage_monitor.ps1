@@ -13,6 +13,7 @@ param(
     [string]$TopModule,
     [Parameter(Mandatory = $true)]
     [string]$PartNumber,
+    [string]$BoardPart = '',
     [Parameter(Mandatory = $true)]
     [string]$ProjectName,
     [Parameter(Mandatory = $true)]
@@ -66,6 +67,9 @@ function Show-StepBanner {
 
 $argumentList = @(
     '-mode', 'batch',
+    '-log', $BuildLog,
+    '-journal', $BuildJournal,
+    '-notrace',
     '-source', $VivadoTcl,
     '-tclargs',
     $ProjectRoot,
@@ -78,9 +82,7 @@ $argumentList = @(
     $BuildStrategy,
     $PowerLimit,
     $StageStatusFile,
-    '-log', $BuildLog,
-    '-journal', $BuildJournal,
-    '-notrace'
+    $BoardPart
 )
 
 if (Test-Path -LiteralPath $StageStatusFile) {
@@ -120,6 +122,10 @@ while (-not $proc.HasExited) {
 }
 
 $proc.WaitForExit()
-Remove-Item -LiteralPath $consoleStdOut -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath $consoleStdErr -Force -ErrorAction SilentlyContinue
+if ((Test-Path -LiteralPath $consoleStdOut) -and ((Get-Item -LiteralPath $consoleStdOut).Length -eq 0)) {
+    Remove-Item -LiteralPath $consoleStdOut -Force -ErrorAction SilentlyContinue
+}
+if ((Test-Path -LiteralPath $consoleStdErr) -and ((Get-Item -LiteralPath $consoleStdErr).Length -eq 0)) {
+    Remove-Item -LiteralPath $consoleStdErr -Force -ErrorAction SilentlyContinue
+}
 exit $proc.ExitCode

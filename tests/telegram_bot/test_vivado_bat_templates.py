@@ -50,7 +50,7 @@ class VivadoBatchTemplateTests(unittest.TestCase):
         for script_text in (gui_text, build_text):
             self.assertIn("bootstrap_manifest_context.bat", script_text)
             self.assertIn("--stage prepare", script_text)
-            self.assertIn("output\\vivado\\%IPI_PROJECT_NAME%\\%IPI_PROJECT_NAME%.xpr", script_text)
+            self.assertIn("%OUTPUT_DIR%\\vivado\\%IPI_PROJECT_NAME%\\%IPI_PROJECT_NAME%.xpr", script_text)
 
         self.assertIn("vivado_open_ip_integrator_gui.tcl", gui_text)
         self.assertIn("vivado_build_ip_integrator_flow.tcl", build_text)
@@ -86,7 +86,7 @@ class VivadoBatchTemplateTests(unittest.TestCase):
         self.assertIn('set "SELECTED_DEVICE_INDEX=%FPGA_DEVICE_INDEX%"', script_text)
         self.assertIn('set "SELECTED_BITSTREAM_PATH=%FPGA_BITSTREAM_PATH%"', script_text)
         self.assertIn('Select bitstream index', script_text)
-        self.assertIn('set "BITSTREAM_OUTPUT_ROOT=%TARGET_PROJECT%\\output"', script_text)
+        self.assertIn('set "BITSTREAM_OUTPUT_ROOT=%OUTPUT_DIR%"', script_text)
         self.assertIn('call :collect_bitstreams "!BITSTREAM_OUTPUT_ROOT!"', script_text)
         self.assertNotIn(r"HW\bitstreams", script_text)
         self.assertIn('set "FPGA_BITSTREAM_PATH=!SELECTED_BITSTREAM_PATH!"', script_text)

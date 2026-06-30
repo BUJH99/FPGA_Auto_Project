@@ -36,7 +36,7 @@ class SingleCycleVivadoSplitTests(unittest.TestCase):
             "project_name": "RISCV_32I_SINGLE",
             "source_files": [source_file],
             "repo_root": REPO_ROOT,
-            "part_name": "xc7a35tcpg236-1",
+            "part_name": "xczu3eg-sbva484-1-i",
             "top_name": "TOP",
             "clock_port": "iClk",
             "reset_port": "iRstn",
@@ -76,7 +76,7 @@ class SingleCycleVivadoSplitTests(unittest.TestCase):
         contract = {
             "source_files": [MANAGED_PROJECT_ROOT / "RISCV_32I_SINGLE" / "src" / "TOP.sv"],
             "repo_root": REPO_ROOT,
-            "part_name": "xc7a35tcpg236-1",
+            "part_name": "xczu3eg-sbva484-1-i",
             "top_name": "TOP",
             "clock_port": "iClk",
             "reset_port": "iRstn",

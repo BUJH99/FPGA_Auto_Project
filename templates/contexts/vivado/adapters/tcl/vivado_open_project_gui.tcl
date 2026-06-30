@@ -7,7 +7,8 @@
 # - Opens an existing block design if present
 # =================================================================
 
-set part_number "xc7a35tcpg236-1"
+set part_number "xczu3eg-sbva484-1-i"
+set board_part ""
 set top_module "TOP"
 set bd_name "design_1"
 set project_name "vivado_ipi"
@@ -23,6 +24,7 @@ set inc_list_file ""
 set requested_top_module ""
 set requested_part_number ""
 set requested_project_name ""
+set requested_board_part ""
 if {[llength $argv] >= 1} {
     set a0 [string trim [lindex $argv 0]]
     if {$a0 ne ""} { set project_root [file normalize $a0] }
@@ -55,6 +57,10 @@ if {[llength $argv] >= 8} {
     set a7 [string trim [lindex $argv 7]]
     if {$a7 ne ""} { set requested_project_name $a7 }
 }
+if {[llength $argv] >= 9} {
+    set a8 [string trim [lindex $argv 8]]
+    if {$a8 ne ""} { set requested_board_part $a8 }
+}
 
 if {[file exists $config_file]} {
     puts "\[INFO\] Loading build config: $config_file"
@@ -69,6 +75,38 @@ if {$requested_part_number ne ""} {
 }
 if {$requested_project_name ne ""} {
     set project_name $requested_project_name
+}
+if {$requested_board_part ne ""} {
+    set board_part $requested_board_part
+}
+
+set output_dir "output"
+if {[info exists env(FPGA_CLAW_OUTPUT_DIR)] && [string trim $env(FPGA_CLAW_OUTPUT_DIR)] ne ""} {
+    set output_dir [string trim $env(FPGA_CLAW_OUTPUT_DIR)]
+}
+if {[file pathtype $output_dir] eq "absolute"} {
+    set output_root [file normalize $output_dir]
+} else {
+    set output_root [file normalize [file join $project_root $output_dir]]
+}
+set default_project_dir [file normalize [file join $project_root "vivado_ipi"]]
+set normalized_project_dir [file normalize [file join $project_root $project_dir]]
+if {$normalized_project_dir eq $default_project_dir} {
+    set project_dir [file join $output_root "vivado" $project_name]
+}
+
+proc apply_board_part {board_part} {
+    set board_part [string trim $board_part]
+    if {$board_part eq ""} { return }
+    if {[catch {set matches [get_board_parts -quiet $board_part]} err] || [llength $matches] == 0} {
+        puts "\[WARN\] Board part '$board_part' is not installed in Vivado. Continuing with part only."
+        return
+    }
+    if {[catch {set_property board_part $board_part [current_project]} err]} {
+        puts "\[WARN\] Failed to set board_part '$board_part': $err"
+    } else {
+        puts "\[INFO\] Board part set to $board_part"
+    }
 }
 
 if {[file pathtype $project_dir] eq "absolute"} {
@@ -85,6 +123,10 @@ if {[file exists $xpr_path]} {
     puts "\[INFO\] Creating project: $project_name"
     create_project $project_name $proj_path -part $part_number -force
 }
+if {$part_number ne ""} {
+    catch { set_property part $part_number [current_project] }
+}
+apply_board_part $board_part
 
 proc add_missing_files {fileset_name file_list label} {
     if {[llength $file_list] == 0} {

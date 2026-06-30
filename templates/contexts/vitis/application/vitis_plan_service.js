@@ -988,7 +988,7 @@ function prepareVitisPlan({
     },
     vivado: {
       topModule: nonEmptyString(context.vivadoConfig.top_module, context.manifestContext.snapshot.top || "TOP"),
-      partNumber: nonEmptyString(context.vivadoConfig.part, "xc7a35tcpg236-1"),
+      partNumber: nonEmptyString(context.vivadoConfig.part, "xczu3eg-sbva484-1-i"),
       projectName: nonEmptyString(context.vivadoConfig.project_name, `${context.projectName}_vivado`),
       srcListPath: normalizeSlashes(path.join(context.root, "output", "manifest", "manifest_src_files.lst")),
       xdcListPath: normalizeSlashes(path.join(context.root, "output", "manifest", "manifest_xdc_files.lst")),

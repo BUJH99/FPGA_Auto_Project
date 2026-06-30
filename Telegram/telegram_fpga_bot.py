@@ -195,6 +195,51 @@ HIERARCHY_SCOPE_CALLBACK_CODES: dict[str, str] = {
     "tb_only": "tb",
 }
 
+STATUS_COMMANDS = {"/start", "/help", "/projects", "/status", "/last", "/history", "/diff"}
+REPORT_COMMANDS = {
+    "/schematic",
+    "/fsm",
+    "/hierarchy",
+    "/presentation",
+    "/report_html",
+    "/report_docs",
+    "/open_presentation",
+    "/vcd_svg",
+    "/vcd_wavedrom",
+}
+REPORT_MENU_NOS = {1, 2, 3, 4, 8, 9, 10, 11, 18, 31}
+PROGRAM_MENU_NOS = {16, 17}
+
+
+def command_group_for_command(command: str) -> str | None:
+    if command in STATUS_COMMANDS:
+        return "status"
+    if command in REPORT_COMMANDS:
+        return "report"
+    if command == "/task":
+        return None
+    return "run"
+
+
+def command_group_for_request(request: JobRequest) -> str:
+    if request.menu_no in REPORT_MENU_NOS:
+        return "report"
+    if request.command_id in {cmd[1:] for cmd in REPORT_COMMANDS}:
+        return "report"
+    return "run"
+
+
+def command_scope_error(group: str) -> str:
+    return f"Command disabled by FPGAClaw Settings: {group}"
+
+
+def notification_event_for_result(job: JobRequest, result: ExecutionResult) -> str:
+    if result.status != "success" and result.return_code != 0:
+        return "fail"
+    if job.menu_no in PROGRAM_MENU_NOS or (job.command_id or job.command_name) in {"program", "build_program"}:
+        return "program_done"
+    return "success"
+
 
 def load_env_file(path: Path) -> None:
     if not path.exists():
@@ -367,6 +412,22 @@ def parse_int_set(raw: str, var_name: str) -> set[int]:
     return values
 
 
+def parse_choice_set(raw: str, var_name: str, allowed: set[str], default: set[str]) -> set[str]:
+    cleaned = raw.strip()
+    if not cleaned:
+        return set(default)
+
+    values: set[str] = set()
+    for token in cleaned.split(","):
+        item = token.strip().lower()
+        if not item:
+            continue
+        if item not in allowed:
+            raise ValueError(f"{var_name} has invalid value: {item}. Allowed: {', '.join(sorted(allowed))}")
+        values.add(item)
+    return values
+
+
 def parse_bool(value: str | None, default: bool) -> bool:
     if value is None:
         return default
@@ -512,6 +573,18 @@ def load_config() -> Config:
         sim_vivado_replay_check_sec = 2
     if sim_vivado_replay_check_sec > 30:
         sim_vivado_replay_check_sec = 30
+    allowed_command_groups = parse_choice_set(
+        os.getenv("TELEGRAM_ALLOWED_COMMAND_GROUPS", "status,run,report"),
+        "TELEGRAM_ALLOWED_COMMAND_GROUPS",
+        {"status", "run", "report"},
+        {"status", "run", "report"},
+    )
+    notify_events = parse_choice_set(
+        os.getenv("TELEGRAM_NOTIFY_EVENTS", "success,fail,program_done"),
+        "TELEGRAM_NOTIFY_EVENTS",
+        {"success", "fail", "program_done"},
+        {"success", "fail", "program_done"},
+    )
 
     return Config(
         bot_token=bot_token,
@@ -534,6 +607,8 @@ def load_config() -> Config:
         sim_vivado_send_log_file=sim_vivado_send_log_file,
         sim_vivado_auto_complete_on_replay=sim_vivado_auto_complete_on_replay,
         sim_vivado_replay_check_sec=sim_vivado_replay_check_sec,
+        allowed_command_groups=allowed_command_groups,
+        notify_events=notify_events,
     )
 
 def telegram_api(config: Config, method: str, payload: dict) -> object:
@@ -2071,10 +2146,11 @@ def run_job_worker(config: Config, chat_id: int, job: JobRequest) -> None:
             ),
         )
         finished_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
-        markup = build_hierarchy_result_markup(config, result)
-        safe_send_text(config, chat_id, TELEGRAM_PRESENTER.build_completion_text(job, result), reply_markup=markup)
-        send_sim_vivado_result_summary(config, chat_id, result)
-        send_execution_artifacts(config, chat_id, result)
+        if notification_event_for_result(job, result) in config.notify_events:
+            markup = build_hierarchy_result_markup(config, result)
+            safe_send_text(config, chat_id, TELEGRAM_PRESENTER.build_completion_text(job, result), reply_markup=markup)
+            send_sim_vivado_result_summary(config, chat_id, result)
+            send_execution_artifacts(config, chat_id, result)
     except Exception as exc:
         safe_send_text(config, chat_id, f"🚨 <b>[ERROR]</b> Failed to execute command: <code>{html_escape(exc)}</code>")
     finally:
@@ -2323,6 +2399,11 @@ def process_message(config: Config, message: dict) -> None:
         command = normalize_command(first)
         args = rest.strip()
 
+    command_group = command_group_for_command(command)
+    if command_group is not None and command_group not in config.allowed_command_groups:
+        send_text(config, chat_id, command_scope_error(command_group))
+        return
+
     if command == "/start":
         help_text, help_kb = build_help()
         send_text(config, chat_id, help_text, reply_markup=get_main_menu_keyboard())
@@ -2436,6 +2517,10 @@ def process_message(config: Config, message: dict) -> None:
         return
     if request is None:
         send_text(config, chat_id, "Failed to build execution request.")
+        return
+    request_group = command_group_for_request(request)
+    if request_group not in config.allowed_command_groups:
+        send_text(config, chat_id, command_scope_error(request_group))
         return
 
     launch_job_async(config, chat_id, request)

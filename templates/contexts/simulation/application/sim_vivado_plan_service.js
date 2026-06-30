@@ -139,8 +139,24 @@ set project_dir "${toTclPath(params.projectDir)}"
 set src_files [list ${toTclList(params.srcFiles)}]
 set tb_files [list ${toTclList(params.tbFiles)}]
 set include_dirs [list ${toTclList(params.includeDirs)}]
+set part_number "xczu3eg-sbva484-1-i"
 
-create_project -force $project_name $project_dir -part xc7a35tcpg236-1
+proc create_sim_project_with_optional_part {project_name project_dir part_number} {
+    set part_number [string trim $part_number]
+    if {$part_number ne ""} {
+        set part_matches {}
+        if {![catch {set part_matches [get_parts -quiet $part_number]}] && [llength $part_matches] > 0} {
+            create_project -force $project_name $project_dir -part $part_number
+            puts "[INFO] Created Vivado simulation project with part: $part_number"
+            return
+        }
+        puts "[WARNING] Target part '$part_number' is not installed in this Vivado. Creating simulation project without explicit part."
+    }
+    create_project -force $project_name $project_dir
+    puts "[INFO] Created Vivado simulation project with Vivado default part: [get_property PART [current_project]]"
+}
+
+create_sim_project_with_optional_part $project_name $project_dir $part_number
 if {[llength $src_files] > 0} { add_files -norecurse $src_files }
 if {[llength $tb_files] > 0} { add_files -fileset sim_1 -norecurse $tb_files }
 if {[llength $include_dirs] > 0} {

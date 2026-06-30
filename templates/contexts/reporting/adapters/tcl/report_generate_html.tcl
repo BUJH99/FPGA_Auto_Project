@@ -17,7 +17,17 @@ if {[llength $argv] >= 2} {
     set src_list_file [file normalize [lindex $argv 1]]
 }
 
-set output_dir [file normalize [file join $project_root "output"]]
+set configured_output_dir ""
+if {[info exists ::env(FPGA_CLAW_OUTPUT_DIR)] && [string trim $::env(FPGA_CLAW_OUTPUT_DIR)] ne ""} {
+    set configured_output_dir [string trim $::env(FPGA_CLAW_OUTPUT_DIR)]
+}
+if {$configured_output_dir ne "" && [file pathtype $configured_output_dir] eq "absolute"} {
+    set output_dir [file normalize $configured_output_dir]
+} elseif {$configured_output_dir ne ""} {
+    set output_dir [file normalize [file join $project_root $configured_output_dir]]
+} else {
+    set output_dir [file normalize [file join $project_root "output"]]
+}
 set final_report_dir [file normalize [file join $output_dir "FINALReport"]]
 set report_dir [file normalize [file join $output_dir "reports"]]
 set time_file [file normalize [file join $report_dir "timing_summary.rpt"]]

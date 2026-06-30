@@ -12,6 +12,7 @@ set project_root [pwd]
 set xpr_path ""
 set requested_top_module ""
 set requested_part_number ""
+set requested_board_part ""
 
 if {[llength $argv] >= 1} {
     set a0 [string trim [lindex $argv 0]]
@@ -29,9 +30,27 @@ if {[llength $argv] >= 4} {
     set a3 [string trim [lindex $argv 3]]
     if {$a3 ne ""} { set requested_part_number $a3 }
 }
+if {[llength $argv] >= 5} {
+    set a4 [string trim [lindex $argv 4]]
+    if {$a4 ne ""} { set requested_board_part $a4 }
+}
 
 proc print_error {msg} {
     puts "\[ERROR\] $msg"
+}
+
+proc apply_board_part {board_part} {
+    set board_part [string trim $board_part]
+    if {$board_part eq ""} { return }
+    if {[catch {set matches [get_board_parts -quiet $board_part]} err] || [llength $matches] == 0} {
+        puts "\[WARN\] Board part '$board_part' is not installed in Vivado. Continuing with part only."
+        return
+    }
+    if {[catch {set_property board_part $board_part [current_project]} err]} {
+        puts "\[WARN\] Failed to set board_part '$board_part': $err"
+    } else {
+        puts "\[INFO\] Board part set to $board_part"
+    }
 }
 
 proc find_bd_files {project_dir} {
@@ -99,6 +118,7 @@ open_project $xpr_path
 if {$requested_part_number ne ""} {
     catch { set_property part $requested_part_number [current_project] }
 }
+apply_board_part $requested_board_part
 
 set project_dir [file dirname $xpr_path]
 set bd_files [find_bd_files $project_dir]

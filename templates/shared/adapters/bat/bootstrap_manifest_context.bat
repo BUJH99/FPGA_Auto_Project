@@ -32,7 +32,15 @@ if not exist "%MANIFEST_TOOL%" (
     exit /b 1
 )
 
-set "MANIFEST_OUT_DIR=%TARGET_PROJECT%\output\manifest"
+set "MANIFEST_OUTPUT_ROOT=%FPGA_CLAW_OUTPUT_DIR%"
+if not defined MANIFEST_OUTPUT_ROOT set "MANIFEST_OUTPUT_ROOT=output"
+if "%MANIFEST_OUTPUT_ROOT:~1,1%"==":" (
+    set "MANIFEST_OUT_DIR=%MANIFEST_OUTPUT_ROOT%\manifest"
+) else if "%MANIFEST_OUTPUT_ROOT:~0,1%"=="\" (
+    set "MANIFEST_OUT_DIR=%MANIFEST_OUTPUT_ROOT%\manifest"
+) else (
+    set "MANIFEST_OUT_DIR=%TARGET_PROJECT%\%MANIFEST_OUTPUT_ROOT%\manifest"
+)
 if not exist "%MANIFEST_OUT_DIR%" mkdir "%MANIFEST_OUT_DIR%" >nul 2>nul
 
 set "MANIFEST_JSON=%MANIFEST_OUT_DIR%\manifest_resolved.json"

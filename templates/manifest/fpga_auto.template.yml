@@ -21,7 +21,9 @@ sim:
   tool: "xsim"
   timescale: "1ns/1ps"
 vivado:
-  part: "xc7a35tcpg236-1"
+  board: "Ultra96v2"
+  board_part: "Avnet-tria:Ultra96v2:part0:1.3"
+  part: "xczu3eg-sbva484-1-i"
   strategy: "Default"
   power_limit_w: 2.5
 report:

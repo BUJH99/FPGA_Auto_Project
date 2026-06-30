@@ -2,6 +2,8 @@
 setlocal enabledelayedexpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "SETTINGS_LOADER=%TEMPLATES_ROOT%\shared\adapters\bat\load_fpga_claw_settings.bat"
+if exist "%SETTINGS_LOADER%" call "%SETTINGS_LOADER%"
 set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
 
@@ -13,6 +15,8 @@ if "%~1"=="" (
 )
 
 set "TARGET_PROJECT=%~f1"
+call :resolve_project_dir "LOG_DIR" "%FPGA_CLAW_LOG_DIR%" "log"
+call :resolve_project_dir "OUTPUT_DIR" "%FPGA_CLAW_OUTPUT_DIR%" "output"
 set "MANIFEST_CTX=%TEMPLATES_ROOT%\shared\adapters\bat\bootstrap_manifest_context.bat"
 set "VIVADO_ENV_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\ensure_vivado_on_path.bat"
 if exist "%MANIFEST_CTX%" (
@@ -26,7 +30,6 @@ if exist "%MANIFEST_CTX%" (
 cd /d "%TARGET_PROJECT%"
 echo Target Project: %TARGET_PROJECT%
 
-set "LOG_DIR=%TARGET_PROJECT%\log"
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 set "PROGRAM_LOG=%LOG_DIR%\vivado_program.log"
 set "PROGRAM_JOU=%LOG_DIR%\vivado_program.jou"
@@ -59,7 +62,7 @@ call :prompt_run_or_cancel
 set "PROMPT_RC=%errorlevel%"
 if "%PROMPT_RC%"=="%USER_CANCEL_RC%" exit /b %USER_CANCEL_RC%
 
-if not exist output mkdir output
+if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 call :select_bitstream
 set "SELECT_BITSTREAM_RC=%errorlevel%"
 if "%SELECT_BITSTREAM_RC%"=="%USER_CANCEL_RC%" exit /b %USER_CANCEL_RC%
@@ -114,6 +117,21 @@ set /p "RUN_INPUT=Press Enter to continue, or Q to return to menu: "
 if /i "%RUN_INPUT%"=="Q" exit /b %USER_CANCEL_RC%
 exit /b 0
 
+:resolve_project_dir
+set "RESOLVE_OUT=%~1"
+set "RESOLVE_VALUE=%~2"
+set "RESOLVE_FALLBACK=%~3"
+if not defined RESOLVE_FALLBACK set "RESOLVE_FALLBACK=output"
+if not defined RESOLVE_VALUE set "RESOLVE_VALUE=%RESOLVE_FALLBACK%"
+if "!RESOLVE_VALUE:~1,1!"==":" (
+    set "%RESOLVE_OUT%=!RESOLVE_VALUE!"
+) else if "!RESOLVE_VALUE:~0,1!"=="\" (
+    set "%RESOLVE_OUT%=!RESOLVE_VALUE!"
+) else (
+    set "%RESOLVE_OUT%=%TARGET_PROJECT%\!RESOLVE_VALUE!"
+)
+exit /b 0
+
 :select_bitstream
 if defined SELECTED_BITSTREAM_PATH (
     for %%I in ("%SELECTED_BITSTREAM_PATH%") do set "SELECTED_BITSTREAM_PATH=%%~fI"
@@ -126,7 +144,7 @@ if defined SELECTED_BITSTREAM_PATH (
 )
 
 set "BITSTREAM_CANDIDATE_COUNT=0"
-set "BITSTREAM_OUTPUT_ROOT=%TARGET_PROJECT%\output"
+set "BITSTREAM_OUTPUT_ROOT=%OUTPUT_DIR%"
 if exist "!BITSTREAM_OUTPUT_ROOT!" call :collect_bitstreams "!BITSTREAM_OUTPUT_ROOT!"
 
 if !BITSTREAM_CANDIDATE_COUNT! leq 0 (

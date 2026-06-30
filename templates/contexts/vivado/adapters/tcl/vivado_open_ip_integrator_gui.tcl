@@ -7,7 +7,8 @@
 # - Does not auto-create IP blocks or auto-connect BD interfaces
 # =================================================================
 
-set part_number "xc7a35tcpg236-1"
+set part_number "xczu3eg-sbva484-1-i"
+set board_part ""
 set top_module "TOP"
 set bd_name "design_1"
 set base_project_name "vivado"
@@ -49,9 +50,36 @@ if {[llength $argv] >= 8} {
     set a7 [string trim [lindex $argv 7]]
     if {$a7 ne ""} { set base_project_name $a7 }
 }
+if {[llength $argv] >= 9} {
+    set a8 [string trim [lindex $argv 8]]
+    if {$a8 ne ""} { set board_part $a8 }
+}
+
+proc apply_board_part {board_part} {
+    set board_part [string trim $board_part]
+    if {$board_part eq ""} { return }
+    if {[catch {set matches [get_board_parts -quiet $board_part]} err] || [llength $matches] == 0} {
+        puts "\[WARN\] Board part '$board_part' is not installed in Vivado. Continuing with part only."
+        return
+    }
+    if {[catch {set_property board_part $board_part [current_project]} err]} {
+        puts "\[WARN\] Failed to set board_part '$board_part': $err"
+    } else {
+        puts "\[INFO\] Board part set to $board_part"
+    }
+}
 
 set project_name "${base_project_name}_ipi"
-set proj_path [file normalize [file join $project_root "output" "vivado" $project_name]]
+set output_dir "output"
+if {[info exists env(FPGA_CLAW_OUTPUT_DIR)] && [string trim $env(FPGA_CLAW_OUTPUT_DIR)] ne ""} {
+    set output_dir [string trim $env(FPGA_CLAW_OUTPUT_DIR)]
+}
+if {[file pathtype $output_dir] eq "absolute"} {
+    set output_root [file normalize $output_dir]
+} else {
+    set output_root [file normalize [file join $project_root $output_dir]]
+}
+set proj_path [file normalize [file join $output_root "vivado" $project_name]]
 set xpr_path [file join $proj_path "${project_name}.xpr"]
 
 proc read_manifest_list {list_file project_root} {
@@ -156,6 +184,10 @@ if {[file exists $xpr_path]} {
     puts "\[INFO\] Creating IP Integrator project: $xpr_path"
     create_project $project_name $proj_path -part $part_number -force
 }
+if {$part_number ne ""} {
+    catch { set_property part $part_number [current_project] }
+}
+apply_board_part $board_part
 
 set src_files [read_manifest_list $src_list_file $project_root]
 if {$src_list_file eq "" || [llength $src_files] == 0} {

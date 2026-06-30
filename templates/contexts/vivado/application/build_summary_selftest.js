@@ -37,7 +37,9 @@ function runBuildSummarySelftest() {
         "  xdc_globs: []",
         "  exclude_globs: []",
         "vivado:",
-        "  part: xc7a35tcpg236-1",
+        "  board: Ultra96v2",
+        "  board_part: Avnet-tria:Ultra96v2:part0:1.3",
+        "  part: xczu3eg-sbva484-1-i",
         "  strategy: PerformanceOptimized",
         "  power_limit_w: 2.5",
         "",
@@ -61,7 +63,9 @@ function runBuildSummarySelftest() {
             exclude_globs: [],
           },
           vivado: {
-            part: "xc7a35tcpg236-1",
+            board: "Ultra96v2",
+            board_part: "Avnet-tria:Ultra96v2:part0:1.3",
+            part: "xczu3eg-sbva484-1-i",
             strategy: "PerformanceOptimized",
             power_limit_w: 2.5,
           },
@@ -114,7 +118,8 @@ function runBuildSummarySelftest() {
     assert.equal(result.summary.qualityGate.power.status, "ok");
     assert.equal(result.summary.qualityGate.timing.status, "ok");
     assert.equal(result.summary.qualityGate.bitstream.status, "ok");
-    assert.equal(result.summary.details.partNumber, "xc7a35tcpg236-1");
+    assert.equal(result.summary.details.partNumber, "xczu3eg-sbva484-1-i");
+    assert.equal(result.summary.details.boardPart, "Avnet-tria:Ultra96v2:part0:1.3");
     assert.equal(result.summary.details.strategy, "PerformanceOptimized");
     assert.equal(result.summary.details.programStatus, "SUCCESS");
     assert.ok(Array.isArray(result.summary.details.stepResults));
@@ -122,6 +127,33 @@ function runBuildSummarySelftest() {
     assert.ok(fs.existsSync(result.summaryPath));
     assert.ok(fs.existsSync(result.resultPath));
     assert.ok(fs.existsSync(path.join(projectRoot, "output", "run_index.json")));
+
+    writeFile(
+      path.join(projectRoot, "output", "FINALReport", "report_data.json"),
+      JSON.stringify({
+        status: { timingPass: 1 },
+        timing: { wns: "0.24", tns: "0.000" },
+        power: { total: "0.51" },
+        cdc: { violations: 0 },
+      }, null, 2)
+    );
+    const fallback = writeBuildSummary({
+      projectRoot,
+      manifestJsonPath: path.join(projectRoot, "output", "manifest", "manifest_resolved.json"),
+      buildLogPath: path.join(projectRoot, "log", "missing.log"),
+      buildPlanPath: prepared.planPath,
+      programStatus: "SKIPPED_BY_NO_PAUSE",
+      buildRc: 0,
+      rtlRc: 0,
+      reportRc: 0,
+    });
+
+    assert.equal(fallback.summary.qualityGate.timing.status, "ok");
+    assert.equal(fallback.summary.qualityGate.timing.wnsNs, 0.24);
+    assert.equal(fallback.summary.qualityGate.power.status, "ok");
+    assert.equal(fallback.summary.qualityGate.power.totalOnChipPowerW, 0.51);
+    assert.equal(fallback.summary.qualityGate.cdc.status, "ok");
+    assert.equal(fallback.summary.details.stepResults[4].status, "skipped");
 
     return {
       ok: true,

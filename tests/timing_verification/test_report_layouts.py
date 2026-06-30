@@ -56,7 +56,7 @@ class SingleCycleReportLayoutTests(unittest.TestCase):
                 "analysis_mode": "single_cycle",
                 "isa_profile": "RV32I",
                 "top_name": "TOP",
-                "part_name": "xc7a35tcpg236-1",
+                "part_name": "xczu3eg-sbva484-1-i",
                 "program_image": "Full Coverage.mem",
                 "program_memory": str(temp_root / "InstructionFORTIMING.mem"),
                 "project_root": str(MANAGED_PROJECT_ROOT / "RISCV_RV32I_SINGLE"),
@@ -262,7 +262,7 @@ class PipelineReportLayoutTests(unittest.TestCase):
                 {
                     "project_name": "RISCV_RV32I_5STAGE",
                     "top_name": "TOP",
-                    "part_name": "xc7a35tcpg236-1",
+                    "part_name": "xczu3eg-sbva484-1-i",
                     "profile": {"stage_order": ["IF", "ID"]},
                 },
                 {

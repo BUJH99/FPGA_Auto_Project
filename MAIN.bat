@@ -2,15 +2,22 @@
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 title FPGAClaw
-set "SETUP_BAT=%CD%\templates\contexts\project_bootstrap\adapters\bat\project_create.bat"
-set "UPGRADE_BAT=%CD%\templates\contexts\project_bootstrap\adapters\bat\project_upgrade_existing.bat"
-set "CONSOLE_HELPER=%CD%\templates\shared\adapters\bat\console_ui.bat"
-set "PROJECT_ROOT_HELPER=%CD%\templates\shared\adapters\bat\resolve_managed_project_root.bat"
+set "TEMPLATES_ROOT=%CD%\templates"
+set "SETTINGS_LOADER=%TEMPLATES_ROOT%\shared\adapters\bat\load_fpga_claw_settings.bat"
+if exist "%SETTINGS_LOADER%" call "%SETTINGS_LOADER%"
+if not defined TEMPLATES_ROOT set "TEMPLATES_ROOT=%CD%\templates"
+set "SETTINGS_LOADER=%TEMPLATES_ROOT%\shared\adapters\bat\load_fpga_claw_settings.bat"
+set "SETUP_BAT=%TEMPLATES_ROOT%\contexts\project_bootstrap\adapters\bat\project_create.bat"
+set "UPGRADE_BAT=%TEMPLATES_ROOT%\contexts\project_bootstrap\adapters\bat\project_upgrade_existing.bat"
+set "SETTINGS_BAT=%TEMPLATES_ROOT%\contexts\settings\adapters\bat\fpga_claw_settings.bat"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
+set "PROJECT_ROOT_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\resolve_managed_project_root.bat"
 
-if exist "%PROJECT_ROOT_HELPER%" call "%PROJECT_ROOT_HELPER%" "%CD%"
-if defined FPGA_AUTO_PROJECT_ROOT (
+if not defined PROJECT_ROOT if exist "%PROJECT_ROOT_HELPER%" call "%PROJECT_ROOT_HELPER%" "%CD%"
+if defined FPGA_AUTO_PROJECT_ROOT if not defined PROJECT_ROOT (
     set "PROJECT_ROOT=%FPGA_AUTO_PROJECT_ROOT%"
-) else (
+)
+if not defined PROJECT_ROOT (
     for %%I in ("%CD%\..") do set "PROJECT_ROOT=%%~fI\Project"
 )
 
@@ -43,6 +50,7 @@ if !PROJ_COUNT! equ 0 (
     goto :NO_PROJECT_MENU
 )
 
+call :APPLY_PREFERRED_PROJECT
 if not defined TARGET_PROJECT_ABS (
     set "TARGET_PROJECT_ABS=!PROJ_PATH_1!"
     set "TARGET_PROJECT=!PROJ_LABEL_1!"
@@ -75,6 +83,8 @@ if /i "!DASH_INPUT!"=="U" (
     call :RUN_PROJECT_UPGRADE ""
     goto :MASTER_MENU
 )
+if /i "!DASH_INPUT!"=="G" goto :SETTINGS_MENU
+if /i "!DASH_INPUT!"=="SETTINGS" goto :SETTINGS_MENU
 if /i "!DASH_INPUT!"=="C" goto :CUSTOMBAT_MENU
 if /i "!DASH_INPUT!"=="B" goto :MASTER_MENU
 if /i "!DASH_INPUT!"=="Q" goto :EXIT
@@ -89,6 +99,7 @@ if not errorlevel 1 (
     if !DASH_INPUT! geq 1 if !DASH_INPUT! leq !PROJ_COUNT! (
         set "TARGET_PROJECT_ABS=!PROJ_PATH_%DASH_INPUT%!"
         set "TARGET_PROJECT=!PROJ_LABEL_%DASH_INPUT%!"
+        call :SAVE_LAST_PROJECT "!PROJ_NAME_%DASH_INPUT%!"
         goto :MASTER_MENU
     )
 )
@@ -111,8 +122,42 @@ if exist "%PROJECT_ROOT%\" (
 )
 exit /b 0
 
+:APPLY_PREFERRED_PROJECT
+if defined TARGET_PROJECT_ABS exit /b 0
+set "PREFERRED_PROJECT="
+if defined FPGA_CLAW_DEFAULT_PROJECT if not "!FPGA_CLAW_DEFAULT_PROJECT!"=="" set "PREFERRED_PROJECT=!FPGA_CLAW_DEFAULT_PROJECT!"
+if not defined PREFERRED_PROJECT if "!FPGA_CLAW_REMEMBER_LAST_PROJECT!"=="1" if defined FPGA_CLAW_LAST_PROJECT if not "!FPGA_CLAW_LAST_PROJECT!"=="" set "PREFERRED_PROJECT=!FPGA_CLAW_LAST_PROJECT!"
+if not defined PREFERRED_PROJECT exit /b 0
+for /L %%N in (1,1,!PROJ_COUNT!) do (
+    if /i "!PROJ_NAME_%%N!"=="!PREFERRED_PROJECT!" (
+        set "TARGET_PROJECT_ABS=!PROJ_PATH_%%N!"
+        set "TARGET_PROJECT=!PROJ_LABEL_%%N!"
+    )
+    if /i "!PROJ_LABEL_%%N!"=="!PREFERRED_PROJECT!" (
+        set "TARGET_PROJECT_ABS=!PROJ_PATH_%%N!"
+        set "TARGET_PROJECT=!PROJ_LABEL_%%N!"
+    )
+    if /i "!PROJ_PATH_%%N!"=="!PREFERRED_PROJECT!" (
+        set "TARGET_PROJECT_ABS=!PROJ_PATH_%%N!"
+        set "TARGET_PROJECT=!PROJ_LABEL_%%N!"
+    )
+)
+exit /b 0
+
+:SAVE_LAST_PROJECT
+if not "!FPGA_CLAW_REMEMBER_LAST_PROJECT!"=="1" exit /b 0
+if "%~1"=="" exit /b 0
+set "SETTINGS_CLI=%TEMPLATES_ROOT%\contexts\settings\adapters\cli\fpga_claw_settings_cli.js"
+if not exist "!SETTINGS_CLI!" exit /b 0
+where node >nul 2>nul
+if errorlevel 1 exit /b 0
+node "!SETTINGS_CLI!" --repo-root "%CD%" --set user.last_project "%~1" --no-backup >nul 2>nul
+exit /b 0
+
 :DETECT_VIVADO_VERSION
 set "DASH_VIVADO_DISPLAY=Vivado unknown"
+if defined VIVADO_BIN call :SET_VIVADO_DISPLAY_FROM_ROOT "%VIVADO_BIN%"
+if /i not "!DASH_VIVADO_DISPLAY!"=="Vivado unknown" exit /b 0
 if defined XILINX_VIVADO call :SET_VIVADO_DISPLAY_FROM_ROOT "%XILINX_VIVADO%"
 if /i not "!DASH_VIVADO_DISPLAY!"=="Vivado unknown" exit /b 0
 for /d %%D in ("C:\AMDDesignTools\*\Vivado") do if /i "!DASH_VIVADO_DISPLAY!"=="Vivado unknown" call :SET_VIVADO_DISPLAY_FROM_ROOT "%%~fD"
@@ -132,7 +177,8 @@ exit /b 0
 :LOAD_PROJECT_CARD
 for %%I in ("%~1") do set "DASH_PROJECT_NAME=%%~nxI"
 set "DASH_PROJECT_NAME_LOCK="
-set "DASH_TARGET_PART=xc7a35tcpg236-1"
+set "DASH_TARGET_PART=xczu3eg-sbva484-1-i"
+set "DASH_TARGET_BOARD=Ultra96v2"
 if exist "%~1\fpga_auto.yml" (
     for /f "usebackq tokens=1,* delims=:" %%A in ("%~1\fpga_auto.yml") do (
         set "DASH_YAML_KEY=%%~A"
@@ -146,14 +192,21 @@ if exist "%~1\fpga_auto.yml" (
             set "DASH_PROJECT_NAME_LOCK=1"
         )
         if /i "!DASH_YAML_KEY!"=="part" if not "!DASH_YAML_VAL!"=="" set "DASH_TARGET_PART=!DASH_YAML_VAL!"
+        if /i "!DASH_YAML_KEY!"=="board" if not "!DASH_YAML_VAL!"=="" set "DASH_TARGET_BOARD=!DASH_YAML_VAL!"
     )
 )
-set "DASH_TARGET_DISPLAY=!DASH_TARGET_PART!"
-if /i "!DASH_TARGET_DISPLAY:~0,2!"=="xc" if not "!DASH_TARGET_DISPLAY:~7!"=="" set "DASH_TARGET_DISPLAY=!DASH_TARGET_DISPLAY:~0,7!"
+if defined FPGA_CLAW_PART if not "!FPGA_CLAW_PART!"=="" set "DASH_TARGET_PART=!FPGA_CLAW_PART!"
+if defined FPGA_CLAW_DEFAULT_BOARD if not "!FPGA_CLAW_DEFAULT_BOARD!"=="" set "DASH_TARGET_BOARD=!FPGA_CLAW_DEFAULT_BOARD!"
+if defined DASH_TARGET_BOARD (
+    set "DASH_TARGET_DISPLAY=!DASH_TARGET_BOARD!"
+) else (
+    set "DASH_TARGET_DISPLAY=!DASH_TARGET_PART!"
+    if /i "!DASH_TARGET_DISPLAY:~0,2!"=="xc" if not "!DASH_TARGET_DISPLAY:~7!"=="" set "DASH_TARGET_DISPLAY=!DASH_TARGET_DISPLAY:~0,7!"
+)
 exit /b 0
 
 :DRAW_CLAW_DASHBOARD
-if not defined DASH_TARGET_DISPLAY set "DASH_TARGET_DISPLAY=xc7a35t"
+if not defined DASH_TARGET_DISPLAY set "DASH_TARGET_DISPLAY=Ultra96v2"
 echo.
 echo %Lime%      ______  ______  ______   ______   ______  __        ______  __       __            %White%     //   //   //%Reset%
 echo %Lime%     / ____/ / __  / / ____/  / ____/  / ____/ / /       / __  / / /  _   / /           %White%    //   //   //%Reset%
@@ -183,7 +236,7 @@ echo.
 echo %Border%  +----------------------------------------------------------------------------------------+%Reset%
 echo %Border%  ^|%Reset% %Amber%SHORTCUTS%Reset%                                                                           %Border%^|%Reset%
 echo %Border%  ^|%Reset%  %Lime%[H]%Reset% Help        %Lime%[S]%Reset% Setup New Project      %Lime%[U]%Reset% Upgrade Projects      %Lime%[Q]%Reset% Quit       %Border%^|%Reset%
-echo %Border%  ^|%Reset%  %Lime%[C]%Reset% CUSTOMBAT   %Lime%[1..N]%Reset% Select Project      %Lime%[Enter]%Reset% Open Command Menu              %Border%^|%Reset%
+echo %Border%  ^|%Reset%  %Lime%[G]%Reset% Settings    %Lime%[C]%Reset% CUSTOMBAT              %Lime%[1..N]%Reset% Select Project      %Lime%[Enter]%Reset% Menu   %Border%^|%Reset%
 echo %Border%  +----------------------------------------------------------------------------------------+%Reset%
 echo.
 exit /b 0
@@ -202,6 +255,7 @@ echo   %Lime%Enter%Reset%   Open the full command menu for the selected project.
 echo   %Lime%H%Reset%       Show this help page.
 echo   %Lime%S%Reset%       Setup a new managed project.
 echo   %Lime%U%Reset%       Upgrade existing project structures.
+echo   %Lime%G%Reset%       Open FPGAClaw Settings.
 echo   %Lime%C%Reset%       Open CUSTOMBAT menu.
 echo   %Lime%Q%Reset%       Quit MAIN.bat.
 echo.
@@ -269,15 +323,17 @@ echo   %PROJECT_ROOT%
 echo.
 echo   %White%[S] Setup New Project%Reset%
 echo   %White%[U] Upgrade Existing Projects%Reset%
+echo   %White%[G] Settings%Reset%
 echo   %Yellow%[C] CUSTOMBAT%Reset%
 echo   %Red%[Q] Quit%Reset%
 echo.
 
 set "NO_PROJ_INPUT="
-set /p "NO_PROJ_INPUT=%Cyan%No project found. Run setup or upgrade? (S/U/C/Q, default S): %Reset%"
+set /p "NO_PROJ_INPUT=%Cyan%No project found. Run setup or upgrade? (S/U/G/C/Q, default S): %Reset%"
 if "!NO_PROJ_INPUT!"=="" set "NO_PROJ_INPUT=S"
 
 if /i "!NO_PROJ_INPUT!"=="Q" goto :EXIT
+if /i "!NO_PROJ_INPUT!"=="G" goto :SETTINGS_MENU
 if /i "!NO_PROJ_INPUT!"=="C" goto :CUSTOMBAT_MENU
 if /i "!NO_PROJ_INPUT!"=="U" (
     call :RUN_PROJECT_UPGRADE ""
@@ -312,6 +368,7 @@ for /L %%N in (1,1,!PROJ_COUNT!) do (
 echo.
 echo   %White%[S] Setup New Project%Reset%
 echo   %White%[U] Upgrade Existing Projects%Reset%
+echo   %White%[G] Settings%Reset%
 echo   %Yellow%[C] CUSTOMBAT%Reset%
 echo   %Red%[Q] Quit%Reset%
 echo.
@@ -320,6 +377,7 @@ set "PROJ_INPUT="
 set /p "PROJ_INPUT=%Cyan%Select Project (Number) or Option: %Reset%"
 
 if /i "!PROJ_INPUT!"=="Q" goto :EXIT
+if /i "!PROJ_INPUT!"=="G" goto :SETTINGS_MENU
 if /i "!PROJ_INPUT!"=="C" goto :CUSTOMBAT_MENU
 if /i "!PROJ_INPUT!"=="U" (
     call :RUN_PROJECT_UPGRADE ""
@@ -349,6 +407,7 @@ if errorlevel 1 (
     )
     if defined TARGET_PROJECT_ABS if exist "!TARGET_PROJECT_ABS!\src" if exist "!TARGET_PROJECT_ABS!\fpga_auto.yml" (
         call :SET_PROJECT_LABEL "!TARGET_PROJECT_ABS!"
+        call :SAVE_LAST_PROJECT "!PROJ_INPUT!"
         goto :PROJECT_MENU
     )
     goto :MASTER_MENU
@@ -359,6 +418,26 @@ if !PROJ_INPUT! gtr !PROJ_COUNT! goto :MASTER_MENU
 
 set "TARGET_PROJECT_ABS=!PROJ_PATH_%PROJ_INPUT%!"
 set "TARGET_PROJECT=!PROJ_LABEL_%PROJ_INPUT%!"
+call :SAVE_LAST_PROJECT "!PROJ_NAME_%PROJ_INPUT%!"
+goto :PROJECT_MENU
+
+:SETTINGS_MENU
+if not exist "!SETTINGS_BAT!" (
+    echo.
+    echo %Red%[ERROR] Settings script not found: !SETTINGS_BAT!%Reset%
+    echo.
+    call "%CONSOLE_HELPER%" pause_then_clear
+    goto :MASTER_MENU
+)
+call "!SETTINGS_BAT!"
+if exist "!SETTINGS_LOADER!" call "!SETTINGS_LOADER!"
+set "SETTINGS_LOADER=%TEMPLATES_ROOT%\shared\adapters\bat\load_fpga_claw_settings.bat"
+set "SETUP_BAT=%TEMPLATES_ROOT%\contexts\project_bootstrap\adapters\bat\project_create.bat"
+set "UPGRADE_BAT=%TEMPLATES_ROOT%\contexts\project_bootstrap\adapters\bat\project_upgrade_existing.bat"
+set "SETTINGS_BAT=%TEMPLATES_ROOT%\contexts\settings\adapters\bat\fpga_claw_settings.bat"
+set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
+set "PROJECT_ROOT_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\resolve_managed_project_root.bat"
+goto :MASTER_MENU
 
 :PROJECT_MENU
 mode con: cols=120 lines=36 >nul 2>&1
@@ -468,7 +547,7 @@ if "!TARGET_NAME!"=="" (
     goto :PROJECT_MENU
 )
 
-set "TARGET_BAT=%CD%\templates\!TARGET_NAME!"
+set "TARGET_BAT=%TEMPLATES_ROOT%\!TARGET_NAME!"
 
 if not exist "!TARGET_BAT!" (
     echo.

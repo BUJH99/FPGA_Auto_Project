@@ -2,6 +2,8 @@
 setlocal enabledelayedexpansion
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..\..\..") do set "TEMPLATES_ROOT=%%~fI"
+set "SETTINGS_LOADER=%TEMPLATES_ROOT%\shared\adapters\bat\load_fpga_claw_settings.bat"
+if exist "%SETTINGS_LOADER%" call "%SETTINGS_LOADER%"
 set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "USER_CANCEL_RC=99"
 
@@ -13,6 +15,8 @@ if "%~1"=="" (
 )
 
 set "TARGET_PROJECT=%~f1"
+call :resolve_project_dir "LOG_DIR" "%FPGA_CLAW_LOG_DIR%" "log"
+call :resolve_project_dir "OUTPUT_DIR" "%FPGA_CLAW_OUTPUT_DIR%" "output"
 set "AUTO_PROGRAM=0"
 set "NO_PAUSE=0"
 set "MANIFEST_CTX=%TEMPLATES_ROOT%\shared\adapters\bat\bootstrap_manifest_context.bat"
@@ -24,7 +28,6 @@ for %%A in ("%~2" "%~3" "%~4") do (
 cd /d "%TARGET_PROJECT%"
 title Vivado Automation Flow - %TARGET_PROJECT%
 
-set "LOG_DIR=%TARGET_PROJECT%\log"
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 
 set "BUILD_LOG=%LOG_DIR%\vivado_full_build.log"
@@ -34,7 +37,7 @@ set "RTL_HIER_JOU=%LOG_DIR%\rtl_hier.jou"
 set "REPORT_GEN_LOG=%LOG_DIR%\report_gen.log"
 set "REPORT_GEN_JOU=%LOG_DIR%\report_gen.jou"
 set "BUILD_STAGE_STATUS=%LOG_DIR%\vivado_build_stage.status"
-set "FINAL_REPORT_DIR=%TARGET_PROJECT%\output\FINALReport"
+set "FINAL_REPORT_DIR=%OUTPUT_DIR%\FINALReport"
 set "FINAL_REPORT_HTML=%FINAL_REPORT_DIR%\Final_Build_Report.html"
 set "BUILD_SUMMARY_TOOL=%TEMPLATES_ROOT%\contexts\vivado\adapters\cli\vivado_capture_build_summary_cli.js"
 set "VIVADO_STAGE_MONITOR_PS1=%TEMPLATES_ROOT%\contexts\vivado\adapters\ps1\vivado_run_with_stage_monitor.ps1"
@@ -84,15 +87,15 @@ echo [INFO] Build start confirmed.
 echo      - Step 2/15 complete.
 
 call :print_step "3/15" "Prepare Output Workspace"
-if not exist output mkdir output
+if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 echo [CLEAN] Resetting RTL build-local artifacts only...
-if exist output\checkpoints rmdir /s /q output\checkpoints
-if exist output\reports rmdir /s /q output\reports
-if exist output\FINALReport rmdir /s /q output\FINALReport
-if exist output\build_summary.json del /q output\build_summary.json >nul 2>&1
-del /q output\*.bit >nul 2>&1
+call :delete_dir_unless_preserved "%OUTPUT_DIR%\checkpoints"
+call :delete_dir_unless_preserved "%OUTPUT_DIR%\reports"
+call :delete_dir_unless_preserved "%OUTPUT_DIR%\FINALReport"
+call :delete_file_unless_preserved "%OUTPUT_DIR%\build_summary.json"
+for %%F in ("%OUTPUT_DIR%\*.bit") do if exist "%%~fF" call :delete_file_unless_preserved "%%~fF"
 echo      - Output directory ready.
-echo      - Preserved output\vivado and output\vitis workspaces.
+echo      - Applied clean preserve patterns: %FPGA_CLAW_CLEAN_PRESERVE%
 echo      - Step 3/15 complete.
 
 call :print_step "4/15" "Load Manifest Context"
@@ -120,10 +123,11 @@ if errorlevel 1 (
     call :maybe_pause
     exit /b 1
 )
-set "BITSTREAM_PATH=%TARGET_PROJECT%\output\%BUILD_TOP_MODULE%.bit"
+set "BITSTREAM_PATH=%OUTPUT_DIR%\%BUILD_TOP_MODULE%.bit"
 echo [PLAN] Build plan ready.
 echo        Top      : %BUILD_TOP_MODULE%
 echo        Part     : %BUILD_PART_NUMBER%
+if defined BUILD_BOARD_PART echo        Board    : %BUILD_BOARD_PART%
 echo        Strategy : %BUILD_STRATEGY%
 echo        Power    : %BUILD_POWER_LIMIT_W% W
 echo        Source   : %BUILD_SRC_LIST%
@@ -136,10 +140,10 @@ echo       Log: %BUILD_LOG%
 echo       Stage file: %BUILD_STAGE_STATUS%
 echo       Waiting for synthesis/implementation/bitstream progress...
 if exist "%VIVADO_STAGE_MONITOR_PS1%" (
-    call powershell -NoProfile -ExecutionPolicy Bypass -File "%VIVADO_STAGE_MONITOR_PS1%" -VivadoTcl "%TEMPLATES_ROOT%\contexts\vivado\adapters\tcl\vivado_run_build_flow.tcl" -ProjectRoot "%TARGET_PROJECT%" -SrcList "%BUILD_SRC_LIST%" -XdcList "%BUILD_XDC_LIST%" -IncList "%BUILD_INC_LIST%" -TopModule "%BUILD_TOP_MODULE%" -PartNumber "%BUILD_PART_NUMBER%" -ProjectName "%BUILD_PROJECT_NAME%" -BuildStrategy "%BUILD_STRATEGY%" -PowerLimit "%BUILD_POWER_LIMIT_W%" -BuildLog "%BUILD_LOG%" -BuildJournal "%BUILD_JOU%" -StageStatusFile "%BUILD_STAGE_STATUS%"
+    call powershell -NoProfile -ExecutionPolicy Bypass -File "%VIVADO_STAGE_MONITOR_PS1%" -VivadoTcl "%TEMPLATES_ROOT%\contexts\vivado\adapters\tcl\vivado_run_build_flow.tcl" -ProjectRoot "%TARGET_PROJECT%" -SrcList "%BUILD_SRC_LIST%" -XdcList "%BUILD_XDC_LIST%" -IncList "%BUILD_INC_LIST%" -TopModule "%BUILD_TOP_MODULE%" -PartNumber "%BUILD_PART_NUMBER%" -BoardPart "%BUILD_BOARD_PART%" -ProjectName "%BUILD_PROJECT_NAME%" -BuildStrategy "%BUILD_STRATEGY%" -PowerLimit "%BUILD_POWER_LIMIT_W%" -BuildLog "%BUILD_LOG%" -BuildJournal "%BUILD_JOU%" -StageStatusFile "%BUILD_STAGE_STATUS%"
 ) else (
     echo [WARN] Stage monitor script not found. Falling back to single-step build execution.
-    call vivado -mode batch -source "%TEMPLATES_ROOT%\contexts\vivado\adapters\tcl\vivado_run_build_flow.tcl" -tclargs "%TARGET_PROJECT%" "%BUILD_SRC_LIST%" "%BUILD_XDC_LIST%" "%BUILD_INC_LIST%" "%BUILD_TOP_MODULE%" "%BUILD_PART_NUMBER%" "%BUILD_PROJECT_NAME%" "%BUILD_STRATEGY%" "%BUILD_POWER_LIMIT_W%" "%BUILD_STAGE_STATUS%" -log "%BUILD_LOG%" -journal "%BUILD_JOU%" -notrace >nul 2>&1
+    call vivado -mode batch -log "%BUILD_LOG%" -journal "%BUILD_JOU%" -notrace -source "%TEMPLATES_ROOT%\contexts\vivado\adapters\tcl\vivado_run_build_flow.tcl" -tclargs "%TARGET_PROJECT%" "%BUILD_SRC_LIST%" "%BUILD_XDC_LIST%" "%BUILD_INC_LIST%" "%BUILD_TOP_MODULE%" "%BUILD_PART_NUMBER%" "%BUILD_PROJECT_NAME%" "%BUILD_STRATEGY%" "%BUILD_POWER_LIMIT_W%" "%BUILD_STAGE_STATUS%" "%BUILD_BOARD_PART%" >nul 2>&1
 )
 set "BUILD_RC=%errorlevel%"
 call :route_vivado_artifacts
@@ -181,7 +185,7 @@ echo [RUN] RTL hierarchy export
 echo       Stage: Vivado mermaid/source hierarchy extraction
 echo       Log: %RTL_HIER_LOG%
 echo       Status: running...
-call vivado -mode batch -source "%TEMPLATES_ROOT%\contexts\code_intel\adapters\tcl\code_export_hierarchy_mermaid.tcl" -tclargs "%TARGET_PROJECT%" "%BUILD_SRC_LIST%" -notrace -log "%RTL_HIER_LOG%" -journal "%RTL_HIER_JOU%" >nul 2>&1
+call vivado -mode batch -log "%RTL_HIER_LOG%" -journal "%RTL_HIER_JOU%" -notrace -source "%TEMPLATES_ROOT%\contexts\code_intel\adapters\tcl\code_export_hierarchy_mermaid.tcl" -tclargs "%TARGET_PROJECT%" "%BUILD_SRC_LIST%" "%BUILD_INC_LIST%" >nul 2>&1
 set "RTL_RC=%errorlevel%"
 call :route_vivado_artifacts
 if %RTL_RC% neq 0 (
@@ -197,7 +201,7 @@ echo [RUN] Final report generation
 echo       Stage: Vivado report HTML assembly
 echo       Log: %REPORT_GEN_LOG%
 echo       Status: running...
-call vivado -mode batch -source "%TEMPLATES_ROOT%\contexts\reporting\adapters\tcl\report_generate_html.tcl" -tclargs "%TARGET_PROJECT%" "%BUILD_SRC_LIST%" -notrace -log "%REPORT_GEN_LOG%" -journal "%REPORT_GEN_JOU%" >nul 2>&1
+call vivado -mode batch -log "%REPORT_GEN_LOG%" -journal "%REPORT_GEN_JOU%" -notrace -source "%TEMPLATES_ROOT%\contexts\reporting\adapters\tcl\report_generate_html.tcl" -tclargs "%TARGET_PROJECT%" "%BUILD_SRC_LIST%" >nul 2>&1
 set "REPORT_RC=%errorlevel%"
 call :route_vivado_artifacts
 if %REPORT_RC% neq 0 (
@@ -236,6 +240,9 @@ if exist "%TEMPLATES_ROOT%\contexts\vivado\adapters\bat\vivado_program_fpga.bat"
             echo [INFO] Device programming completed.
             set "PROGRAM_STATUS=SUCCESS"
         )
+    ) else if "%NO_PAUSE%"=="1" (
+        echo [INFO] --no-pause mode: device programming skipped.
+        set "PROGRAM_STATUS=SKIPPED_BY_NO_PAUSE"
     ) else (
         choice /C YN /N /M "Run vivado_fpga_program.bat now? [Y/N]: "
         if errorlevel 2 (
@@ -265,6 +272,8 @@ echo      - Step 14/15 complete.
 call :print_step "15/15" "Finalize Build Summary"
 echo [RUN] Capturing final build summary metadata...
 call :write_build_summary
+call :archive_bitstream
+call :prune_logs
 echo [OK] Build summary captured.
 echo      - Step 15/15 complete.
 
@@ -273,13 +282,13 @@ echo [DONE] Vivado flow completed.
 if defined BITSTREAM_PATH (
     echo        Bitstream : %BITSTREAM_PATH%
 ) else (
-    echo        Bitstream : %CD%\output
+    echo        Bitstream : %OUTPUT_DIR%
 )
 echo        Report    : %FINAL_REPORT_HTML%
 echo        Logs      : %LOG_DIR%
 echo        Program   : %PROGRAM_STATUS%
 echo.
-echo Press any key to close this window...
+if not "%NO_PAUSE%"=="1" echo Press any key to close this window...
 call :maybe_pause
 exit /b 0
 
@@ -303,6 +312,55 @@ set /p "RUN_INPUT=Press Enter to continue, or Q to return to menu: "
 if /i "%RUN_INPUT%"=="Q" exit /b %USER_CANCEL_RC%
 exit /b 0
 
+:resolve_project_dir
+set "RESOLVE_OUT=%~1"
+set "RESOLVE_VALUE=%~2"
+set "RESOLVE_FALLBACK=%~3"
+if not defined RESOLVE_FALLBACK set "RESOLVE_FALLBACK=output"
+if not defined RESOLVE_VALUE set "RESOLVE_VALUE=%RESOLVE_FALLBACK%"
+if "!RESOLVE_VALUE:~1,1!"==":" (
+    set "%RESOLVE_OUT%=!RESOLVE_VALUE!"
+) else if "!RESOLVE_VALUE:~0,1!"=="\" (
+    set "%RESOLVE_OUT%=!RESOLVE_VALUE!"
+) else (
+    set "%RESOLVE_OUT%=%TARGET_PROJECT%\!RESOLVE_VALUE!"
+)
+exit /b 0
+
+:delete_dir_unless_preserved
+if not exist "%~1" exit /b 0
+call :is_clean_preserved "%~1"
+if not errorlevel 1 (
+    echo [KEEP] %~1
+    exit /b 0
+)
+rmdir /s /q "%~1"
+exit /b 0
+
+:delete_file_unless_preserved
+if not exist "%~1" exit /b 0
+call :is_clean_preserved "%~1"
+if not errorlevel 1 (
+    echo [KEEP] %~1
+    exit /b 0
+)
+del /q "%~1" >nul 2>&1
+exit /b 0
+
+:is_clean_preserved
+if not defined FPGA_CLAW_CLEAN_PRESERVE exit /b 1
+set "FPGA_CLAW_CHECK_PATH=%~f1"
+set "FPGA_CLAW_CHECK_REL=!FPGA_CLAW_CHECK_PATH:%TARGET_PROJECT%\=!"
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$rel = ($env:FPGA_CLAW_CHECK_REL -replace '\\','/').Trim('/');" ^
+  "$patterns = ($env:FPGA_CLAW_CLEAN_PRESERVE -split ',') | ForEach-Object { ($_ -replace '\\','/').Trim().Trim('/') } | Where-Object { $_ };" ^
+  "foreach ($pattern in $patterns) {" ^
+  "  $regex = '^' + [regex]::Escape($pattern).Replace('\*\*','.*').Replace('\*','[^/]*') + '$';" ^
+  "  if ($rel -match $regex) { exit 0 }" ^
+  "}" ^
+  "exit 1"
+exit /b %errorlevel%
+
 :route_vivado_artifacts
 for %%F in (vivado.log vivado.jou vivado.pb vivado.str) do (
     if exist "%%F" move /y "%%F" "%LOG_DIR%\" >nul 2>&1
@@ -320,8 +378,8 @@ if "%AUTO_PROGRAM%"=="1" set "PLAN_ARGS=%PLAN_ARGS% --auto-program"
 if "%NO_PAUSE%"=="1" set "PLAN_ARGS=%PLAN_ARGS% --no-pause"
 call node "%BUILD_SUMMARY_TOOL%" --stage prepare --project "%TARGET_PROJECT%" --manifest-json "%MANIFEST_JSON%" --src-list "%MANIFEST_SRC_LIST%" --xdc-list "%MANIFEST_XDC_LIST%" --inc-list "%MANIFEST_INC_LIST%" %PLAN_ARGS% >nul
 if errorlevel 1 exit /b 1
-set "BUILD_PLAN_JSON=%TARGET_PROJECT%\output\vivado\build_plan.json"
-set "BUILD_PLAN_CMD=%TARGET_PROJECT%\output\vivado\build_plan.cmd"
+set "BUILD_PLAN_JSON=%OUTPUT_DIR%\vivado\build_plan.json"
+set "BUILD_PLAN_CMD=%OUTPUT_DIR%\vivado\build_plan.cmd"
 if not exist "%BUILD_PLAN_CMD%" exit /b 1
 call "%BUILD_PLAN_CMD%"
 exit /b 0
@@ -330,6 +388,25 @@ exit /b 0
 if not exist "%BUILD_SUMMARY_TOOL%" exit /b 0
 if not exist "%MANIFEST_JSON%" exit /b 0
 call node "%BUILD_SUMMARY_TOOL%" --stage capture --project "%TARGET_PROJECT%" --manifest-json "%MANIFEST_JSON%" --build-log "%BUILD_LOG%" --build-plan-json "%BUILD_PLAN_JSON%" --program-status "%PROGRAM_STATUS%" --build-rc "%BUILD_RC%" --rtl-rc "%RTL_RC%" --report-rc "%REPORT_RC%" >nul
+exit /b 0
+
+:archive_bitstream
+if not exist "%BITSTREAM_PATH%" exit /b 0
+if not defined FPGA_CLAW_BITSTREAM_ARCHIVE_DIR exit /b 0
+for /f %%T in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd-HHmmss"') do set "ARCHIVE_TS=%%T"
+set "ARCHIVE_PROJECT=%BUILD_PROJECT_NAME%"
+if not defined ARCHIVE_PROJECT for %%I in ("%TARGET_PROJECT%") do set "ARCHIVE_PROJECT=%%~nxI"
+set "ARCHIVE_DIR=%FPGA_CLAW_BITSTREAM_ARCHIVE_DIR%\%ARCHIVE_PROJECT%\%ARCHIVE_TS%"
+if not exist "%ARCHIVE_DIR%" mkdir "%ARCHIVE_DIR%" >nul 2>&1
+copy /y "%BITSTREAM_PATH%" "%ARCHIVE_DIR%\" >nul 2>&1
+for %%B in ("%BITSTREAM_PATH%") do if exist "%ARCHIVE_DIR%\%%~nxB" echo [ARCHIVE] Bitstream archived: %ARCHIVE_DIR%
+exit /b 0
+
+:prune_logs
+if not defined FPGA_CLAW_KEEP_LOGS exit /b 0
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$dir=$env:LOG_DIR; $keep=[int]($env:FPGA_CLAW_KEEP_LOGS); if ($keep -le 0 -or -not (Test-Path -LiteralPath $dir)) { exit 0 };" ^
+  "Get-ChildItem -LiteralPath $dir -File | Sort-Object LastWriteTime -Descending | Select-Object -Skip $keep | Remove-Item -Force -ErrorAction SilentlyContinue"
 exit /b 0
 
 :print_build_checks
