@@ -161,10 +161,17 @@ function Get-YosysVersionText {
 }
 
 function Test-IsYowaspYosys {
-  param([string]$YosysCmd)
+  param(
+    [string]$YosysCmd,
+    [string]$VersionText = ""
+  )
 
   if ([string]::IsNullOrWhiteSpace($YosysCmd)) {
     return $false
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($VersionText) -and $VersionText -match "yowasp/yosys") {
+    return $true
   }
 
   $fileName = [System.IO.Path]::GetFileName($YosysCmd)
@@ -435,7 +442,8 @@ elseif ($resolvedFrontend -eq "slang" -and -not $slangAvailable) {
 
 $yosysVersionText = Get-YosysVersionText -YosysCmd $YosysCmd
 $useYosysPluginForSlang = ($slangMode -eq "plugin")
-$useReadSlangSingleThread = ($resolvedFrontend -eq "slang" -and (Test-IsYowaspYosys -YosysCmd $YosysCmd))
+$isYowaspYosys = Test-IsYowaspYosys -YosysCmd $YosysCmd -VersionText $yosysVersionText
+$useReadSlangSingleThread = ($resolvedFrontend -eq "slang" -and $isYowaspYosys)
 
 $moduleEntries = Try-LoadModuleEntriesFromIndexer -ProjectPath $ProjectPath -HdlIndexerPath $HdlIndexerPath -ManifestJson $ManifestJson
 if ($moduleEntries.Count -eq 0) {
@@ -499,6 +507,10 @@ if ($MaxParallel -le 0) {
 }
 else {
   $MaxParallel = [Math]::Max(1, [Math]::Min($MaxParallel, $selectedCount))
+}
+if ($useReadSlangSingleThread -and $MaxParallel -gt 1) {
+  Write-Host "[INFO] yowasp-yosys detected; forcing schematic workers to 1 for Wasmtime compatibility."
+  $MaxParallel = 1
 }
 
 $logDir = Join-Path $ProjectPath "output\Diagram\logs"
