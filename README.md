@@ -118,6 +118,7 @@ The canonical runtime path is Windows. `MAIN.bat`, Telegram execution, Vivado au
 
 2. **Run the Toolkit:**
    Simply double-click or run `MAIN.bat` from your command prompt. It will automatically detect valid projects inside the sibling `../Project/` directory (those containing an `fpga_auto.yml` manifest file) and provide an interactive terminal menu mapping out all available automation tasks.
+   Managed project roots can also launch the toolkit with `fpgaclaw` when `fpgaclaw.cmd` is present. New projects get this launcher automatically; run `[U] Upgrade` from `MAIN.bat` to add or refresh it for existing projects. If the automation repo root is on `PATH`, the repo-level `fpgaclaw.cmd` also works from inside a project and auto-selects the nearest folder containing `fpga_auto.yml` and `src/`.
 
 3. *(Optional)* **Legacy Project Migration**:
    To migrate root-level legacy projects into the structured sibling `../Project/*` format, you can run the bootstrap script:
@@ -425,6 +426,7 @@ graph LR
 
 2. **툴킷 실행:**
    단순히 `MAIN.bat` 파일을 더블 클릭하거나 명령 프롬프트에서 직접 실행하십시오. 스크립트가 저장소와 같은 상위 레벨의 `../Project/` 내부 유효한 프로젝트(`fpga_auto.yml` 보유 폴더)를 모두 자동 감지하고, 활용 가능한 인터랙티브 실행 메뉴를 띄워줍니다.
+   관리 프로젝트 루트에 `fpgaclaw.cmd`가 있으면 그 위치에서 `fpgaclaw`만 입력해도 툴킷을 실행할 수 있습니다. 새 프로젝트에는 자동 생성되며, 기존 프로젝트는 `MAIN.bat`의 `[U] Upgrade`로 추가 또는 갱신할 수 있습니다. 자동화 repo 루트를 `PATH`에 넣은 경우 repo 루트의 `fpgaclaw.cmd`도 프로젝트 내부 어디서든 동작하고, `fpga_auto.yml`과 `src/`가 있는 가장 가까운 프로젝트를 자동 선택합니다.
 
 3. *(선택)* **구버전 프로젝트 마이그레이션**:
    기존 루트 경로 등에 무질서하게 배치된 레거시 프로젝트를 표준 `../Project/*` 구조로 복사/통합하려면 다음 스크립트를 사용하십시오.

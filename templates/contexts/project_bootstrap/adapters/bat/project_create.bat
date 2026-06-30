@@ -6,6 +6,7 @@ set "CONSOLE_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\console_ui.bat"
 set "PROJECT_ROOT_HELPER=%TEMPLATES_ROOT%\shared\adapters\bat\resolve_managed_project_root.bat"
 
 set "MANIFEST_TEMPLATE=%TEMPLATES_ROOT%\manifest\fpga_auto.template.yml"
+set "PROJECT_LAUNCHER_TEMPLATE=%TEMPLATES_ROOT%\project\fpgaclaw.cmd"
 set "NO_PAUSE=0"
 set "SETUP_RC=0"
 set "PROJECT_NAME="
@@ -138,6 +139,23 @@ if errorlevel 1 (
     goto END
 )
 
+if not exist "%PROJECT_LAUNCHER_TEMPLATE%" (
+    echo [ERROR] Project launcher template missing: %PROJECT_LAUNCHER_TEMPLATE%
+    set "SETUP_RC=1"
+    goto END
+)
+
+powershell -NoProfile -Command ^
+    "$tpl = Get-Content -LiteralPath $env:PROJECT_LAUNCHER_TEMPLATE -Raw; " ^
+    "$out = $tpl.Replace('__FPGA_CLAW_REPO_ROOT__', $env:REPO_ROOT); " ^
+    "$enc = New-Object System.Text.UTF8Encoding($false); " ^
+    "[System.IO.File]::WriteAllText((Join-Path $env:TARGET_PROJECT 'fpgaclaw.cmd'), $out, $enc);"
+if errorlevel 1 (
+    echo [ERROR] Failed to create fpgaclaw.cmd launcher.
+    set "SETUP_RC=1"
+    goto END
+)
+
 powershell -NoProfile -Command ^
     "$enc = New-Object System.Text.UTF8Encoding($false); " ^
     "$main = [string]::Join([Environment]::NewLine, @('int main(void) {', '    return 0;', '}')) + [Environment]::NewLine; " ^
@@ -190,6 +208,7 @@ echo - sw\apps\hello_world\data
 echo - vitis\launch
 echo - vitis\bsp_overrides
 echo - fpga_auto.yml
+echo - fpgaclaw.cmd
 echo ------------------------------------------------
 echo.
 

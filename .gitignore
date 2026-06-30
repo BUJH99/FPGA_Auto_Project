@@ -7,6 +7,7 @@
 !/ReadMe.md
 !/templates/
 !/MAIN.bat
+!/fpgaclaw.cmd
 !/templates/vcd2sgv/
 !/templates/vcd2sgv/**
 !/tests/

@@ -35,6 +35,8 @@ class ProjectCreateVitisScaffoldTests(unittest.TestCase):
             r"%TARGET_PROJECT%\log\vitis",
             r"sw\apps\hello_world\src\main.c",
             r"vitis\launch\hardware.json",
+            r"%TEMPLATES_ROOT%\project\fpgaclaw.cmd",
+            r"fpgaclaw.cmd",
         )
 
         for fragment in expected_fragments:

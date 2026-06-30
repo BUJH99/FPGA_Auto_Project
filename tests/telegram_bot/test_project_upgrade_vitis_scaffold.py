@@ -141,6 +141,10 @@ sim:
             self.assertTrue((project / "sw/apps/hello_world/src/main.c").is_file())
             hardware = json.loads((project / "vitis/launch/hardware.json").read_text(encoding="utf-8"))
             self.assertEqual("hardware", hardware["mode"])
+            launcher_text = (project / "fpgaclaw.cmd").read_text(encoding="utf-8")
+            self.assertIn("MAIN.bat", launcher_text)
+            self.assertIn("TARGET_PROJECT_ABS", launcher_text)
+            self.assertNotIn("__FPGA_CLAW_REPO_ROOT__", launcher_text)
 
             manifest = self.resolve_manifest(project)
             self.assertEqual([], manifest["errors"])
@@ -166,12 +170,14 @@ sim:
 
             self.assertEqual(0, result.returncode, msg=result.stderr + result.stdout)
             self.assertFalse((project / "sw").exists())
+            self.assertFalse((project / "fpgaclaw.cmd").exists())
             self.assertNotIn("vitis:", (project / "fpga_auto.yml").read_text(encoding="utf-8"))
 
             summary_path = repo / "output/project_upgrade/project_upgrade_summary.json"
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             self.assertEqual("warning", summary["status"])
             self.assertEqual(1, summary["details"]["results"][0]["plannedFiles"].count("sw/apps/hello_world/src/main.c"))
+            self.assertEqual(1, summary["details"]["results"][0]["plannedFiles"].count("fpgaclaw.cmd"))
 
     def test_upgrade_second_run_is_current_with_empty_vitis_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -206,6 +212,8 @@ sim:
         self.assertIn("project_upgrade_cli.js", batch_text)
         self.assertIn("--dry-run", batch_text)
         self.assertIn("UPGRADE_BAT", main_text)
+        self.assertIn("FPGA_CLAW_LAUNCH_CWD", main_text)
+        self.assertIn(":APPLY_LAUNCH_CWD_PROJECT", main_text)
         self.assertIn("Upgrade Existing Projects", main_text)
         self.assertIn("Upgrade This Project", main_text)
 

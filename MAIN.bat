@@ -1,5 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
+if not defined FPGA_CLAW_LAUNCH_CWD set "FPGA_CLAW_LAUNCH_CWD=%CD%"
 cd /d "%~dp0"
 title FPGAClaw
 set "TEMPLATES_ROOT=%CD%\templates"
@@ -20,6 +21,8 @@ if defined FPGA_AUTO_PROJECT_ROOT if not defined PROJECT_ROOT (
 if not defined PROJECT_ROOT (
     for %%I in ("%CD%\..") do set "PROJECT_ROOT=%%~fI\Project"
 )
+if not defined TARGET_PROJECT_ABS if defined FPGA_CLAW_LAUNCH_CWD call :APPLY_LAUNCH_CWD_PROJECT "%FPGA_CLAW_LAUNCH_CWD%"
+if defined TARGET_PROJECT_ABS if not defined TARGET_PROJECT call :SET_PROJECT_LABEL "!TARGET_PROJECT_ABS!"
 
 :: Define ESC character for ANSI colors
 for /F %%a in ('echo prompt $E ^| cmd') do set "ESC=%%a"
@@ -44,7 +47,7 @@ mode con: cols=122 lines=46 >nul 2>&1
 call "%CONSOLE_HELPER%" clear
 call :SCAN_MANAGED_PROJECTS
 call :DETECT_VIVADO_VERSION
-if !PROJ_COUNT! equ 0 (
+if !PROJ_COUNT! equ 0 if not defined TARGET_PROJECT_ABS (
     set "DASH_TARGET_DISPLAY=unknown"
     call :DRAW_CLAW_DASHBOARD
     goto :NO_PROJECT_MENU
@@ -121,6 +124,24 @@ if exist "%PROJECT_ROOT%\" (
     )
 )
 exit /b 0
+
+:APPLY_LAUNCH_CWD_PROJECT
+set "LAUNCH_SCAN=%~f1"
+if not exist "%LAUNCH_SCAN%" exit /b 0
+
+:APPLY_LAUNCH_CWD_PROJECT_LOOP
+if exist "!LAUNCH_SCAN!\fpga_auto.yml" if exist "!LAUNCH_SCAN!\src" (
+    set "LAUNCH_REL=!LAUNCH_SCAN:%PROJECT_ROOT%\=!"
+    if /i not "!LAUNCH_REL!"=="!LAUNCH_SCAN!" (
+        set "TARGET_PROJECT_ABS=!LAUNCH_SCAN!"
+        call :SET_PROJECT_LABEL "!TARGET_PROJECT_ABS!"
+        exit /b 0
+    )
+)
+for %%I in ("!LAUNCH_SCAN!\..") do set "LAUNCH_PARENT=%%~fI"
+if /i "!LAUNCH_PARENT!"=="!LAUNCH_SCAN!" exit /b 0
+set "LAUNCH_SCAN=!LAUNCH_PARENT!"
+goto :APPLY_LAUNCH_CWD_PROJECT_LOOP
 
 :APPLY_PREFERRED_PROJECT
 if defined TARGET_PROJECT_ABS exit /b 0

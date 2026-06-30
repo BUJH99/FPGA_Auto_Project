@@ -42,6 +42,8 @@ const HARDWARE_JSON = {
   hw_server: "",
   device_index: null,
 };
+const PROJECT_LAUNCHER_FILE = "fpgaclaw.cmd";
+const PROJECT_LAUNCHER_TEMPLATE = path.resolve(__dirname, "../../../project/fpgaclaw.cmd");
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -66,6 +68,11 @@ function ensureDir(dirPath) {
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true });
   }
+}
+
+function renderProjectLauncher(repoRoot) {
+  const template = fs.readFileSync(PROJECT_LAUNCHER_TEMPLATE, "utf8");
+  return template.replace(/__FPGA_CLAW_REPO_ROOT__/g, path.resolve(repoRoot || process.cwd()));
 }
 
 function defaultVitisManifestSection() {
@@ -234,7 +241,7 @@ function validateManagedProject(projectPath) {
   return "";
 }
 
-function planProjectUpgrade(projectPath) {
+function planProjectUpgrade(projectPath, repoRoot = process.cwd()) {
   const root = path.resolve(projectPath);
   const dirs = SCAFFOLD_DIRS
     .map((row) => path.join(root, row))
@@ -252,10 +259,16 @@ function planProjectUpgrade(projectPath) {
     files.push("vitis/launch/hardware.json");
   }
 
+  const launcherPath = path.join(root, PROJECT_LAUNCHER_FILE);
+  const launcherText = renderProjectLauncher(repoRoot);
+  if (!fs.existsSync(launcherPath) || fs.readFileSync(launcherPath, "utf8") !== launcherText) {
+    files.push(PROJECT_LAUNCHER_FILE);
+  }
+
   return { dirs, files };
 }
 
-function writeScaffold(projectPath, plan, changes) {
+function writeScaffold(projectPath, plan, changes, repoRoot = process.cwd()) {
   for (const relDir of plan.dirs) {
     ensureDir(path.join(projectPath, relDir));
     changes.push(`dir_created:${relDir}`);
@@ -273,6 +286,13 @@ function writeScaffold(projectPath, plan, changes) {
     ensureDir(path.dirname(hardwarePath));
     fs.writeFileSync(hardwarePath, `${JSON.stringify(HARDWARE_JSON, null, 2)}\n`, "utf8");
     changes.push("file_created:vitis/launch/hardware.json");
+  }
+
+  if (plan.files.includes(PROJECT_LAUNCHER_FILE)) {
+    const launcherPath = path.join(projectPath, PROJECT_LAUNCHER_FILE);
+    const existed = fs.existsSync(launcherPath);
+    fs.writeFileSync(launcherPath, renderProjectLauncher(repoRoot), "utf8");
+    changes.push(`${existed ? "file_updated" : "file_created"}:${PROJECT_LAUNCHER_FILE}`);
   }
 }
 
@@ -297,7 +317,7 @@ function upgradeProject(projectPath, request) {
   }
 
   try {
-    const scaffoldPlan = planProjectUpgrade(root);
+    const scaffoldPlan = planProjectUpgrade(root, request.repoRoot);
     row.plannedDirs = scaffoldPlan.dirs;
     row.plannedFiles = scaffoldPlan.files;
 
@@ -315,7 +335,7 @@ function upgradeProject(projectPath, request) {
       return row;
     }
 
-    writeScaffold(root, scaffoldPlan, row.changes);
+    writeScaffold(root, scaffoldPlan, row.changes, request.repoRoot);
     const manifestChanged = row.changes.some((change) => String(change || "").startsWith("manifest_"));
     if (manifestChanged) {
       const manifestText = hadVitisSection
@@ -442,9 +462,11 @@ module.exports = {
   SCAFFOLD_DIRS,
   STARTER_MAIN_C,
   HARDWARE_JSON,
+  PROJECT_LAUNCHER_FILE,
   defaultVitisManifestSection,
   executeProjectUpgrade,
   planProjectUpgrade,
+  renderProjectLauncher,
   upgradeManifestConfig,
   writeProjectUpgradeArtifacts,
 };
